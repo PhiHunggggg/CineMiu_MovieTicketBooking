@@ -1,4 +1,9 @@
 <Solution>
   <Project Path="API_Gateway/API_Gateway.csproj" />
   <Project Path="API_Service/API_Service.csproj" />
+  <Project Path="Common/Common.csproj" />
+  <Project Path="DTO/DTO.csproj" />
+  <Project Path="Entities/Entities.csproj" />
+  <Project Path="Libs/Libs.csproj" />
+  <Project Path="Repository/Repository.csproj" />
 </Solution>
