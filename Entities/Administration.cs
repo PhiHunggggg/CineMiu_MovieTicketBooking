@@ -7,7 +7,7 @@ using System.Text;
 namespace Entities
 {
     [Table("reviews")]
-    public class CinemaReview
+    public class Review
     {
         [Key]
         [Column("review_id")]
@@ -33,7 +33,7 @@ namespace Entities
     }
 
     [Table("notifications")]
-    public class CinemaNotification
+    public class Notification
     {
         [Key]
         [Column("notif_id")]

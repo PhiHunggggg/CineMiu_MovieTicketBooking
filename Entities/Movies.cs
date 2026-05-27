@@ -79,4 +79,35 @@ namespace Entities
         [Column("genre_id")]
         public int GenreId { get; set; }
     }
+    [Table("ticket_prices")]
+    public class TicketPrice
+    {
+        [Key]
+        [Column("price_id")]
+        public int PriceId { get; set; }
+
+        [Column("cinema_id")]
+        public int CinemaId { get; set; }
+
+        [Column("hall_type_id")]
+        public byte HallTypeId { get; set; }
+
+        [Column("seat_type_id")]
+        public byte SeatTypeId { get; set; }
+
+        [Column("day_type_id")]
+        public byte DayTypeId { get; set; }
+
+        [Column("time_slot")]
+        public string TimeSlot { get; set; } = "all_day";
+
+        [Column("base_price")]
+        public decimal BasePrice { get; set; }
+
+        [Column("effective_from")]
+        public DateTime EffectiveFrom { get; set; }
+
+        [Column("effective_to")]
+        public DateTime? EffectiveTo { get; set; }
+    }
 }

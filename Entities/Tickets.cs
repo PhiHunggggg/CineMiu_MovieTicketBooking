@@ -6,10 +6,10 @@ using System.Text;
 
 namespace Entities
 {
-    internal class Tickets
+    public class Tickets
     {
         [Table("ticket_prices")]
-        public class CinemaTicketPrice
+        public class TicketPrice
         {
             [Key]
             [Column("price_id")]
@@ -40,7 +40,7 @@ namespace Entities
             public DateTime? EffectiveTo { get; set; }
         }
         [Table("tickets")]
-        public class CinemaTicket
+        public class Ticket
         {
             [Key]
             [Column("ticket_id")]
@@ -70,5 +70,6 @@ namespace Entities
             [Column("checked_by")]
             public int? CheckedBy { get; set; }
         }
+
     }
 }

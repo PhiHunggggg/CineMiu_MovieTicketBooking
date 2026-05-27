@@ -7,7 +7,7 @@ using System.Text;
 namespace Entities
 {
     [Table("member_tiers")]
-    public class CinemaMemberTier
+    public class MemberTier
     {
         [Key]
         [Column("tier_id")]
@@ -27,7 +27,7 @@ namespace Entities
     }
 
     [Table("user_memberships")]
-    public class CinemaUserMembership
+    public class UserMembership
     {
         [Key]
         [Column("user_id")]
@@ -44,7 +44,7 @@ namespace Entities
     }
 
     [Table("point_transactions")]
-    public class CinemaPointTransaction
+    public class PointTransaction
     {
         [Key]
         [Column("transaction_id")]

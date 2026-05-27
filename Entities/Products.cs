@@ -8,7 +8,7 @@ using System.Text;
 namespace Entities
 {
     [Table("concession_categories")]
-    public class CinemaConcessionCategory:IAudittable
+    public class ConcessionCategory:IAudittable
     {
         [Key]
         [Column("cat_id")]
@@ -23,7 +23,7 @@ namespace Entities
     }
 
     [Table("concession_items")]
-    public class CinemaConcessionItem:IAudittable
+    public class ConcessionItem:IAudittable
     {
         [Key]
         [Column("item_id")]

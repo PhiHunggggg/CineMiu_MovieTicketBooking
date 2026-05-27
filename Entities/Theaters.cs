@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Entities
 {
-    public class CinemaChain
+    public class Chain
     {
         [Key]
         [Column("chain_id")]
@@ -70,7 +70,7 @@ namespace Entities
         public DateTime UpdatedAt { get; set; }
     }
     [Table("halls")]
-    public class CinemaHall:IAudittable
+    public class Hall:IAudittable
     {
         [Key]
         [Column("hall_id")]
@@ -102,7 +102,7 @@ namespace Entities
         public DateTime UpdatedAt { get; set; }
     }
     [Table("seats")]
-    public class CinemaSeat : IAudittable
+    public class Seat : IAudittable
     {
         [Key]
         [Column("seat_id")]

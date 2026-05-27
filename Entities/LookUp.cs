@@ -37,8 +37,24 @@ namespace Entities
         [Column("updated_at")]
         public DateTime UpdatedAt { get; set; }
     }
+    [Table("hall_types")]
+    public class HallType
+    {
+        [Key]
+        [Column("hall_type_id")]
+        public byte HallTypeId { get; set; }
+
+        [Column("type_name")]
+        public string TypeName { get; set; } = "";
+
+        [Column("description")]
+        public string? Description { get; set; }
+
+        [Column("surcharge_pct")]
+        public decimal SurchargePct { get; set; }
+    }
     [Table("seat_types")]
-    public class CinemaSeatType: IAudittable
+    public class SeatType: IAudittable
     {
         [Key]
         [Column("seat_type_id")]
@@ -58,7 +74,7 @@ namespace Entities
         public DateTime UpdatedAt { get; set; }
     }
     [Table("day_types")]
-    public class CinemaDayType
+    public class DayType
     {
         [Key]
         [Column("day_type_id")]
@@ -71,7 +87,7 @@ namespace Entities
         public string? Description { get; set; }
     }
     [Table("countries")]
-    public class CinemaCountry
+    public class Country
     {
         [Key]
         [Column("country_id")]
@@ -84,7 +100,7 @@ namespace Entities
         public string? CountryCode { get; set; }
     }
     [Table("payment_methods")]
-    public class CinemaPaymentMethod
+    public class PaymentMethod
     {
         [Key]
         [Column("method_id")]

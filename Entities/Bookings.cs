@@ -6,10 +6,10 @@ using System.Text;
 
 namespace Entities
 {
-    internal class Bookings
+    public class Bookings
     {
         [Table("bookings")]
-        public class CinemaBooking
+        public class Booking
         {
             [Key]
             [Column("booking_id")]
@@ -58,7 +58,7 @@ namespace Entities
             public string? Notes { get; set; }
         }
         [Table("booking_concessions")]
-        public class CinemaBookingConcession
+        public class BookingConcession
         {
             [Key]
             [Column("id")]
@@ -81,7 +81,7 @@ namespace Entities
         }
 
         [Table("payments")]
-        public class CinemaPayment
+        public class Payment
         {
             [Key]
             [Column("payment_id")]
@@ -119,7 +119,7 @@ namespace Entities
         }
 
         [Table("seat_locks")]
-        public class CinemaSeatLock
+        public class SeatLock
         {
             [Key]
             [Column("lock_id")]
