@@ -33,10 +33,10 @@ namespace Entities
         public DateTime? EndDate { get; set; }
 
         [Column("age_rating")]
-        public string AgeRating { get; set; } = "P";
+        public string? AgeRating { get; set; } = "P";
 
         [Column("status")]
-        public string Status { get; set; } = "coming_soon";
+        public string? Status { get; set; } = "coming_soon";
 
         [Column("synopsis")]
         public string? Synopsis { get; set; }
@@ -77,7 +77,7 @@ namespace Entities
         [Column("movie_id")]
         public int MovieId { get; set; }
         [Column("genre_id")]
-        public int GenreId { get; set; }
+        public byte GenreId { get; set; }
     }
     [Table("ticket_prices")]
     public class TicketPrice

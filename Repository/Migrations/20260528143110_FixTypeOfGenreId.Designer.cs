@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Repository;
 
@@ -11,9 +12,11 @@ using Repository;
 namespace Repository.Migrations
 {
     [DbContext(typeof(SqlServerDbContext))]
-    partial class SqlServerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260528143110_FixTypeOfGenreId")]
+    partial class FixTypeOfGenreId
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -473,9 +476,12 @@ namespace Repository.Migrations
 
             modelBuilder.Entity("Entities.Genre", b =>
                 {
-                    b.Property<byte>("GenreId")
-                        .HasColumnType("tinyint")
+                    b.Property<int>("GenreId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
                         .HasColumnName("genre_id");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("GenreId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("datetime2")
@@ -630,6 +636,7 @@ namespace Repository.Migrations
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("MovieId"));
 
                     b.Property<string>("AgeRating")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("age_rating");
 
@@ -679,6 +686,7 @@ namespace Repository.Migrations
                         .HasColumnName("release_date");
 
                     b.Property<string>("Status")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("status");
 
@@ -718,8 +726,8 @@ namespace Repository.Migrations
                         .HasColumnType("int")
                         .HasColumnName("movie_id");
 
-                    b.Property<byte>("GenreId")
-                        .HasColumnType("tinyint")
+                    b.Property<int>("GenreId")
+                        .HasColumnType("int")
                         .HasColumnName("genre_id");
 
                     b.HasKey("MovieId", "GenreId");
