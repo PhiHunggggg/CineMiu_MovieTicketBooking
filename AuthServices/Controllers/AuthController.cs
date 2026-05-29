@@ -42,13 +42,14 @@ namespace AuthServices.Controllers
                 return Unauthorized(new { message = "Invalid email or password" });
             }
             var roleName = await _userService.ResolveRoleName(user.RoleId);
-            var token = TokenHelper.GenerateToken(_secretKey, TokenExpirationMinutes, user.UserId.ToString(), user.Email, roleName);
+            var token = TokenHelper.GenerateToken(_secretKey, TokenExpirationMinutes, user.UserId.ToString(), user.Email, roleName, user.CinemaId);
 
             return Ok(new DTO.Authen.LoginDto.LoginResponse
             {
                 Token = token,
                 UserId = user.UserId.ToString(),
                 RoleId = user.RoleId,
+                CinemaId = user.CinemaId,
                 FullName = user.FullName,
                 Email = user.Email,
                 Phone = user.Phone,
@@ -86,6 +87,7 @@ namespace AuthServices.Controllers
                 var user = new Users
                 {
                     RoleId = request.RoleId,
+                    CinemaId = request.CinemaId,
                     FullName = request.FullName,
                     Email = request.Email,
                     Phone = request.Phone,

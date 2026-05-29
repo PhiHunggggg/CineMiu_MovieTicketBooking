@@ -9,6 +9,7 @@ namespace DTO.Authen
         public class RegisterRequest
         {
             public byte RoleId { get; set; }
+            public int? CinemaId { get; set; }
             public string FullName { get; set; } = "";
             public string Email { get; set; } = "";
             public string Password { get; set; } = "";

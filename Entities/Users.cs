@@ -16,6 +16,8 @@ namespace Entities
 
         [Column("role_id")]
         public byte RoleId { get; set; } = 1;
+        [Column("cinema_id")]
+        public int? CinemaId { get; set; }
 
         [Column("full_name")]
         public string FullName { get; set; } = "";

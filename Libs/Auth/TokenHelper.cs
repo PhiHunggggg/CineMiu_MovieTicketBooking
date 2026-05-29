@@ -80,22 +80,34 @@ namespace Libs.Auth
                 .Equals(storedHash,
                     StringComparison.Ordinal);
         }
-        public static string GenerateToken(string secretKey, int minuteExpireTime, string userId, string userName, string? roles)
+        public static string GenerateToken(string secretKey, int minuteExpireTime, string userId, string userName, string? roles,int? cinemaId)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
             var key = Encoding.ASCII.GetBytes(secretKey);
 
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.Name, userName),
+                new Claim(ClaimTypes.NameIdentifier, userId),
+                new Claim(ClaimTypes.Role, roles ?? "User"),
+            };
+
+            // Nếu user thuộc rạp nào thì lưu vào token
+            if (cinemaId.HasValue)
+            {
+                claims.Add(
+                    new Claim("CinemaId", cinemaId.Value.ToString()));
+            }
+
             var tokenDescriptor = new SecurityTokenDescriptor
             {
-                // Sử dụng C# Collection Expression [] giúp code cực kỳ gọn gàng
-                Subject = new ClaimsIdentity([
-                    new Claim(ClaimTypes.Name, userName),
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Role, roles ?? "User")
-                ]),
+                Subject = new ClaimsIdentity(claims),
 
                 Expires = DateTime.UtcNow.AddMinutes(minuteExpireTime),
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+
+                SigningCredentials = new SigningCredentials(
+                    new SymmetricSecurityKey(key),
+                    SecurityAlgorithms.HmacSha256Signature)
             };
 
             var token = tokenHandler.CreateToken(tokenDescriptor);
