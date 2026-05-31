@@ -1,0 +1,28 @@
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
+import AdminLayout from './layouts/AdminLayout'
+import Dashboard from './pages/admin/Dashboard'
+import Bookings from './pages/admin/Bookings'
+import Movies from './pages/admin/Movies'
+import Users from './pages/admin/Users'
+import './App.css'
+
+function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Navigate to="/admin/dashboard" replace />} />
+        <Route path="/admin" element={<AdminLayout />}>
+          <Route index element={<Navigate to="/admin/dashboard" replace />} />
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="movies" element={<Movies />} />
+          <Route path="bookings" element={<Bookings />} />
+          <Route path="users" element={<Users />} />
+          <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
+  )
+}
+
+export default App
