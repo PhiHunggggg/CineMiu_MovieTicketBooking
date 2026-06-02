@@ -67,7 +67,7 @@ namespace Entities
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
         [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
     [Table("halls")]
     public class Hall:IAudittable
@@ -99,7 +99,7 @@ namespace Entities
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
         [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
     [Table("seats")]
     public class Seat : IAudittable
@@ -128,6 +128,6 @@ namespace Entities
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
         [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
 }

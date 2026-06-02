@@ -7,7 +7,7 @@ namespace Entities.Audit
     public interface IAudittable
     {
         DateTime CreatedAt { get; set; }
-        DateTime UpdatedAt { get; set; }
+        DateTime? UpdatedAt { get; set; }
     }
     public interface IAudittable2
     {

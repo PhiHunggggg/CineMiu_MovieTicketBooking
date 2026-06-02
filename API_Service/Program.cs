@@ -9,6 +9,8 @@ using Microsoft.OpenApi;
 using Services.Theater;
 using System.Text;
 using Repository.EFCore.Theater;
+using Services.Booking;
+using Repository.EFCore.Bookings;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,7 +23,8 @@ builder.Services.AddDataProtection()
 
 builder.Services.AddScoped<IMovieService, MovieService>();
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
-
+builder.Services.AddScoped<IBookingService, BookkingService>();
+builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 //builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 //builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 //builder.Services.AddScoped<IBookingRepository, BookingRepository>();

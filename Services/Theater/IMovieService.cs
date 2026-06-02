@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Text;
+using DTO.Booking;
 using DTO.Common;
 using DTO.Theater;
 namespace Services.Theater

@@ -88,7 +88,7 @@ namespace Repository.Migrations
                     image_url = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     is_active = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -102,7 +102,7 @@ namespace Repository.Migrations
                     cat_id = table.Column<byte>(type: "tinyint", nullable: false),
                     cat_name = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -122,7 +122,7 @@ namespace Repository.Migrations
                     image_url = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     is_available = table.Column<bool>(type: "bit", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -164,7 +164,7 @@ namespace Repository.Migrations
                     genre_name = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     description = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -199,7 +199,7 @@ namespace Repository.Migrations
                     total_seats = table.Column<short>(type: "smallint", nullable: false),
                     status = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -227,7 +227,7 @@ namespace Repository.Migrations
                 columns: table => new
                 {
                     movie_id = table.Column<int>(type: "int", nullable: false),
-                    genre_id = table.Column<int>(type: "int", nullable: false)
+                    genre_id = table.Column<byte>(type: "tinyint", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -246,8 +246,8 @@ namespace Repository.Migrations
                     duration_mins = table.Column<short>(type: "smallint", nullable: false),
                     release_date = table.Column<DateTime>(type: "datetime2", nullable: true),
                     end_date = table.Column<DateTime>(type: "datetime2", nullable: true),
-                    age_rating = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    status = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    age_rating = table.Column<string>(type: "nvarchar(max)", nullable: true),
+                    status = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     synopsis = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     director = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     cast_members = table.Column<string>(type: "nvarchar(max)", nullable: true),
@@ -258,7 +258,7 @@ namespace Repository.Migrations
                     trailer_url = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     imdb_rating = table.Column<decimal>(type: "decimal(3,1)", precision: 3, scale: 1, nullable: true),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -374,7 +374,7 @@ namespace Repository.Migrations
                     valid_to = table.Column<DateTime>(type: "datetime2", nullable: false),
                     is_active = table.Column<bool>(type: "bit", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -407,7 +407,7 @@ namespace Repository.Migrations
                     role_name = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     description = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -441,7 +441,7 @@ namespace Repository.Migrations
                     description = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     price_modifier = table.Column<decimal>(type: "decimal(8,2)", precision: 8, scale: 2, nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -461,7 +461,7 @@ namespace Repository.Migrations
                     seat_code = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     is_active = table.Column<bool>(type: "bit", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -482,7 +482,7 @@ namespace Repository.Migrations
                     is_special = table.Column<bool>(type: "bit", nullable: false),
                     status = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -551,6 +551,7 @@ namespace Repository.Migrations
                     user_id = table.Column<int>(type: "int", nullable: false)
                         .Annotation("SqlServer:Identity", "1, 1"),
                     role_id = table.Column<byte>(type: "tinyint", nullable: false, defaultValue: (byte)1),
+                    cinema_id = table.Column<int>(type: "int", nullable: true),
                     full_name = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     email = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     phone = table.Column<string>(type: "nvarchar(450)", nullable: true),
@@ -560,7 +561,7 @@ namespace Repository.Migrations
                     gender = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     is_active = table.Column<bool>(type: "bit", nullable: false, defaultValue: true),
                     created_at = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()"),
-                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: false, defaultValueSql: "GETUTCDATE()")
+                    updated_at = table.Column<DateTime>(type: "datetime2", nullable: true, defaultValueSql: "GETUTCDATE()")
                 },
                 constraints: table =>
                 {

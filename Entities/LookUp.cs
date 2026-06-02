@@ -20,7 +20,7 @@ namespace Entities
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
         [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
     [Table("genres")]
     public class Genre : IAudittable
@@ -35,7 +35,7 @@ namespace Entities
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
         [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
     [Table("hall_types")]
     public class HallType
@@ -71,7 +71,7 @@ namespace Entities
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
         [Column("updated_at")]
-        public DateTime UpdatedAt { get; set; }
+        public DateTime? UpdatedAt { get; set; }
     }
     [Table("day_types")]
     public class DayType
