@@ -26,6 +26,10 @@ namespace Repository.Migrations
                 oldClrType: typeof(string),
                 oldType: "nvarchar(max)");
 
+            migrationBuilder.DropPrimaryKey(
+                name: "PK_movie_genres",
+                table: "movie_genres");
+
             migrationBuilder.AlterColumn<byte>(
                 name: "genre_id",
                 table: "movie_genres",
@@ -34,14 +38,10 @@ namespace Repository.Migrations
                 oldClrType: typeof(int),
                 oldType: "int");
 
-            migrationBuilder.AlterColumn<byte>(
-                name: "genre_id",
-                table: "genres",
-                type: "tinyint",
-                nullable: false,
-                oldClrType: typeof(int),
-                oldType: "int")
-                .OldAnnotation("SqlServer:Identity", "1, 1");
+            migrationBuilder.AddPrimaryKey(
+                name: "PK_movie_genres",
+                table: "movie_genres",
+                columns: new[] { "movie_id", "genre_id" });
         }
 
         /// <inheritdoc />
@@ -67,6 +67,10 @@ namespace Repository.Migrations
                 oldType: "nvarchar(max)",
                 oldNullable: true);
 
+            migrationBuilder.DropPrimaryKey(
+                name: "PK_movie_genres",
+                table: "movie_genres");
+
             migrationBuilder.AlterColumn<int>(
                 name: "genre_id",
                 table: "movie_genres",
@@ -75,14 +79,10 @@ namespace Repository.Migrations
                 oldClrType: typeof(byte),
                 oldType: "tinyint");
 
-            migrationBuilder.AlterColumn<int>(
-                name: "genre_id",
-                table: "genres",
-                type: "int",
-                nullable: false,
-                oldClrType: typeof(byte),
-                oldType: "tinyint")
-                .Annotation("SqlServer:Identity", "1, 1");
+            migrationBuilder.AddPrimaryKey(
+                name: "PK_movie_genres",
+                table: "movie_genres",
+                columns: new[] { "movie_id", "genre_id" });
         }
     }
 }

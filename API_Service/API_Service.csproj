@@ -14,10 +14,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Include="Repository.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
     <ProjectReference Include="..\API_Gateway\API_Gateway.csproj" />
     <ProjectReference Include="..\DTO\DTO.csproj" />
     <ProjectReference Include="..\Repository\Repository.csproj" />

@@ -9,6 +9,7 @@ namespace Repository.EFCore.Theater
 {
     public interface IMovieRepository
     {
+        Task<List<MovieDTO.GenreResponse>> GetGenresAsync();
         Task<List<DTO.Theater.MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, string? status, int? cinemaId);
         Task CreateAsync(MovieDTO.MovieRequest movieRequest);
         Task UpdateAsync(int movieId, MovieDTO.MovieRequest movieRequest);

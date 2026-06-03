@@ -10,6 +10,19 @@ namespace Repository.EFCore.Theater
 {
     public class MovieRepository(SqlServerDbContext context) : IMovieRepository
     {
+        public async Task<List<MovieDTO.GenreResponse>> GetGenresAsync()
+        {
+            return await context.Genres
+                .AsNoTracking()
+                .OrderBy(x => x.GenreId)
+                .Select(x => new MovieDTO.GenreResponse
+                {
+                    GenreId = x.GenreId,
+                    GenreName = x.GenreName
+                })
+                .ToListAsync();
+        }
+
         public async Task<List<DTO.Theater.MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, string? status, int? cinemaId)
         {
             var query = context.Movies.AsNoTracking();
@@ -22,7 +35,7 @@ namespace Repository.EFCore.Theater
             // now_showing, coming_soon, ended
             if(!string.IsNullOrEmpty(status))
             {
-                query = query.Where(x => status.Contains(x.Status!));
+                query = query.Where(x => x.Status == status);
             }
 
             // Tìm theo id phim
@@ -46,6 +59,7 @@ namespace Repository.EFCore.Theater
             var genreIdsLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreId);
             var items = movies.Select(x => new MovieDTO.MovieResponse
             {
+                MovieId = x.MovieId,
                 Title = x.Title,
                 TitleEn = x.TitleEn,
                 CountryId = x.CountryId,
@@ -83,6 +97,7 @@ namespace Repository.EFCore.Theater
                 .ToListAsync();
             return new MovieDTO.MovieResponse
             {
+                MovieId = movie.MovieId,
                 Title = movie.Title,
                 TitleEn = movie.TitleEn,
                 CountryId = movie.CountryId,
@@ -139,7 +154,7 @@ namespace Repository.EFCore.Theater
 
             if (movieRequest.GenreIds != null && movieRequest.GenreIds.Count > 0)
             {
-                var movieGenres = movieRequest.GenreIds.Select(genreId => new MovieGenre
+                var movieGenres = movieRequest.GenreIds.Distinct().Select(genreId => new MovieGenre
                 {
                     MovieId = movie.MovieId,
                     GenreId = genreId
