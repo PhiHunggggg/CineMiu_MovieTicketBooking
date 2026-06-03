@@ -80,6 +80,7 @@ namespace Repository
             modelBuilder.Entity<Notification>().HasIndex(e => new { e.UserId, e.IsRead });
 
             modelBuilder.Entity<Users>().Property(e => e.RoleId).HasDefaultValue((byte)1);
+            modelBuilder.Entity<Users>().Property(e => e.CinemaId).HasDefaultValue(null);
             modelBuilder.Entity<Users>().Property(e => e.IsActive).HasDefaultValue(true);
             modelBuilder.Entity<Users>().Property(e => e.CreatedAt).HasDefaultValueSql("GETUTCDATE()");
             modelBuilder.Entity<Users>().Property(e => e.UpdatedAt).HasDefaultValueSql("GETUTCDATE()");

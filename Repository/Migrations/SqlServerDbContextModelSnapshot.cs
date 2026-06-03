@@ -342,7 +342,7 @@ namespace Repository.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("phone");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -366,7 +366,7 @@ namespace Repository.Migrations
                         .HasColumnType("datetime2")
                         .HasColumnName("created_at");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -414,7 +414,7 @@ namespace Repository.Migrations
                         .HasColumnType("decimal(10,2)")
                         .HasColumnName("price");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -491,7 +491,7 @@ namespace Repository.Migrations
                         .HasColumnType("nvarchar(450)")
                         .HasColumnName("genre_name");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -546,7 +546,7 @@ namespace Repository.Migrations
                         .HasColumnType("smallint")
                         .HasColumnName("total_seats");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -703,7 +703,7 @@ namespace Repository.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("trailer_url");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -932,7 +932,7 @@ namespace Repository.Migrations
                         .HasColumnType("int")
                         .HasColumnName("total_uses");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -1019,7 +1019,7 @@ namespace Repository.Migrations
                         .HasColumnType("nvarchar(450)")
                         .HasColumnName("role_name");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -1070,7 +1070,7 @@ namespace Repository.Migrations
                         .HasColumnType("tinyint")
                         .HasColumnName("seat_type_id");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -1108,7 +1108,7 @@ namespace Repository.Migrations
                         .HasColumnType("nvarchar(450)")
                         .HasColumnName("type_name");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -1163,7 +1163,7 @@ namespace Repository.Migrations
                         .HasColumnType("nvarchar(max)")
                         .HasColumnName("status");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at");
 
@@ -1370,7 +1370,7 @@ namespace Repository.Migrations
                         .HasDefaultValue((byte)1)
                         .HasColumnName("role_id");
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("UpdatedAt")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("datetime2")
                         .HasColumnName("updated_at")
