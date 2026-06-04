@@ -18,26 +18,41 @@ export default function ProfilePage() {
     const email = getUserEmail(user);
 
     useEffect(() => {
-        if (!isLoggedIn || (!userId && !email)) {
-            setLoading(false);
-            return;
-        }
+        let ignore = false;
 
-        setLoading(true);
-        setError('');
+        Promise.resolve()
+            .then(() => {
+                if (!isLoggedIn || (!userId && !email)) {
+                    if (!ignore) setLoading(false);
+                    return null;
+                }
 
-        const membershipRequest = userId ? loyaltyApi.getByUser(userId) : loyaltyApi.getByEmail(email);
-        const transactionsRequest = userId ? loyaltyApi.getTransactions(userId) : loyaltyApi.getTransactionsByEmail(email);
+                if (!ignore) {
+                    setLoading(true);
+                    setError('');
+                }
 
-        Promise.all([membershipRequest, transactionsRequest])
-            .then(([membershipData, transactionData]) => {
+                const membershipRequest = userId ? loyaltyApi.getByUser(userId) : loyaltyApi.getByEmail(email);
+                const transactionsRequest = userId ? loyaltyApi.getTransactions(userId) : loyaltyApi.getTransactionsByEmail(email);
+
+                return Promise.all([membershipRequest, transactionsRequest]);
+            })
+            .then(result => {
+                if (ignore || !result) return;
+                const [membershipData, transactionData] = result;
                 setMembership(membershipData);
                 setTransactions(Array.isArray(transactionData) ? transactionData : []);
             })
             .catch(err => {
-                setError(err.message || 'Không thể tải thông tin thành viên.');
+                if (!ignore) setError(err.message || 'Không thể tải thông tin thành viên.');
             })
-            .finally(() => setLoading(false));
+            .finally(() => {
+                if (!ignore) setLoading(false);
+            });
+
+        return () => {
+            ignore = true;
+        };
     }, [isLoggedIn, userId, email]);
 
     if (loading) {

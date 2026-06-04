@@ -39,20 +39,38 @@ export default function MyTicketsPage() {
     const email = getUserEmail(user);
 
     useEffect(() => {
-        if (!userId && !email) {
-            setLoading(false);
-            setTickets([]);
-            return;
-        }
+        let ignore = false;
 
-        setLoading(true);
-        setError('');
+        Promise.resolve()
+            .then(() => {
+                if (!userId && !email) {
+                    if (!ignore) {
+                        setTickets([]);
+                        setLoading(false);
+                    }
+                    return null;
+                }
 
-        const request = userId ? bookingApi.getByUser(userId) : bookingApi.getByEmail(email);
-        request
-            .then(data => setTickets(Array.isArray(data) ? data.map(normalizeTicket) : []))
-            .catch(err => setError(err.message || 'Không thể tải danh sách vé.'))
-            .finally(() => setLoading(false));
+                if (!ignore) {
+                    setLoading(true);
+                    setError('');
+                }
+
+                return userId ? bookingApi.getByUser(userId) : bookingApi.getByEmail(email);
+            })
+            .then(data => {
+                if (!ignore && data) setTickets(Array.isArray(data) ? data.map(normalizeTicket) : []);
+            })
+            .catch(err => {
+                if (!ignore) setError(err.message || 'Không thể tải danh sách vé.');
+            })
+            .finally(() => {
+                if (!ignore) setLoading(false);
+            });
+
+        return () => {
+            ignore = true;
+        };
     }, [userId, email]);
 
     if (loading) {

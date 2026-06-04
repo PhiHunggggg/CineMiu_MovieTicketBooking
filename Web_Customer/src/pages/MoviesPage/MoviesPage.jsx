@@ -6,7 +6,7 @@ import './MoviesPage.css';
 
 export default function MoviesPage() {
     const [movies, setMovies] = useState([]);
-    const [genres, setGenres] = useState([]);
+    const [, setGenres] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('now_showing');
     const [search, setSearch] = useState('');
@@ -15,14 +15,27 @@ export default function MoviesPage() {
     const [selectedMovie, setSelectedMovie] = useState(null);
 
     useEffect(() => {
-        setLoading(true);
-        movieApi.getAll({ status: filter, keyword: search, page, pageSize: 12 })
-            .then(data => {
+        async function loadMovies() {
+            setLoading(true);
+
+            try {
+                const data = await movieApi.getAll({
+                    status: filter,
+                    keyword: search,
+                    page,
+                    pageSize: 12
+                });
+
                 setMovies(data.items || []);
                 setTotalPages(data.totalPages || 1);
-            })
-            .catch(console.error)
-            .finally(() => setLoading(false));
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        loadMovies();
     }, [filter, search, page]);
 
     useEffect(() => {
