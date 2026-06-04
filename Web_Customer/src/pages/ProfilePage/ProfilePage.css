@@ -1,0 +1,89 @@
+.profile-page {
+    padding-top: 32px;
+    padding-bottom: 48px;
+}
+
+.profile-page__header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 24px;
+}
+
+    .profile-page__header h1 {
+        margin: 0 0 6px;
+    }
+
+    .profile-page__header p {
+        margin: 0;
+        color: var(--text-muted, #777);
+    }
+
+.profile-page__tickets-link {
+    border: 1px solid var(--primary, #f5c518);
+    border-radius: 8px;
+    color: var(--primary, #f5c518);
+    font-weight: 700;
+    padding: 10px 14px;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.profile-page__grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(300px, 0.9fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.profile-page__summary {
+    border: 1px solid var(--border-color, #ddd);
+    border-radius: 8px;
+    padding: 20px;
+    background: var(--bg-card, #fff);
+}
+
+    .profile-page__summary h2 {
+        margin: 0 0 16px;
+    }
+
+    .profile-page__summary dl {
+        display: grid;
+        gap: 12px;
+        margin: 0;
+    }
+
+    .profile-page__summary div {
+        display: grid;
+        gap: 4px;
+    }
+
+    .profile-page__summary dt {
+        color: var(--text-muted, #777);
+        font-size: 0.82rem;
+    }
+
+    .profile-page__summary dd {
+        margin: 0;
+        font-weight: 700;
+    }
+
+.profile-page__error {
+    border: 1px solid rgba(220, 38, 38, 0.3);
+    border-radius: 8px;
+    color: #dc2626;
+    margin-bottom: 16px;
+    padding: 12px 14px;
+}
+
+@media (max-width: 800px) {
+    .profile-page__header,
+    .profile-page__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .profile-page__header {
+        flex-direction: column;
+    }
+}
