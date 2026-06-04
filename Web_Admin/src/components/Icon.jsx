@@ -23,6 +23,9 @@ const icons = {
   edit: (
     <path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Zm11-13 3 3" />
   ),
+  halls: (
+    <path d="M4 6h16v12H4V6Zm3 3h2v2H7V9Zm4 0h2v2h-2V9Zm4 0h2v2h-2V9ZM7 13h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Z" />
+  ),
   image: (
     <path d="M5 5h14v14H5V5Zm3 10 3-3 2 2 3-4 3 5M9 9.5h.01" />
   ),
@@ -43,6 +46,9 @@ const icons = {
   ),
   search: (
     <path d="m20 20-4.5-4.5M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z" />
+  ),
+  showtimes: (
+    <path d="M7 3v4M17 3v4M4 8h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Zm4 7 3 2 3-2" />
   ),
   trash: (
     <path d="M4 7h16M10 11v6m4-6v6M6 7l1 14h10l1-14M9 7V4h6v3" />

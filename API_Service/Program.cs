@@ -26,10 +26,13 @@ builder.Services.AddScoped<IMovieService, MovieService>();
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
 builder.Services.AddScoped<ICinemaService, CinemaService>();
 builder.Services.AddScoped<ICinemaRepository, CinemaRepository>();
+builder.Services.AddScoped<IHallService, HallService>();
+builder.Services.AddScoped<IHallRepository, HallRepository>();
+builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+builder.Services.AddScoped<IShowtimeRepository, ShowtimeRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 
-//builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 //builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 //builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 //builder.Services.AddScoped<IBookingService, BookingService>();
@@ -177,6 +180,49 @@ static async Task SeedLookupsAsync(IServiceProvider services)
             new Chain { ChainName = "CineMiu", LogoUrl = null, Website = "https://cinemiu.local" },
             new Chain { ChainName = "Galaxy Cinema", LogoUrl = null, Website = "https://www.galaxycine.vn" },
             new Chain { ChainName = "CGV", LogoUrl = null, Website = "https://www.cgv.vn" }
+        );
+    }
+
+    if (!await context.HallTypes.AnyAsync())
+    {
+        context.HallTypes.AddRange(
+            new HallType { HallTypeId = 1, TypeName = "2D", Description = "Phong chieu tieu chuan", SurchargePct = 0 },
+            new HallType { HallTypeId = 2, TypeName = "3D", Description = "Phong chieu 3D", SurchargePct = 15 },
+            new HallType { HallTypeId = 3, TypeName = "IMAX", Description = "Phong chieu IMAX", SurchargePct = 30 },
+            new HallType { HallTypeId = 4, TypeName = "4DX", Description = "Phong chieu 4DX", SurchargePct = 35 }
+        );
+    }
+
+    if (!await context.SeatTypes.AnyAsync())
+    {
+        context.SeatTypes.AddRange(
+            new SeatType
+            {
+                SeatTypeId = 1,
+                TypeName = "Standard",
+                Description = "Ghe tieu chuan",
+                PriceModifier = 0,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new SeatType
+            {
+                SeatTypeId = 2,
+                TypeName = "VIP",
+                Description = "Ghe VIP",
+                PriceModifier = 20000,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new SeatType
+            {
+                SeatTypeId = 3,
+                TypeName = "Couple",
+                Description = "Ghe doi",
+                PriceModifier = 45000,
+                CreatedAt = now,
+                UpdatedAt = now
+            }
         );
     }
 

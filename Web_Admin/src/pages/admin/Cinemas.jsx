@@ -163,10 +163,12 @@ function Cinemas() {
   }, [isActiveFilter, keyword, page])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchChains()
   }, [fetchChains])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchCinemas()
   }, [fetchCinemas])
 

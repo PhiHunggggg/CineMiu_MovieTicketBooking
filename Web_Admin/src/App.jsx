@@ -6,6 +6,8 @@ import Cinemas from './pages/admin/Cinemas'
 import Movies from './pages/admin/Movies'
 import Users from './pages/admin/Users'
 import './App.css'
+import Halls from './pages/admin/Halls'
+import Showtimes from './pages/admin/Showtimes'
 
 function App() {
   return (
@@ -17,6 +19,8 @@ function App() {
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="movies" element={<Movies />} />
           <Route path="cinemas" element={<Cinemas />} />
+          <Route path="halls" element={<Halls />} />
+          <Route path="showtimes" element={<Showtimes />} />
           <Route path="bookings" element={<Bookings />} />
           <Route path="users" element={<Users />} />
           <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />

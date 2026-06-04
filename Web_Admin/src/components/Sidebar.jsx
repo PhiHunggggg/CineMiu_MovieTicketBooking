@@ -5,6 +5,8 @@ const navigationItems = [
   { to: '/admin/dashboard', label: 'Tổng quan', icon: 'dashboard' },
   { to: '/admin/movies', label: 'Phim', icon: 'movies' },
   { to: '/admin/cinemas', label: 'Rạp', icon: 'cinemas' },
+  { to: '/admin/halls', label: 'Phòng chiếu', icon: 'halls' },
+  { to: '/admin/showtimes', label: 'Suất chiếu', icon: 'showtimes' },
   { to: '/admin/bookings', label: 'Đặt vé', icon: 'bookings' },
   { to: '/admin/users', label: 'Người dùng', icon: 'users' },
 ]

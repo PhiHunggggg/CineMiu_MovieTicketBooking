@@ -347,6 +347,13 @@
   gap: 10px;
 }
 
+.showtimes-filters {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) auto auto;
+  gap: 10px;
+  justify-content: start;
+}
+
 .search-field {
   position: relative;
   min-width: 0;
@@ -371,6 +378,8 @@
 .movies-filters select,
 .cinemas-filters input,
 .cinemas-filters select,
+.showtimes-filters input,
+.showtimes-filters select,
 .form-field input,
 .form-field select,
 .form-field textarea {
@@ -395,6 +404,8 @@
 .movies-filters select:focus,
 .cinemas-filters input:focus,
 .cinemas-filters select:focus,
+.showtimes-filters input:focus,
+.showtimes-filters select:focus,
 .form-field input:focus,
 .form-field select:focus,
 .form-field textarea:focus {
@@ -556,6 +567,94 @@
   object-fit: cover;
 }
 
+.showtimes-table {
+  min-width: 1040px;
+}
+
+.showtime-location-cell strong,
+.showtime-location-cell span,
+.showtime-location-cell small,
+.schedule-cell strong,
+.schedule-cell span,
+.schedule-cell small,
+.seat-count-cell strong,
+.seat-count-cell small {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.showtime-location-cell strong,
+.schedule-cell strong,
+.seat-count-cell strong {
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.showtime-location-cell span,
+.showtime-location-cell small,
+.schedule-cell span,
+.schedule-cell small,
+.seat-count-cell small {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
+.showtime-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.showtime-tags span {
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 999px;
+  color: #0f766e;
+  background: #ccfbf1;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.seat-progress {
+  width: 128px;
+  height: 6px;
+  overflow: hidden;
+  margin-top: 8px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+
+.seat-progress span {
+  height: 100%;
+  display: block;
+  border-radius: inherit;
+  background: #f97316;
+}
+
+.showtime-form-modal {
+  width: min(780px, 100%);
+}
+
+.form-hint {
+  color: var(--color-muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.showtime-special-field {
+  align-self: end;
+}
+
 .status-badge {
   min-width: 96px;
   display: inline-flex;
@@ -590,6 +689,31 @@
 }
 
 .status-inactive {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.status-scheduled {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.status-selling {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.status-sold_out {
+  color: #9a3412;
+  background: #ffedd5;
+}
+
+.status-cancelled {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.status-completed {
   color: #475569;
   background: #e2e8f0;
 }
@@ -800,7 +924,8 @@
   }
 
   .movies-filters,
-  .cinemas-filters {
+  .cinemas-filters,
+  .showtimes-filters {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -835,6 +960,7 @@
 
   .movies-filters,
   .cinemas-filters,
+  .showtimes-filters,
   .form-grid {
     grid-template-columns: 1fr;
   }

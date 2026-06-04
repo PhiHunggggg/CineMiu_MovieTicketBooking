@@ -6,7 +6,7 @@ namespace API_Service.Controllers
 {
     [Route("api/cinemas")]
     [ApiController]
-    public class CinemaController(ICinemaService cinemaService) : ControllerBase
+    public class CinemaController(ICinemaService cinemaService, IHallService hallService) : ControllerBase
     {
         [HttpGet("chains")]
         public async Task<IActionResult> GetChains()
@@ -28,6 +28,20 @@ namespace API_Service.Controllers
             try
             {
                 var result = await cinemaService.GetCinemaByIdAsync(cinemaId);
+                return Ok(result);
+            }
+            catch (ArgumentException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
+        }
+
+        [HttpGet("halls/{hallId:int}/seats")]
+        public async Task<IActionResult> GetHallSeats(int hallId)
+        {
+            try
+            {
+                var result = await hallService.GetSeatsAsync(hallId);
                 return Ok(result);
             }
             catch (ArgumentException ex)

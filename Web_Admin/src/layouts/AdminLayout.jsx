@@ -5,6 +5,9 @@ import Sidebar from '../components/Sidebar'
 const pageTitles = {
   '/admin/dashboard': 'Tổng quan',
   '/admin/movies': 'Quản lý phim',
+  '/admin/cinemas': 'Quản lý rạp',
+  '/admin/halls': 'Quản lý phòng chiếu',
+  '/admin/showtimes': 'Quản lý suất chiếu',
   '/admin/bookings': 'Quản lý đặt vé',
   '/admin/users': 'Quản lý người dùng',
 }

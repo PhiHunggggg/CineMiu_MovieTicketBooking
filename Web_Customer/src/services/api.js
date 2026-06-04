@@ -18,3 +18,7 @@ export const movieApi = {
     },
     getById: (id) => request(`/movies/${id}`),
 };
+
+export const showtimeApi = {
+    getAll: (params = {}) => request('/showtimes?${new URLSearchParams(params)}'),
+}

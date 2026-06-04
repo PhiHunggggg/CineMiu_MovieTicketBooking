@@ -267,6 +267,11 @@ namespace Repository.EFCore.Bookings
                     throw new Exception("Concession quantity must be greater than 0");
                 }
 
+                if (seats.Any(s => s.HallId != showtime.HallId || !s.IsActive))
+                {
+                    throw new Exception("Some selected seats are not valid for this showtime");
+                }
+
                 if (items.Count != itemIds.Count)
                 {
                     throw new Exception("Some concessions were not found");
