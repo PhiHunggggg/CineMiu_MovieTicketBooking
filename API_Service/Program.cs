@@ -13,7 +13,9 @@ using Repository.EFCore.Theater;
 using Services.Booking;
 using Repository.EFCore.Bookings;
 
+
 var builder = WebApplication.CreateBuilder(args);
+
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();

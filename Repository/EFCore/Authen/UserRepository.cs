@@ -7,6 +7,35 @@ namespace Repository.EFCore.Authen
 {
     public class UserRepository(SqlServerDbContext context) : IUserRepository
     {
+        public async Task<List<Users>> SearchAsync(string? keyword, byte? roleId, bool? isActive)
+{
+    var query = context.Users.AsNoTracking().AsQueryable();
+
+    if (!string.IsNullOrWhiteSpace(keyword))
+    {
+        keyword = keyword.Trim();
+        query = query.Where(u =>
+            u.FullName.Contains(keyword) ||
+            u.Email.Contains(keyword) ||
+            (u.Phone != null && u.Phone.Contains(keyword)));
+    }
+
+    if (roleId.HasValue) query = query.Where(u => u.RoleId == roleId.Value);
+    if (isActive.HasValue) query = query.Where(u => u.IsActive == isActive.Value);
+
+    return await query.OrderByDescending(u => u.CreatedAt).ToListAsync();
+}
+
+public Task<bool> EmailExistsAsync(string email, int? excludeUserId = null)
+{
+    return context.Users.AnyAsync(u =>
+        u.Email == email && (!excludeUserId.HasValue || u.UserId != excludeUserId.Value));
+}
+
+public Task<List<Role>> GetRolesAsync()
+{
+    return context.Roles.AsNoTracking().OrderBy(r => r.RoleId).ToListAsync();
+}
         public async Task<Users?> GetByIndentifierAsync(string identifier)
         {
             identifier = identifier.Trim();
