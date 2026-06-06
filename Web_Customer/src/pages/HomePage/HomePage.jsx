@@ -37,6 +37,7 @@ export default function HomePage() {
 
     const heroMovies = nowShowing.slice(0, 5);
     const heroMovie = heroMovies[heroIndex];
+    const heroMovieId = heroMovie?.movieId || heroMovie?.id;
 
     const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ';
 
@@ -67,10 +68,10 @@ export default function HomePage() {
                                     <p className="hero__synopsis">{heroMovie.synopsis.substring(0, 200)}...</p>
                                 )}
                                 <div className="hero__actions">
-                                    <Link to={`/bookings?flow=movie_first&movieId=${heroMovie.id || heroMovie.movieId}`} className="hero__btn hero__btn--primary">
+                                    <Link to={`/bookings?flow=movie_first&movieId=${heroMovieId}`} className="hero__btn hero__btn--primary">
                                         🎟️ Đặt vé ngay
                                     </Link>
-                                    <Link to={`/movies/${heroMovie.id || heroMovie.movieId}`} className="hero__btn hero__btn--secondary">
+                                    <Link to={`/movies/${heroMovieId}`} className="hero__btn hero__btn--secondary">
                                         Chi tiết phim
                                     </Link>
                                     {heroMovie.trailerUrl && (
@@ -162,7 +163,7 @@ export default function HomePage() {
                 ) : (
                     <div className="home-movie-grid">
                         {nowShowing.map(movie => (
-                            <MovieCard key={movie.id} movie={movie} />
+                            <MovieCard key={movie.movieId || movie.id} movie={movie} />
                         ))}
                     </div>
                 )}
@@ -186,7 +187,7 @@ export default function HomePage() {
                 ) : comingSoon.length > 0 ? (
                     <div className="home-movie-grid">
                         {comingSoon.map(movie => (
-                            <MovieCard key={movie.id} movie={movie} />
+                            <MovieCard key={movie.movieId || movie.id} movie={movie} />
                         ))}
                     </div>
                 ) : (

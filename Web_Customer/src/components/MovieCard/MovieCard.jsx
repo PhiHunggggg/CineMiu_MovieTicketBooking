@@ -21,6 +21,7 @@ export default function MovieCard({ movie }) {
   };
 
   const movieId = movie.id || movie.movieId;
+  const genres = Array.isArray(movie.genres) ? movie.genres : [];
 
   return (
     <>
@@ -42,6 +43,9 @@ export default function MovieCard({ movie }) {
             <Link to={`/bookings?flow=movie_first&movieId=${movieId}`} className="movie-card-v2__btn movie-card-v2__btn--book">
               🎟️ Đặt vé
             </Link>
+            <Link to={`/movies/${movieId}`} className="movie-card-v2__btn movie-card-v2__btn--trailer">
+              Chi tiết
+            </Link>
             {movie.trailerUrl && (
               <button
                 onClick={(e) => { e.preventDefault(); setShowTrailer(true); }}
@@ -55,7 +59,9 @@ export default function MovieCard({ movie }) {
 
         <div className="movie-card-v2__info">
           <h3 className="movie-card-v2__title">{movie.title}</h3>
-          <h3 className="movie-card-v2__genre">Thể loại : {movie.genres.map((genre) => genre).join(', ')}.</h3>
+          {genres.length > 0 && (
+            <h3 className="movie-card-v2__genre">Thể loại: {genres.join(', ')}.</h3>
+          )}
           <div className="movie-card-v2__meta">
             <span>⏱ {movie.durationMins}p</span>
             {movie.releaseDate && <span>📅 {formatDate(movie.releaseDate)}</span>}
