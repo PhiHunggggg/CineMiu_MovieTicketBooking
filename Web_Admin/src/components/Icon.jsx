@@ -56,6 +56,9 @@ const icons = {
   users: (
     <path d="M16 19v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1m10-9a4 4 0 1 1-8 0 4 4 0 0 1 8 0Zm8 9v-1a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
   ),
+  vouchers: (
+    <path d="M4 7h16v4a2 2 0 0 0 0 4v4H4v-4a2 2 0 0 0 0-4V7Zm6 3 4 6m.5-6h.01M9.5 16h.01" />
+  ),
 }
 
 function Icon({ name, className = 'icon' }) {

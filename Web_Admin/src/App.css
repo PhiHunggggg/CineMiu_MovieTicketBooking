@@ -360,6 +360,12 @@
   justify-content: start;
 }
 
+.vouchers-filters {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 180px 170px auto auto;
+  gap: 10px;
+}
+
 .search-field {
   position: relative;
   min-width: 0;
@@ -388,6 +394,8 @@
 .users-filters select,
 .showtimes-filters input,
 .showtimes-filters select,
+.vouchers-filters input,
+.vouchers-filters select,
 .form-field input,
 .form-field select,
 .form-field textarea {
@@ -416,6 +424,8 @@
 .users-filters select:focus,
 .showtimes-filters input:focus,
 .showtimes-filters select:focus,
+.vouchers-filters input:focus,
+.vouchers-filters select:focus,
 .form-field input:focus,
 .form-field select:focus,
 .form-field textarea:focus {
@@ -614,6 +624,31 @@
   min-width: 1040px;
 }
 
+.vouchers-table {
+  min-width: 1080px;
+}
+
+.voucher-code-cell strong,
+.voucher-code-cell span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.voucher-code-cell strong {
+  color: var(--color-text);
+  font-size: 15px;
+  line-height: 1.25;
+}
+
+.voucher-code-cell span {
+  margin-top: 4px;
+  color: var(--color-muted);
+  font-size: 13px;
+}
+
 .showtime-location-cell strong,
 .showtime-location-cell span,
 .showtime-location-cell small,
@@ -692,6 +727,10 @@
   width: min(760px, 100%);
 }
 
+.voucher-form-modal {
+  width: min(780px, 100%);
+}
+
 .form-hint {
   color: var(--color-muted);
   font-size: 12px;
@@ -763,6 +802,17 @@
 .status-completed {
   color: #475569;
   background: #e2e8f0;
+}
+
+.status-upcoming {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.status-expired,
+.status-exhausted {
+  color: #991b1b;
+  background: #fee2e2;
 }
 
 .row-actions {
@@ -973,7 +1023,8 @@
   .movies-filters,
   .cinemas-filters,
   .users-filters,
-  .showtimes-filters {
+  .showtimes-filters,
+  .vouchers-filters {
     grid-template-columns: 1fr 1fr;
   }
 }
@@ -1010,6 +1061,7 @@
   .cinemas-filters,
   .users-filters,
   .showtimes-filters,
+  .vouchers-filters,
   .form-grid {
     grid-template-columns: 1fr;
   }

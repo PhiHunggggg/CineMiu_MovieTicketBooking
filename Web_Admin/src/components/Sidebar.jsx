@@ -8,6 +8,7 @@ const navigationItems = [
   { to: '/admin/halls', label: 'Phòng chiếu', icon: 'halls' },
   { to: '/admin/showtimes', label: 'Suất chiếu', icon: 'showtimes' },
   { to: '/admin/bookings', label: 'Đặt vé', icon: 'bookings' },
+  { to: '/admin/vouchers', label: 'Voucher', icon: 'vouchers' },
   { to: '/admin/users', label: 'Người dùng', icon: 'users' },
 ]
 

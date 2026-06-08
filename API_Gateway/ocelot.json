@@ -120,6 +120,40 @@
       ]
     },
     {
+      "DownstreamPathTemplate": "/api/promotions/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5001
+        }
+      ],
+      "UpstreamPathTemplate": "/api/promotions/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS"
+      ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/promotions",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5001
+        }
+      ],
+      "UpstreamPathTemplate": "/api/promotions",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "OPTIONS"
+      ]
+    },
+    {
       "DownstreamPathTemplate": "/api/bookings",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [

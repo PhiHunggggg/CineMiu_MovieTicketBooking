@@ -8,6 +8,7 @@ import Users from './pages/admin/Users'
 import './App.css'
 import Halls from './pages/admin/Halls'
 import Showtimes from './pages/admin/Showtimes'
+import Vouchers from './pages/admin/Vouchers'
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="halls" element={<Halls />} />
           <Route path="showtimes" element={<Showtimes />} />
           <Route path="bookings" element={<Bookings />} />
+          <Route path="vouchers" element={<Vouchers />} />
           <Route path="users" element={<Users />} />
           <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Route>

@@ -480,7 +480,7 @@ namespace Repository.EFCore.Bookings
 
             return BookingPromotionValidation.Valid(promotion, discountAmount);
         }
-        private static decimal CalculateDiscount(Promotion promotion, decimal orderAmount)
+        private static decimal CalculateDiscount(Entities.Promotion promotion, decimal orderAmount)
         {
             if (orderAmount <= 0)
             {

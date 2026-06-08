@@ -9,6 +9,7 @@ const pageTitles = {
   '/admin/halls': 'Quản lý phòng chiếu',
   '/admin/showtimes': 'Quản lý suất chiếu',
   '/admin/bookings': 'Quản lý đặt vé',
+  '/admin/vouchers': 'Quản lý voucher',
   '/admin/users': 'Quản lý người dùng',
 }
 

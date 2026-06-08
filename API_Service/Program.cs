@@ -12,6 +12,8 @@ using System.Text;
 using Repository.EFCore.Theater;
 using Services.Booking;
 using Repository.EFCore.Bookings;
+using Repository.EFCore.Promotion;
+using Services.Promotion;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -34,6 +36,8 @@ builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 builder.Services.AddScoped<IShowtimeRepository, ShowtimeRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
+builder.Services.AddScoped<IPromotionService, PromotionService>();
+builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 
 //builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 //builder.Services.AddScoped<IBookingRepository, BookingRepository>();
@@ -154,7 +158,7 @@ app.MapControllers();
 await SeedLookupsAsync(app.Services);
 
 Console.WriteLine("Cinema Booking API Service running on port 5001");
-Console.WriteLine("Endpoints: /api/movies, /api/cinemas, /api/showtimes, /api/bookings");
+Console.WriteLine("Endpoints: /api/movies, /api/cinemas, /api/showtimes, /api/bookings, /api/promotions");
 app.Run();
 
 static async Task SeedLookupsAsync(IServiceProvider services)
