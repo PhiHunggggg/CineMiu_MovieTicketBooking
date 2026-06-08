@@ -64,14 +64,21 @@ namespace API_Service.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateBooking([FromBody] DTO.Booking.BookingDto.BookingCreateRequest request)
         {
-            var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(claimValue, out var userId))
+            try
             {
-                return Unauthorized(new { message = "User ID not found in token" });
+                var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!int.TryParse(claimValue, out var userId))
+                {
+                    return Unauthorized(new { message = "User ID not found in token" });
+                }
+                request.UserId = userId;
+                var bookingId = await bookingService.Create(request);
+                return Ok(new { message = "Booking created successfully", bookingId });
             }
-            request.UserId = userId;
-            var bookingId = await bookingService.Create(request);
-            return Ok(new { message = "Booking created successfully", bookingId });
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
 
         [Authorize]
@@ -97,6 +104,32 @@ namespace API_Service.Controllers
             {
                 await bookingService.Cancel(id, cancel, currentUserId, currentUserRole, currentUserCinemaId);
                 return Ok(new { message = "Booking cancelled successfully" });
+            }
+            catch (Exception ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
+        [Authorize]
+        [HttpPost("{id:int}/payments")]
+        public async Task<IActionResult> AddPayment(int id, [FromBody] BookingPaymentCreateRequest request)
+        {
+            var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(userIdClaim, out var currentUserId))
+            {
+                return Unauthorized(new { message = "User ID not found in token" });
+            }
+
+            try
+            {
+                var result = await bookingService.AddPaymentAsync(id, request, currentUserId);
+                if (result == null)
+                {
+                    return NotFound(new { message = "Booking not found" });
+                }
+
+                return Ok(result);
             }
             catch (Exception ex)
             {
