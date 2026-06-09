@@ -16,13 +16,13 @@
     opacity: 0;
     transform: translateY(16px);
   }
-
   to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
+/* Booking Flow Selector */
 .booking-flow-selector {
   display: flex;
   gap: 0.75rem;
@@ -70,7 +70,6 @@
   .booking-flow-selector {
     flex-direction: column;
   }
-
   .booking-flow-selector__btn {
     justify-content: center;
   }

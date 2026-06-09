@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useBooking } from '../../context/BookingContext';
+import { BookingProvider, useBooking } from '../../context/BookingContext';
 import { useAuth } from '../../context/AuthContext';
 import { cinemaApi, movieApi } from '../../services/api';
 import BookingStepper from '../../components/BookingStepper/BookingStepper';
@@ -11,143 +11,128 @@ import CinemaForMovieSelect from '../../components/Steps/CinemaForMovieSelect/Ci
 import ShowtimeSelect from '../../components/Steps/ShowtimeSelect/ShowtimeSelect';
 import SeatSelect from '../../components/Steps/SeatSelect/SeatSelect';
 import FoodSelect from '../../components/Steps/FoodSelect/FoodSelect';
+import VoucherSelect from '../../components/Steps/VoucherSelect/VoucherSelect';
 import Invoice from '../../components/Steps/Invoice/Invoice';
 import LoginGateModal from '../../components/LoginGateModal/LoginGateModal';
 import './BookingPage.css';
 
-function normalizeMovie(movieData) {
-  const movie = movieData?.movie || movieData;
-  if (!movie) return null;
-
-  return {
-    ...movie,
-    movieId: movie.movieId || movie.id,
-    durationMins: movie.durationMins || movie.durationMin,
-  };
-}
-
-function normalizeCinema(cinemaData) {
-  const cinema = cinemaData?.cinema || cinemaData;
-  if (!cinema) return null;
-
-  return {
-    ...cinema,
-    cinemaId: cinema.cinemaId || cinema.id,
-    cinemaName: cinema.cinemaName || cinema.name,
-    name: cinema.name || cinema.cinemaName,
-  };
-}
-
-export default function BookingPage() {
-  const {
-    step,
-    bookingFlow,
-    setBookingFlow,
-    selectCinema,
-    selectMovieFirst,
-    selectCinemaForMovie,
-  } = useBooking();
+function BookingContent() {
+  const { step, bookingFlow, setBookingFlow, selectCinema, selectMovieFirst, selectCinemaForMovie } = useBooking();
   const { isLoggedIn } = useAuth();
+  const [showLoginModal, setShowLoginModal] = useState(false);
   const [searchParams] = useSearchParams();
   const [initialized, setInitialized] = useState(false);
 
+  // Handle URL params for deep linking
   useEffect(() => {
     if (initialized) return;
-
     const flowParam = searchParams.get('flow');
     const movieIdParam = searchParams.get('movieId');
     const cinemaIdParam = searchParams.get('cinemaId');
 
     if (flowParam === 'movie_first') {
       setBookingFlow('movie_first');
-
+      // If a movieId is provided, auto-select the movie
       if (movieIdParam) {
-        movieApi
-          .getById(Number(movieIdParam))
+        movieApi.getById(parseInt(movieIdParam))
           .then(movieData => {
-            const movie = normalizeMovie(movieData);
-            if (movie) {
-              selectMovieFirst(movie);
-            }
-
-            if (cinemaIdParam) {
-              cinemaApi
-                .getById(Number(cinemaIdParam))
-                .then(cinemaData => {
-                  const cinema = normalizeCinema(cinemaData);
-                  if (cinema) {
-                    selectCinemaForMovie(cinema);
-                  }
-                })
-                .catch(console.error);
+            if (movieData) {
+              // Normalize the movie data
+              const movie = movieData.movie || movieData;
+              selectMovieFirst({
+                movieId: movie.movieId || movie.id,
+                title: movie.title,
+                posterUrl: movie.posterUrl,
+                durationMins: movie.durationMins || movie.durationMin,
+                ageRating: movie.ageRating,
+                imdbRating: movie.imdbRating,
+                releaseDate: movie.releaseDate,
+              });
+              if (cinemaIdParam) {
+                cinemaApi.getById(parseInt(cinemaIdParam))
+                  .then(data => {
+                    const cinema = data.cinema || data;
+                    selectCinemaForMovie({
+                      cinemaId: cinema.cinemaId || cinema.id,
+                      cinemaName: cinema.cinemaName || cinema.name,
+                      name: cinema.cinemaName || cinema.name,
+                      address: cinema.address,
+                      city: cinema.city,
+                      district: cinema.district,
+                      imageUrl: cinema.imageUrl,
+                    });
+                  })
+                  .catch(console.error);
+              }
             }
           })
           .catch(console.error);
       }
     } else if (cinemaIdParam) {
+      // Cinema-first with pre-selected cinema
       setBookingFlow('cinema_first');
-
-      cinemaApi
-        .getById(Number(cinemaIdParam))
-        .then(cinemaData => {
-          const cinema = normalizeCinema(cinemaData);
-          if (cinema) {
-            selectCinema(cinema);
-          }
+      cinemaApi.getById(parseInt(cinemaIdParam))
+        .then(data => {
+          const cinema = data.cinema || data;
+          selectCinema({
+            cinemaId: cinema.cinemaId || cinema.id,
+            cinemaName: cinema.cinemaName || cinema.name,
+            name: cinema.cinemaName || cinema.name,
+            address: cinema.address,
+            city: cinema.city,
+            district: cinema.district,
+            imageUrl: cinema.imageUrl,
+          });
         })
         .catch(console.error);
     }
-
     setInitialized(true);
   }, [searchParams, initialized, setBookingFlow, selectMovieFirst, selectCinema, selectCinemaForMovie]);
 
+  // If step >= 3 and user is NOT logged in, show login gate
   const needsLogin = step >= 3 && !isLoggedIn;
 
   const renderStep = () => {
+    // Show login modal overlay when trying to access step 3+ without login
     if (needsLogin) {
-      return <LoginGateModal />;
+      return (
+        <>
+          <LoginGateModal
+            onClose={() => setShowLoginModal(false)}
+          />
+        </>
+      );
     }
 
     if (bookingFlow === 'movie_first') {
       switch (step) {
-        case 1:
-          return <MovieSelectFirst />;
-        case 2:
-          return <CinemaForMovieSelect />;
-        case 3:
-          return <ShowtimeSelect />;
-        case 4:
-          return <SeatSelect />;
-        case 5:
-          return <FoodSelect />;
-        case 6:
-          return <Invoice />;
-        default:
-          return <MovieSelectFirst />;
+        case 1: return <MovieSelectFirst />;
+        case 2: return <CinemaForMovieSelect />;
+        case 3: return <ShowtimeSelect />;
+        case 4: return <SeatSelect />;
+        case 5: return <FoodSelect />;
+        case 6: return <VoucherSelect />;
+        case 7: return <Invoice />;
+        default: return <MovieSelectFirst />;
       }
-    }
-
-    switch (step) {
-      case 1:
-        return <CinemaSelect />;
-      case 2:
-        return <MovieSelect />;
-      case 3:
-        return <ShowtimeSelect />;
-      case 4:
-        return <SeatSelect />;
-      case 5:
-        return <FoodSelect />;
-      case 6:
-        return <Invoice />;
-      default:
-        return <CinemaSelect />;
+    } else {
+      switch (step) {
+        case 1: return <CinemaSelect />;
+        case 2: return <MovieSelect />;
+        case 3: return <ShowtimeSelect />;
+        case 4: return <SeatSelect />;
+        case 5: return <FoodSelect />;
+        case 6: return <VoucherSelect />;
+        case 7: return <Invoice />;
+        default: return <CinemaSelect />;
+      }
     }
   };
 
   return (
     <div className="booking-page" id="booking-page">
       <div className="booking-page__container container">
+        {/* Flow selector — only show at step 1 */}
         {step === 1 && (
           <div className="booking-flow-selector" id="booking-flow-selector">
             <button
@@ -166,13 +151,19 @@ export default function BookingPage() {
             </button>
           </div>
         )}
-
         <BookingStepper />
-
         <div className="booking-page__step" key={needsLogin ? 'login-gate' : step}>
           {renderStep()}
         </div>
       </div>
     </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <BookingProvider>
+      <BookingContent />
+    </BookingProvider>
   );
 }
