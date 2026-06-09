@@ -477,6 +477,14 @@
   font-weight: 800;
 }
 
+.invoice-success__checkin-item img {
+  width: 64px;
+  height: 64px;
+  padding: 4px;
+  background: #fff;
+  border-radius: var(--radius-sm);
+}
+
 .invoice-success__checkin-item code {
   min-width: 0;
   padding: 0.5rem;
