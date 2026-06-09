@@ -1,13 +1,14 @@
-export const BANK_ID = 'MB';
-export const ACCOUNT_NO = '0000000000';
-export const ACCOUNT_NAME = 'CINEMIU';
+export const BANK_ID = 'MB'; // Military Bank
+export const ACCOUNT_NO = '0693913018888';
+export const ACCOUNT_NAME = 'NGUYEN PHI HUNG';
+const TEMPLATE = 'compact';
 
-export function generateQrCodeUrl(amount, content) {
-  const params = new URLSearchParams({
-    amount: Math.max(0, Number(amount || 0)).toString(),
-    addInfo: content || 'CINEMIU',
-    accountName: ACCOUNT_NAME,
-  });
-
-  return `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-compact2.png?${params.toString()}`;
-}
+/**
+ * Generates a VietQR URL for payment
+ * @param {number} amount - The amount to be paid
+ * @param {string} bookingCode - The unique booking code to be used as description
+ * @returns {string} The QR code image URL
+ */
+export const generateQrCodeUrl = (amount, bookingCode) => {
+  return `https://img.vietqr.io/image/${BANK_ID}-${ACCOUNT_NO}-${TEMPLATE}.png?amount=${amount}&addInfo=${encodeURIComponent(bookingCode)}&accountName=${encodeURIComponent(ACCOUNT_NAME)}`;
+};
