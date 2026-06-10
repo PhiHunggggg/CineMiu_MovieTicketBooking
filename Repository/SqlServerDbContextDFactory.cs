@@ -11,7 +11,7 @@ namespace Repository
 
             // Used by "dotnet ef" when no startup project host is available.
             var connectionString =
-                "Server=MEICHAN;Database=CINEMIU_MovieTicketBooking;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
+                "Server=PHIHUNG\\SQLEXPRESS01;Database=CINEMIU_MovieTicketBooking;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
 
             optionsBuilder.UseSqlServer(connectionString);
 
