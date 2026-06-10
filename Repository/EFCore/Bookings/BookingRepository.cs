@@ -70,7 +70,13 @@ namespace Repository.EFCore.Bookings
                 StartTime = x.showtime.StartTime,
                 EndTime = x.showtime.EndTime,
                 TicketCount = context.Tickets.Count(t => t.BookingId == x.booking.BookingId),
-                UsedTicketCount = context.Tickets.Count(t => t.BookingId == x.booking.BookingId && t.IsUsed)
+                UsedTicketCount = context.Tickets.Count(t => t.BookingId == x.booking.BookingId && t.IsUsed),
+                RefundAmount = context.Payments
+                    .Where(p => p.BookingId == x.booking.BookingId)
+                    .Sum(p => p.RefundAmount ?? 0),
+                RefundedAt = context.Payments
+                    .Where(p => p.BookingId == x.booking.BookingId && p.RefundedAt != null)
+                    .Max(p => p.RefundedAt)
             }).ToListAsync();
 
             return result;
@@ -108,9 +114,87 @@ namespace Repository.EFCore.Bookings
                                     StartTime = showtime.StartTime,
                                     EndTime = showtime.EndTime,
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
+                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
+                                    RefundAmount = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId)
+                                        .Sum(p => p.RefundAmount ?? 0),
+                                    RefundedAt = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId && p.RefundedAt != null)
+                                        .Max(p => p.RefundedAt)
                                 }).FirstOrDefaultAsync();
             return result;
+        }
+        public async Task<BookingDto.BookingDetailResponse?> GetDetailAsync(int id)
+        {
+            var booking = await GetByIdAsync(id);
+            if (booking == null)
+            {
+                return null;
+            }
+
+            var tickets = await (from ticket in context.Tickets.AsNoTracking()
+                                 join seat in context.Seats.AsNoTracking() on ticket.SeatId equals seat.SeatId
+                                 join seatType in context.SeatTypes.AsNoTracking() on ticket.SeatTypeId equals seatType.SeatTypeId
+                                 where ticket.BookingId == id
+                                 orderby seat.RowLabel, seat.ColNumber
+                                 select new BookingDto.TicketResponse
+                                 {
+                                     TicketId = ticket.TicketId,
+                                     BookingId = ticket.BookingId,
+                                     SeatId = ticket.SeatId,
+                                     SeatCode = seat.SeatCode,
+                                     SeatTypeId = ticket.SeatTypeId,
+                                     SeatTypeName = seatType.TypeName,
+                                     Price = ticket.Price,
+                                     QrCode = ticket.QrCode,
+                                     IsUsed = ticket.IsUsed,
+                                     UsedAt = ticket.UsedAt,
+                                     CheckedBy = ticket.CheckedBy
+                                 }).ToListAsync();
+
+            var concessions = await (from concession in context.BookingConcessions.AsNoTracking()
+                                     join item in context.ConcessionItems.AsNoTracking() on concession.ItemId equals item.ItemId into itemJoin
+                                     from item in itemJoin.DefaultIfEmpty()
+                                     where concession.BookingId == id
+                                     orderby concession.Id
+                                     select new BookingDto.BookingConcessionResponse
+                                     {
+                                         Id = concession.Id,
+                                         BookingId = concession.BookingId,
+                                         ItemId = concession.ItemId,
+                                         ItemName = item != null ? item.ItemName : "",
+                                         Quantity = concession.Quantity,
+                                         UnitPrice = concession.UnitPrice,
+                                         Subtotal = concession.Subtotal
+                                     }).ToListAsync();
+
+            var payments = await context.Payments
+                .AsNoTracking()
+                .Where(x => x.BookingId == id)
+                .OrderByDescending(x => x.PaidAt ?? DateTime.MinValue)
+                .ThenByDescending(x => x.PaymentId)
+                .Select(x => new BookingDto.PaymentResponse
+                {
+                    PaymentId = x.PaymentId,
+                    BookingId = x.BookingId,
+                    MethodId = x.MethodId,
+                    TransactionRef = x.TransactionRef,
+                    Amount = x.Amount,
+                    Currency = x.Currency,
+                    Status = x.Status,
+                    PaidAt = x.PaidAt,
+                    RefundAmount = x.RefundAmount,
+                    RefundedAt = x.RefundedAt
+                })
+                .ToListAsync();
+
+            return new BookingDto.BookingDetailResponse
+            {
+                Booking = booking,
+                Tickets = tickets,
+                Concessions = concessions,
+                Payments = payments
+            };
         }
         public async Task<BookingDto.BookingResponse?> GetByBookingCodeAsync(string bookingCode)
         {
@@ -145,7 +229,13 @@ namespace Repository.EFCore.Bookings
                                     StartTime = showtime.StartTime,
                                     EndTime = showtime.EndTime,
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
+                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
+                                    RefundAmount = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId)
+                                        .Sum(p => p.RefundAmount ?? 0),
+                                    RefundedAt = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId && p.RefundedAt != null)
+                                        .Max(p => p.RefundedAt)
                                 }).FirstOrDefaultAsync();
             return result;
         }
@@ -182,7 +272,13 @@ namespace Repository.EFCore.Bookings
                                     StartTime = showtime.StartTime,
                                     EndTime = showtime.EndTime,
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
+                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
+                                    RefundAmount = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId)
+                                        .Sum(p => p.RefundAmount ?? 0),
+                                    RefundedAt = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId && p.RefundedAt != null)
+                                        .Max(p => p.RefundedAt)
                                 }).FirstOrDefaultAsync();
             return result;
         }
@@ -219,7 +315,13 @@ namespace Repository.EFCore.Bookings
                                     StartTime = showtime.StartTime,
                                     EndTime = showtime.EndTime,
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
+                                    UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
+                                    RefundAmount = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId)
+                                        .Sum(p => p.RefundAmount ?? 0),
+                                    RefundedAt = context.Payments
+                                        .Where(p => p.BookingId == booking.BookingId && p.RefundedAt != null)
+                                        .Max(p => p.RefundedAt)
                                 }).FirstOrDefaultAsync();
             return result;
         }
@@ -420,6 +522,115 @@ namespace Repository.EFCore.Bookings
                     x.ShowtimeId == booking.ShowtimeId && seatIds.Contains(x.SeatId)));
             }
             await context.SaveChangesAsync();
+        }
+        public async Task RefundAsync(int bookingId, BookingDto.RefundBookingDto refund)
+        {
+            var booking = await context.Bookings.FirstOrDefaultAsync(b => b.BookingId == bookingId);
+            if (booking == null)
+            {
+                throw new Exception("Booking not found");
+            }
+
+            var usedTicketCount = await context.Tickets.CountAsync(t => t.BookingId == bookingId && t.IsUsed);
+            if (usedTicketCount > 0)
+            {
+                throw new Exception("Cannot refund a booking with checked-in tickets");
+            }
+
+            if (booking.FinalAmount <= 0)
+            {
+                throw new Exception("Booking has no refundable amount");
+            }
+
+            var payments = await context.Payments
+                .Where(x => x.BookingId == bookingId)
+                .OrderBy(x => x.PaymentId)
+                .ToListAsync();
+
+            var refundedAmount = payments.Sum(x => x.RefundAmount ?? 0);
+            var remainingRefund = booking.FinalAmount - refundedAmount;
+            if (remainingRefund <= 0)
+            {
+                throw new Exception("Booking has already been refunded");
+            }
+
+            var now = DateTime.UtcNow;
+
+            if (payments.Count == 0)
+            {
+                context.Payments.Add(new Entities.Bookings.Payment
+                {
+                    BookingId = bookingId,
+                    MethodId = 1,
+                    TransactionRef = $"ADMIN-REFUND-{booking.BookingCode}",
+                    Amount = booking.FinalAmount,
+                    Currency = "VND",
+                    Status = "refunded",
+                    GatewayResponse = refund.Reason,
+                    PaidAt = booking.ConfirmedAt ?? booking.CreatedAt,
+                    RefundAmount = booking.FinalAmount,
+                    RefundedAt = now
+                });
+            }
+            else
+            {
+                foreach (var payment in payments)
+                {
+                    if (remainingRefund <= 0)
+                    {
+                        break;
+                    }
+
+                    var alreadyRefunded = payment.RefundAmount ?? 0;
+                    var refundableFromPayment = Math.Max(payment.Amount - alreadyRefunded, 0);
+                    if (refundableFromPayment <= 0)
+                    {
+                        continue;
+                    }
+
+                    var amount = Math.Min(refundableFromPayment, remainingRefund);
+                    payment.RefundAmount = alreadyRefunded + amount;
+                    payment.RefundedAt = now;
+                    payment.Status = payment.RefundAmount >= payment.Amount ? "refunded" : "partial_refund";
+                    payment.GatewayResponse = string.IsNullOrWhiteSpace(refund.Reason)
+                        ? payment.GatewayResponse
+                        : refund.Reason;
+                    remainingRefund -= amount;
+                }
+            }
+
+            booking.Status = "cancelled";
+            booking.CancelledAt ??= now;
+            booking.CancelReason = string.IsNullOrWhiteSpace(refund.Reason)
+                ? booking.CancelReason ?? "Refunded by administrator"
+                : refund.Reason;
+
+            var seatIds = await context.Tickets
+                .Where(t => t.BookingId == bookingId)
+                .Select(t => t.SeatId)
+                .ToListAsync();
+
+            if (seatIds.Count > 0)
+            {
+                context.SeatLocks.RemoveRange(context.SeatLocks.Where(x =>
+                    x.ShowtimeId == booking.ShowtimeId && seatIds.Contains(x.SeatId)));
+            }
+
+            await context.SaveChangesAsync();
+        }
+        public async Task<int?> GetBookingIdByTicketQrAsync(string qrCode)
+        {
+            if (string.IsNullOrWhiteSpace(qrCode))
+            {
+                return null;
+            }
+
+            var normalizedQrCode = qrCode.Trim();
+            return await context.Tickets
+                .AsNoTracking()
+                .Where(x => x.QrCode == normalizedQrCode)
+                .Select(x => (int?)x.BookingId)
+                .FirstOrDefaultAsync();
         }
         private async Task<BookingPromotionValidation> ValidatePromotionForBooking(string? promoCode, int userId, decimal orderAmount)
         {

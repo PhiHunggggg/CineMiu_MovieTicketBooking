@@ -1,72 +1,193 @@
-using DTO.Authen;
-using Microsoft.AspNetCore.Mvc;
+using Entities;
 using Services.Authen;
+using DTO.Authen;
+using Libs.Auth;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
-namespace AuthServices.Controllers
+namespace AuthService.Controllers
 {
     [Route("api/users")]
     [ApiController]
-    public class UsersController(IUserService userService) : ControllerBase
+    [Authorize]
+    public class UserController : ControllerBase
     {
-        [HttpGet]
-        public async Task<IActionResult> GetUsers(
-            [FromQuery] string? keyword,
-            [FromQuery] byte? roleId,
-            [FromQuery] bool? isActive,
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 12)
+        private readonly IUserService _userService;
+
+        public UserController(IUserService userService)
         {
-            var result = await userService.GetUsersAsync(keyword, roleId, isActive, page, pageSize);
-            return Ok(result);
+            _userService = userService;
         }
 
-        [HttpGet("{userId:int}")]
-        public async Task<IActionResult> GetUserById(int userId)
+        [HttpGet]
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> GetAll([FromQuery] string keyword = "", [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
         {
-            try
+            var resp = await _userService.GetUsersAsync(keyword, null, null, page, pageSize);
+            return Ok(new
             {
-                var result = await userService.GetUserByIdAsync(userId);
-                return Ok(result);
-            }
-            catch (ArgumentException ex)
+                data = resp.Items,
+                resp.TotalCount,
+                resp.Page,
+                resp.PageSize,
+                resp.TotalPages
+            });
+        }
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var user = await _userService.GetUserByIdAsync(id);
+            if (user == null)
             {
-                return NotFound(new { message = ex.Message });
+                return NotFound(new { message = "User not found" });
             }
+
+            return Ok(user);
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] UserDto.UserRequest request)
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> Create([FromBody] CreateUserRequest request)
         {
+            if (request == null)
+            {
+                return BadRequest(new { message = "Invalid request" });
+            }
+
+            if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            {
+                return BadRequest(new { message = "Full name, email and password are required" });
+            }
+
             try
             {
-                await userService.CreateUserAsync(request);
-                return Ok(new { message = "User created successfully" });
+                var dto = new UserDto.UserRequest
+                {
+                    RoleId = request.RoleId ?? 1,
+                    CinemaId = null,
+                    FullName = request.FullName,
+                    Email = request.Email,
+                    Password = request.Password,
+                    Phone = request.Phone,
+                    AvatarUrl = request.AvatarUrl,
+                    DateOfBirth = request.DateOfBirth,
+                    Gender = request.Gender,
+                    IsActive = request.IsActive ?? true
+                };
+
+                await _userService.CreateUserAsync(dto);
+                return NoContent();
             }
-            catch (ArgumentException ex)
+            catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                return BadRequest(new { message = "Failed to create user: " + ex.Message });
             }
         }
 
-        [HttpPut("{userId:int}")]
-        public async Task<IActionResult> Update(int userId, [FromBody] UserDto.UserRequest request)
+        [HttpPut("{id}")]
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> Update(int id, [FromBody] UpdateUserRequest request)
         {
-            try
+            if (request == null)
             {
-                await userService.UpdateUserAsync(userId, request);
-                return Ok(new { message = "User updated successfully" });
+                return BadRequest(new { message = "Invalid request" });
             }
-            catch (ArgumentException ex)
+
+            var existingUser = await _userService.GetById(id);
+            if (existingUser == null)
             {
-                return BadRequest(new { message = ex.Message });
+                return NotFound(new { message = "User not found" });
             }
+            var dto = new UserDto.UserRequest
+            {
+                RoleId = request.RoleId ?? existingUser.RoleId,
+                CinemaId = existingUser.CinemaId,
+                FullName = request.FullName ?? existingUser.FullName,
+                Email = request.Email ?? existingUser.Email,
+                Password = request.Password,
+                Phone = request.Phone ?? existingUser.Phone,
+                AvatarUrl = request.AvatarUrl ?? existingUser.AvatarUrl,
+                DateOfBirth = request.DateOfBirth ?? existingUser.DateOfBirth,
+                Gender = request.Gender ?? existingUser.Gender,
+                IsActive = request.IsActive ?? existingUser.IsActive
+            };
+
+            await _userService.UpdateUserAsync(id, dto);
+            return NoContent();
         }
 
-        [HttpDelete("{userId:int}")]
-        public async Task<IActionResult> Delete(int userId)
+        [HttpDelete("{id}")]
+        [Authorize(Roles = "admin")]
+        public async Task<IActionResult> Delete(int id)
         {
-            await userService.DeleteAsync(userId);
-            return Ok(new { message = "User deleted successfully" });
+            var existingUser = await _userService.GetById(id);
+            if (existingUser == null)
+            {
+                return NotFound(new { message = "User not found" });
+            }
+
+            await _userService.DeleteAsync(id);
+            return NoContent();
         }
+
+        private static UserResponse ToResponse(Users user)
+        {
+            return new UserResponse
+            {
+                UserId = user.UserId,
+                RoleId = user.RoleId,
+                FullName = user.FullName,
+                Email = user.Email,
+                Phone = user.Phone,
+                AvatarUrl = user.AvatarUrl,
+                DateOfBirth = user.DateOfBirth,
+                Gender = user.Gender,
+                IsActive = user.IsActive,
+                CreatedAt = user.CreatedAt,
+                UpdatedAt = user.UpdatedAt ?? DateTime.UtcNow
+            };
+        }
+    }
+
+    public class UserResponse
+    {
+        public int UserId { get; set; }
+        public byte RoleId { get; set; }
+        public string FullName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string? Phone { get; set; }
+        public string? AvatarUrl { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public bool IsActive { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public DateTime UpdatedAt { get; set; }
+    }
+
+    public class CreateUserRequest
+    {
+        public byte? RoleId { get; set; }
+        public string FullName { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string? Phone { get; set; }
+        public string? AvatarUrl { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public bool? IsActive { get; set; }
+    }
+
+    public class UpdateUserRequest
+    {
+        public byte? RoleId { get; set; }
+        public string? Password { get; set; }
+        public string? FullName { get; set; }
+        public string? Email { get; set; }
+        public string? Phone { get; set; }
+        public string? AvatarUrl { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public bool? IsActive { get; set; }
     }
 }

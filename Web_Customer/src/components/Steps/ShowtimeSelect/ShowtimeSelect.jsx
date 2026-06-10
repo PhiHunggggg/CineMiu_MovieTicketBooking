@@ -42,7 +42,6 @@ export default function ShowtimeSelect() {
     // Generate date tabs based on available showtimes
     const dateTabs = useMemo(() => {
         const tabs = [];
-        const sortedDates = Object.keys(dateGroups).sort();
 
         // Generate next 7 days in YYYY-MM-DD local format
         const next7Days = [];
@@ -55,9 +54,6 @@ export default function ShowtimeSelect() {
                 String(d.getDate()).padStart(2, '0');
             next7Days.push(ds);
         }
-
-        // Combine with actual dates from DB and unique them
-        const allDates = [...new Set([...next7Days, ...sortedDates])].sort();
 
         next7Days.forEach(dateStr => {
             // Parse YYYY-MM-DD manually to create a Local Date object
@@ -99,11 +95,10 @@ export default function ShowtimeSelect() {
         }
     }, [dates, showDate, selectShowDate]);
 
-    const currentShowtimes = showDate ? (dateGroups[showDate] || []) : [];
-
     // Group by hall
     const hallGroups = useMemo(() => {
         const groups = {};
+        const currentShowtimes = showDate ? (dateGroups[showDate] || []) : [];
         currentShowtimes.forEach(item => {
             if (!item.hall) return;
             const hallId = item.hall.hallId;
@@ -118,7 +113,7 @@ export default function ShowtimeSelect() {
             groups[hallId].showtimes.push(item.showtime);
         });
         return Object.values(groups);
-    }, [currentShowtimes]);
+    }, [dateGroups, showDate]);
 
     const formatTime = (t) => {
         if (!t) return '';
@@ -162,7 +157,7 @@ export default function ShowtimeSelect() {
                         {movie?.posterUrl && <img src={movie.posterUrl} alt="" className="showtime-select__movie-thumb" />}
                         <div>
                             <strong>{movie?.title}</strong>
-                            <span>{movie?.durationMins || movie?.durationMins} phút • {cinema?.cinemaName || cinema?.name}</span>
+                            <span>{movie?.durationMins} phút · {cinema?.cinemaName || cinema?.name}</span>
                         </div>
                     </div>
                 </div>
@@ -215,7 +210,6 @@ export default function ShowtimeSelect() {
                                                 onClick={() => !isSoldOut && st.status !== 'cancelled' && selectShowtime(st, group.hall)}
                                                 disabled={st.status === 'cancelled' || isSoldOut}
                                             >
-                                                {/* Chú ý: st ở đây chính là item.showtime từ Backend */}
                                                 <span className="showtime-time-btn__time">
                                                     {formatTime(st.startTime.split('T')[1])}
                                                 </span>

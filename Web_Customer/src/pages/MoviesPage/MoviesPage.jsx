@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { movieApi, lookupApi } from '../../services/api';
+import { movieApi } from '../../services/api';
 import MovieCard from '../../components/MovieCard/MovieCard';
 import './MoviesPage.css';
 
 export default function MoviesPage() {
     const [movies, setMovies] = useState([]);
-    const [genres, setGenres] = useState([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('now_showing');
     const [search, setSearch] = useState('');
@@ -24,10 +23,6 @@ export default function MoviesPage() {
             .catch(console.error)
             .finally(() => setLoading(false));
     }, [filter, search, page]);
-
-    useEffect(() => {
-        lookupApi.getAll().then(data => setGenres(data.genres || [])).catch(console.error);
-    }, []);
 
     const formatDate = (d) => {
         if (!d) return '';

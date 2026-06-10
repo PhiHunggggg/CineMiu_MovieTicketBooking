@@ -1,579 +1,292 @@
-import axios from 'axios'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import Icon from '../../components/Icon'
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { cinemaApi, cinemaLookupApi } from '../../services/api';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5001'
-const PAGE_SIZE = 8
+const emptyCinema = {
+    chainId: '',
+    cinemaName: '',
+    address: '',
+    city: '',
+    district: '',
+    phone: '',
+    email: '',
+    mapUrl: '',
+    imageUrl: '',
+    isActive: true,
+};
 
-const activeOptions = [
-  { value: '', label: 'Tất cả trạng thái' },
-  { value: 'true', label: 'Đang hoạt động' },
-  { value: 'false', label: 'Tạm ngưng' },
-]
+const getItems = (data) => data?.items || data?.data || data || [];
 
-const initialForm = {
-  chainId: '',
-  cinemaName: '',
-  address: '',
-  city: '',
-  ward: '',
-  phone: '',
-  email: '',
-  mapUrl: '',
-  imageUrl: '',
-  isActive: true,
-}
+const AdminCinemas = () => {
+    const [cinemas, setCinemas] = useState([]);
+    const [chains, setChains] = useState([]);
+    const [city, setCity] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingCinema, setEditingCinema] = useState(null);
+    const [formData, setFormData] = useState(emptyCinema);
+    const [error, setError] = useState('');
 
-function getErrorMessage(error, fallback) {
-  const data = error?.response?.data
+    useEffect(() => {
+        loadLookups();
+        loadCinemas();
+    }, []);
 
-  if (typeof data === 'string') return data
+    const loadLookups = async () => {
+        try {
+            const response = await cinemaLookupApi.getAll();
+            setChains(response.data?.chains || []);
+        } catch (err) {
+            console.error('Failed to load cinema lookups:', err);
+        }
+    };
 
-  return data?.message || data?.title || error?.message || fallback
-}
+    const loadCinemas = async () => {
+        setLoading(true);
+        try {
+            const response = await cinemaApi.getAll({ city: city || undefined, activeOnly: false });
+            setCinemas(getItems(response.data));
+        } catch {
+            setError('Không tải được danh sách chi nhánh rạp');
+        } finally {
+            setLoading(false);
+        }
+    };
 
-function optionalText(value) {
-  const trimmed = String(value ?? '').trim()
-  return trimmed || null
-}
+    const openModal = (cinema = null) => {
+        setEditingCinema(cinema);
+        setError('');
 
-function getActiveLabel(value) {
-  return value ? 'Đang hoạt động' : 'Tạm ngưng'
-}
+        if (cinema) {
+            setFormData({
+                chainId: cinema.chainId || '',
+                cinemaName: cinema.cinemaName || '',
+                address: cinema.address || '',
+                city: cinema.city || '',
+                district: cinema.district || '',
+                phone: cinema.phone || '',
+                email: cinema.email || '',
+                mapUrl: cinema.mapUrl || '',
+                imageUrl: cinema.imageUrl || '',
+                isActive: cinema.isActive ?? true,
+            });
+        } else {
+            setFormData({ ...emptyCinema, chainId: chains[0]?.chainId || '' });
+        }
 
-function toForm(cinema) {
-  return {
-    chainId: cinema.chainId ?? '',
-    cinemaName: cinema.cinemaName ?? '',
-    address: cinema.address ?? '',
-    city: cinema.city ?? '',
-    ward: cinema.ward ?? cinema.district ?? '',
-    phone: cinema.phone ?? '',
-    email: cinema.email ?? '',
-    mapUrl: cinema.mapUrl ?? '',
-    imageUrl: cinema.imageUrl ?? '',
-    isActive: Boolean(cinema.isActive),
-  }
-}
+        setShowModal(true);
+    };
 
-function buildPayload(form) {
-  return {
-    chainId: Number(form.chainId),
-    cinemaName: form.cinemaName.trim(),
-    address: form.address.trim(),
-    city: form.city.trim(),
-    ward: optionalText(form.ward),
-    phone: optionalText(form.phone),
-    email: optionalText(form.email),
-    mapUrl: optionalText(form.mapUrl),
-    imageUrl: optionalText(form.imageUrl),
-    isActive: Boolean(form.isActive),
-  }
-}
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingCinema(null);
+        setError('');
+    };
 
-function validateForm(form) {
-  const errors = {}
-  const chainId = Number(form.chainId)
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
 
-  if (!Number.isInteger(chainId) || chainId <= 0) {
-    errors.chainId = 'Vui lòng chọn chuỗi rạp.'
-  }
+        const payload = {
+            ...formData,
+            chainId: Number(formData.chainId),
+            latitude: null,
+            longitude: null,
+        };
 
-  if (!form.cinemaName.trim()) {
-    errors.cinemaName = 'Vui lòng nhập tên rạp.'
-  }
+        try {
+            if (editingCinema) {
+                await cinemaApi.update(editingCinema.cinemaId || editingCinema.id, payload);
+            } else {
+                await cinemaApi.create(payload);
+            }
 
-  if (!form.address.trim()) {
-    errors.address = 'Vui lòng nhập địa chỉ.'
-  }
+            closeModal();
+            loadCinemas();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Lưu chi nhánh rạp thất bại');
+        }
+    };
 
-  if (!form.city.trim()) {
-    errors.city = 'Vui lòng nhập thành phố.'
-  }
+    const handleDelete = async (cinema) => {
+        if (!window.confirm(`Xóa chi nhánh "${cinema.cinemaName}"?`)) return;
 
-  return errors
-}
+        try {
+            await cinemaApi.delete(cinema.cinemaId || cinema.id);
+            loadCinemas();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Xóa chi nhánh rạp thất bại');
+        }
+    };
 
-function Cinemas() {
-  const [cinemas, setCinemas] = useState([])
-  const [chains, setChains] = useState([])
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: PAGE_SIZE,
-    totalCount: 0,
-    totalPages: 1,
-  })
-  const [page, setPage] = useState(1)
-  const [keywordInput, setKeywordInput] = useState('')
-  const [keyword, setKeyword] = useState('')
-  const [isActiveFilter, setIsActiveFilter] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [isFormOpen, setIsFormOpen] = useState(false)
-  const [editingCinema, setEditingCinema] = useState(null)
-  const [form, setForm] = useState(initialForm)
-  const [formErrors, setFormErrors] = useState({})
-  const [isSaving, setIsSaving] = useState(false)
-  const [deletingId, setDeletingId] = useState(null)
-
-  const fetchChains = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/cinemas/chains`)
-      const items = Array.isArray(response.data) ? response.data : []
-      setChains(items)
-      setForm((current) => {
-        if (current.chainId || items.length === 0) return current
-        return { ...current, chainId: String(items[0].chainId) }
-      })
-    } catch (chainError) {
-      setChains([])
-      setError(getErrorMessage(chainError, 'Không tải được danh sách chuỗi rạp.'))
-    }
-  }, [])
-
-  const fetchCinemas = useCallback(async () => {
-    setIsLoading(true)
-    setError('')
-
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/cinemas`, {
-        params: {
-          keyword: keyword || undefined,
-          isActive: isActiveFilter || undefined,
-          page,
-          pageSize: PAGE_SIZE,
-        },
-      })
-
-      const data = response.data ?? {}
-      setCinemas(Array.isArray(data.items) ? data.items : [])
-      setPagination({
-        page: data.page ?? page,
-        pageSize: data.pageSize ?? PAGE_SIZE,
-        totalCount: data.totalCount ?? 0,
-        totalPages: Math.max(data.totalPages ?? 1, 1),
-      })
-    } catch (cinemaError) {
-      setCinemas([])
-      setError(getErrorMessage(cinemaError, 'Không tải được danh sách rạp.'))
-    } finally {
-      setIsLoading(false)
-    }
-  }, [isActiveFilter, keyword, page])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchChains()
-  }, [fetchChains])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchCinemas()
-  }, [fetchCinemas])
-
-  const shownRange = useMemo(() => {
-    if (pagination.totalCount === 0) return '0'
-
-    const start = (pagination.page - 1) * pagination.pageSize + 1
-    const end = Math.min(pagination.page * pagination.pageSize, pagination.totalCount)
-
-    return `${start}-${end}`
-  }, [pagination])
-
-  const formDefaults = useMemo(
-    () => ({
-      ...initialForm,
-      chainId: chains.length > 0 ? String(chains[0].chainId) : '',
-    }),
-    [chains],
-  )
-
-  const openCreateForm = () => {
-    setEditingCinema(null)
-    setForm(formDefaults)
-    setFormErrors({})
-    setError('')
-    setNotice('')
-    setIsFormOpen(true)
-  }
-
-  const openEditForm = (cinema) => {
-    setEditingCinema(cinema)
-    setForm(toForm(cinema))
-    setFormErrors({})
-    setError('')
-    setNotice('')
-    setIsFormOpen(true)
-  }
-
-  const closeForm = () => {
-    if (isSaving) return
-
-    setIsFormOpen(false)
-    setEditingCinema(null)
-    setForm(formDefaults)
-    setFormErrors({})
-  }
-
-  const handleFieldChange = (event) => {
-    const { checked, name, type, value } = event.target
-    const nextValue = type === 'checkbox' ? checked : value
-
-    setForm((current) => ({ ...current, [name]: nextValue }))
-    setFormErrors((current) => {
-      if (!current[name]) return current
-
-      const next = { ...current }
-      delete next[name]
-      return next
-    })
-  }
-
-  const handleSearch = (event) => {
-    event.preventDefault()
-    setKeyword(keywordInput.trim())
-    setPage(1)
-  }
-
-  const resetFilters = () => {
-    setKeywordInput('')
-    setKeyword('')
-    setIsActiveFilter('')
-    setPage(1)
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    const nextErrors = validateForm(form)
-
-    if (Object.keys(nextErrors).length > 0) {
-      setFormErrors(nextErrors)
-      return
-    }
-
-    setIsSaving(true)
-    setError('')
-    setNotice('')
-
-    try {
-      const payload = buildPayload(form)
-
-      if (editingCinema) {
-        await axios.put(`${API_BASE_URL}/api/cinemas/${editingCinema.cinemaId}`, payload)
-        setNotice('Đã cập nhật rạp.')
-      } else {
-        await axios.post(`${API_BASE_URL}/api/cinemas`, payload)
-        setNotice('Đã thêm rạp mới.')
-      }
-
-      closeForm()
-      await fetchCinemas()
-    } catch (saveError) {
-      setError(getErrorMessage(saveError, 'Không lưu được rạp.'))
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDelete = async (cinema) => {
-    const confirmed = window.confirm(`Xóa rạp "${cinema.cinemaName}"?`)
-    if (!confirmed) return
-
-    setDeletingId(cinema.cinemaId)
-    setError('')
-    setNotice('')
-
-    try {
-      await axios.delete(`${API_BASE_URL}/api/cinemas/${cinema.cinemaId}`)
-      setNotice('Đã xóa rạp.')
-
-      if (cinemas.length === 1 && page > 1) {
-        setPage((current) => current - 1)
-      } else {
-        await fetchCinemas()
-      }
-    } catch (deleteError) {
-      setError(getErrorMessage(deleteError, 'Không xóa được rạp.'))
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  return (
-    <section className="admin-page cinemas-page" aria-label="Quản lý rạp">
-      <div className="page-surface movies-surface">
-        <div className="movies-toolbar">
-          <div>
-            <p className="section-kicker">Danh sách rạp</p>
-            <h2>Quản lý rạp</h2>
-            <p className="section-subtitle">
-              Hiển thị {shownRange} trong {pagination.totalCount} rạp
-            </p>
-          </div>
-
-          <button className="primary-button" type="button" onClick={openCreateForm}>
-            <Icon name="plus" />
-            Thêm rạp
-          </button>
-        </div>
-
-        <form className="cinemas-filters" onSubmit={handleSearch}>
-          <label className="search-field">
-            <Icon name="search" className="field-icon" />
-            <input
-              type="search"
-              value={keywordInput}
-              onChange={(event) => setKeywordInput(event.target.value)}
-              placeholder="Tìm theo tên, địa chỉ"
-              aria-label="Tìm kiếm rạp"
-            />
-          </label>
-
-          <select
-            value={isActiveFilter}
-            onChange={(event) => {
-              setIsActiveFilter(event.target.value)
-              setPage(1)
-            }}
-            aria-label="Lọc trạng thái rạp"
-          >
-            {activeOptions.map((option) => (
-              <option key={option.value || 'all'} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <button className="secondary-button" type="submit">
-            <Icon name="search" />
-            Tìm kiếm
-          </button>
-          <button className="ghost-button" type="button" onClick={resetFilters}>
-            <Icon name="refresh" />
-            Đặt lại
-          </button>
-        </form>
-
-        {error ? <div className="alert alert-error">{error}</div> : null}
-        {notice ? <div className="alert alert-success">{notice}</div> : null}
-
-        <div className="movies-table-wrap">
-          <table className="movies-table cinemas-table">
-            <thead>
-              <tr>
-                <th>Rạp</th>
-                <th>Thành phố</th>
-                <th>Liên hệ</th>
-                <th>Trạng thái</th>
-                <th aria-label="Thao tác" />
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan="5" className="table-state">
-                    Đang tải danh sách rạp...
-                  </td>
-                </tr>
-              ) : cinemas.length > 0 ? (
-                cinemas.map((cinema) => (
-                  <tr key={cinema.cinemaId}>
-                    <td>
-                      <div className="cinema-cell">
-                        <div className="cinema-thumb">
-                          {cinema.imageUrl ? (
-                            <img src={cinema.imageUrl} alt="" />
-                          ) : (
-                            <Icon name="cinemas" />
-                          )}
-                        </div>
-                        <div>
-                          <strong>{cinema.cinemaName}</strong>
-                          <span>{cinema.address}</span>
-                          <small>{cinema.chainName || 'Chưa có chuỗi rạp'}</small>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <strong>{cinema.city}</strong>
-                      <span className="muted-cell">{cinema.ward ?? cinema.district ?? 'Chưa có xã/phường'}</span>
-                    </td>
-                    <td>
-                      <strong>{cinema.phone || 'Chưa có SĐT'}</strong>
-                      <span className="muted-cell">{cinema.email || 'Chưa có email'}</span>
-                    </td>
-                    <td>
-                      <span className={`status-badge ${cinema.isActive ? 'status-active' : 'status-inactive'}`}>
-                        {getActiveLabel(cinema.isActive)}
-                      </span>
-                    </td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          className="icon-button table-action"
-                          type="button"
-                          onClick={() => openEditForm(cinema)}
-                          aria-label={`Sửa rạp ${cinema.cinemaName}`}
-                          title="Sửa rạp"
-                        >
-                          <Icon name="edit" />
-                        </button>
-                        <button
-                          className="icon-button table-action danger"
-                          type="button"
-                          onClick={() => handleDelete(cinema)}
-                          disabled={deletingId === cinema.cinemaId}
-                          aria-label={`Xóa rạp ${cinema.cinemaName}`}
-                          title="Xóa rạp"
-                        >
-                          <Icon name="trash" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="5" className="table-state">
-                    Chưa có rạp phù hợp.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="pagination-bar">
-          <span>
-            Trang {pagination.page} / {pagination.totalPages}
-          </span>
-          <div className="pagination-actions">
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => setPage((current) => Math.max(current - 1, 1))}
-              disabled={page <= 1 || isLoading}
-              aria-label="Trang trước"
-            >
-              <Icon name="chevronLeft" />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => setPage((current) => Math.min(current + 1, pagination.totalPages))}
-              disabled={page >= pagination.totalPages || isLoading}
-              aria-label="Trang sau"
-            >
-              <Icon name="chevronRight" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {isFormOpen ? (
-        <div className="modal-backdrop">
-          <section className="modal-panel cinema-form-modal" role="dialog" aria-modal="true">
-            <div className="modal-header">
-              <div>
-                <p className="section-kicker">{editingCinema ? 'Sửa rạp' : 'Thêm rạp'}</p>
-                <h2>{editingCinema ? editingCinema.cinemaName : 'Rạp mới'}</h2>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={closeForm}
-                disabled={isSaving}
-                aria-label="Đóng form"
-              >
-                <Icon name="close" />
-              </button>
+    return (
+        <div className="content-wrapper">
+            <div className="content-header">
+                <div className="container-fluid">
+                    <h1 className="m-0">Quản lý chi nhánh rạp</h1>
+                </div>
             </div>
 
-            <form className="movie-form" onSubmit={handleSubmit}>
-              <div className="form-grid">
-                <label className="form-field required">
-                  <span>Tên rạp</span>
-                  <input name="cinemaName" value={form.cinemaName} onChange={handleFieldChange} />
-                  {formErrors.cinemaName ? <em>{formErrors.cinemaName}</em> : null}
-                </label>
+            <section className="content">
+                <div className="container-fluid">
+                    {error && !showModal && <div className="alert alert-warning">{error}</div>}
+                    <div className="card">
+                        <div className="card-header">
+                            <div className="row">
+                                <div className="col-md-8">
+                                    <form className="form-inline" onSubmit={(e) => { e.preventDefault(); loadCinemas(); }}>
+                                        <input className="form-control mr-2 mb-2" value={city} onChange={(e) => setCity(e.target.value)} placeholder="Lọc theo thành phố..." />
+                                        <button className="btn btn-primary mb-2" type="submit">
+                                            <i className="fas fa-filter"></i> Lọc
+                                        </button>
+                                    </form>
+                                </div>
+                                <div className="col-md-4 text-right">
+                                    <button className="btn btn-success" onClick={() => openModal()}>
+                                        <i className="fas fa-plus"></i> Thêm chi nhánh
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="card-body">
+                            {loading ? (
+                                <div className="text-center py-5"><div className="spinner-border text-primary"></div></div>
+                            ) : (
+                                <div className="table-responsive">
+                                    <table className="table table-bordered table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th>Tên rạp</th>
+                                                <th>Địa chỉ</th>
+                                                <th>Thành phố</th>
+                                                <th>Liên hệ</th>
+                                                <th>Trạng thái</th>
+                                                <th style={{ width: '220px' }}>Thao tác</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {cinemas.length === 0 ? (
+                                                <tr><td colSpan="6" className="text-center">Không tìm thấy chi nhánh</td></tr>
+                                            ) : cinemas.map((cinema) => (
+                                                <tr key={cinema.cinemaId || cinema.id}>
+                                                    <td><strong>{cinema.cinemaName}</strong></td>
+                                                    <td>{cinema.address}</td>
+                                                    <td>{cinema.city}</td>
+                                                    <td>{cinema.phone || cinema.email || '-'}</td>
+                                                    <td>
+                                                        <span className={`badge ${cinema.isActive ? 'badge-success' : 'badge-secondary'}`}>
+                                                            {cinema.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <Link
+                                                            className="btn btn-sm btn-primary mr-1"
+                                                            to={`/admin/halls?create=1&cinemaId=${cinema.cinemaId || cinema.id}`}
+                                                            title="Thêm phòng cho chi nhánh"
+                                                        >
+                                                            <i className="fas fa-door-open"></i>
+                                                        </Link>
+                                                        <Link
+                                                            className="btn btn-sm btn-warning mr-1"
+                                                            to={`/admin/ticket-prices?create=1&cinemaId=${cinema.cinemaId || cinema.id}`}
+                                                            title="Thêm giá vé cho chi nhánh"
+                                                        >
+                                                            <i className="fas fa-tags"></i>
+                                                        </Link>
+                                                        <Link
+                                                            className="btn btn-sm btn-success mr-1"
+                                                            to={`/admin/showtimes?create=1&cinemaId=${cinema.cinemaId || cinema.id}`}
+                                                            title="Tạo lịch chiếu tại chi nhánh"
+                                                        >
+                                                            <i className="fas fa-calendar-plus"></i>
+                                                        </Link>
+                                                        <button className="btn btn-sm btn-info mr-1" onClick={() => openModal(cinema)}>
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(cinema)}>
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-                <label className="form-field required">
-                  <span>Chuỗi rạp</span>
-                  <select name="chainId" value={form.chainId} onChange={handleFieldChange}>
-                    <option value="">Chọn chuỗi rạp</option>
-                    {chains.map((chain) => (
-                      <option key={chain.chainId} value={chain.chainId}>
-                        {chain.chainName}
-                      </option>
-                    ))}
-                  </select>
-                  {formErrors.chainId ? <em>{formErrors.chainId}</em> : null}
-                </label>
-
-                <label className="form-field required wide">
-                  <span>Địa chỉ</span>
-                  <input name="address" value={form.address} onChange={handleFieldChange} />
-                  {formErrors.address ? <em>{formErrors.address}</em> : null}
-                </label>
-
-                <label className="form-field required">
-                  <span>Thành phố</span>
-                  <input name="city" value={form.city} onChange={handleFieldChange} />
-                  {formErrors.city ? <em>{formErrors.city}</em> : null}
-                </label>
-
-                <label className="form-field">
-                  <span>Xã/Phường</span>
-                  <input name="ward" value={form.ward} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field">
-                  <span>Số điện thoại</span>
-                  <input name="phone" value={form.phone} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field">
-                  <span>Email</span>
-                  <input name="email" type="email" value={form.email} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field checkbox-field wide">
-                  <input
-                    name="isActive"
-                    type="checkbox"
-                    checked={form.isActive}
-                    onChange={handleFieldChange}
-                  />
-                  <span>Đang hoạt động</span>
-                </label>
-
-                <label className="form-field wide">
-                  <span>Map URL</span>
-                  <input name="mapUrl" value={form.mapUrl} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field wide">
-                  <span>Image URL</span>
-                  <input name="imageUrl" value={form.imageUrl} onChange={handleFieldChange} />
-                </label>
-              </div>
-
-              <div className="form-actions">
-                <button className="ghost-button" type="button" onClick={closeForm} disabled={isSaving}>
-                  Hủy
-                </button>
-                <button className="primary-button" type="submit" disabled={isSaving}>
-                  <Icon name="save" />
-                  {isSaving ? 'Đang lưu...' : 'Lưu rạp'}
-                </button>
-              </div>
-            </form>
-          </section>
+            {showModal && (
+                <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,.5)' }}>
+                    <div className="modal-dialog modal-lg">
+                        <div className="modal-content">
+                            <form onSubmit={handleSubmit}>
+                                <div className="modal-header">
+                                    <h5 className="modal-title">{editingCinema ? 'Cập nhật chi nhánh rạp' : 'Thêm chi nhánh rạp'}</h5>
+                                    <button type="button" className="close" onClick={closeModal}>&times;</button>
+                                </div>
+                                <div className="modal-body">
+                                    {error && <div className="alert alert-danger">{error}</div>}
+                                    <div className="row">
+                                        <div className="col-md-6 form-group">
+                                            <label>Chuỗi rạp</label>
+                                            <select className="form-control" value={formData.chainId} onChange={(e) => setFormData({ ...formData, chainId: e.target.value })} required>
+                                                <option value="">Chọn chuỗi rạp</option>
+                                                {chains.map((chain) => (
+                                                    <option key={chain.chainId} value={chain.chainId}>{chain.chainName}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Tên rạp</label>
+                                            <input className="form-control" value={formData.cinemaName} onChange={(e) => setFormData({ ...formData, cinemaName: e.target.value })} required />
+                                        </div>
+                                        <div className="col-md-12 form-group">
+                                            <label>Địa chỉ</label>
+                                            <input className="form-control" value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} required />
+                                        </div>
+                                        <div className="col-md-4 form-group">
+                                            <label>Thành phố</label>
+                                            <input className="form-control" value={formData.city} onChange={(e) => setFormData({ ...formData, city: e.target.value })} required />
+                                        </div>
+                                        <div className="col-md-4 form-group">
+                                            <label>Xã/Phường</label>
+                                            <input className="form-control" value={formData.district} onChange={(e) => setFormData({ ...formData, district: e.target.value })} />
+                                        </div>
+                                        <div className="col-md-4 form-group">
+                                            <label>Điện thoại</label>
+                                            <input className="form-control" value={formData.phone} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} />
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Email</label>
+                                            <input type="email" className="form-control" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Ảnh</label>
+                                            <input className="form-control" value={formData.imageUrl} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} />
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Trạng thái</label>
+                                            <select className="form-control" value={String(formData.isActive)} onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}>
+                                                <option value="true">Hoạt động</option>
+                                                <option value="false">Ngừng hoạt động</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="modal-footer">
+                                    <button type="button" className="btn btn-secondary" onClick={closeModal}>Đóng</button>
+                                    <button type="submit" className="btn btn-primary">Lưu</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-      ) : null}
-    </section>
-  )
-}
+    );
+};
 
-export default Cinemas
+export default AdminCinemas;

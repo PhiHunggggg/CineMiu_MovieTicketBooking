@@ -1,6 +1,9 @@
 using DTO.Theater;
 using Entities;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Text;
+using TicketPriceEntity = Entities.Tickets.TicketPrice;
 
 namespace Repository.EFCore.Theater
 {
@@ -271,11 +274,24 @@ namespace Repository.EFCore.Theater
                 .Select(x => new { ShowtimeId = x.Key, Count = x.Count() })
                 .ToDictionaryAsync(x => x.ShowtimeId, x => x.Count);
 
+            var cinemaIds = items.Select(x => x.Cinema.CinemaId).Distinct().ToList();
+            var hallTypeIds = items.Select(x => x.Hall.HallTypeId).Distinct().ToList();
+            var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
+            var standardSeatTypeId = await ResolveStandardSeatTypeIdAsync();
+            var priceRules = await context.TicketPrices
+                .AsNoTracking()
+                .Where(x =>
+                    cinemaIds.Contains(x.CinemaId) &&
+                    hallTypeIds.Contains(x.HallTypeId) &&
+                    x.SeatTypeId == standardSeatTypeId)
+                .ToListAsync();
+
             return items.Select(item =>
             {
                 var bookedSeats = bookedSeatCounts.GetValueOrDefault(item.Showtime.ShowtimeId);
                 var totalSeats = item.Hall.TotalSeats;
                 var availableSeats = Math.Max(totalSeats - bookedSeats, 0);
+                var basePrice = ResolveBasePrice(item.Showtime, item.Cinema, item.Hall, dayTypes, priceRules);
                 var summary = new ShowtimeDTO.ShowtimeSummary
                 {
                     ShowtimeId = item.Showtime.ShowtimeId,
@@ -286,7 +302,7 @@ namespace Repository.EFCore.Theater
                     LanguageType = item.Showtime.LanguageType,
                     IsSpecial = item.Showtime.IsSpecial,
                     Status = item.Showtime.Status,
-                    BasePrice = DefaultBasePrice,
+                    BasePrice = basePrice,
                     TotalSeats = totalSeats,
                     AvailableSeats = availableSeats
                 };
@@ -358,6 +374,111 @@ namespace Repository.EFCore.Theater
                     }
                 };
             }).ToList();
+        }
+
+        private async Task<byte> ResolveStandardSeatTypeIdAsync()
+        {
+            var standardSeatType = await context.SeatTypes
+                .AsNoTracking()
+                .OrderBy(x => x.SeatTypeId)
+                .FirstOrDefaultAsync(x => x.TypeName.ToLower().Contains("standard"));
+
+            if (standardSeatType != null)
+            {
+                return standardSeatType.SeatTypeId;
+            }
+
+            return await context.SeatTypes
+                .AsNoTracking()
+                .OrderBy(x => x.SeatTypeId)
+                .Select(x => x.SeatTypeId)
+                .FirstOrDefaultAsync();
+        }
+
+        private static decimal ResolveBasePrice(ShowTime showtime, Cinema cinema, Hall hall, List<DayType> dayTypes, List<TicketPriceEntity> priceRules)
+        {
+            var dayTypeId = ResolveDayTypeId(showtime, dayTypes);
+            if (!dayTypeId.HasValue)
+            {
+                return DefaultBasePrice;
+            }
+
+            var timeSlot = ResolveTimeSlot(showtime.StartTime);
+            var applicablePrices = priceRules
+                .Where(x =>
+                    x.CinemaId == cinema.CinemaId &&
+                    x.HallTypeId == hall.HallTypeId &&
+                    x.DayTypeId == dayTypeId.Value &&
+                    x.EffectiveFrom <= showtime.StartTime &&
+                    (!x.EffectiveTo.HasValue || x.EffectiveTo.Value >= showtime.StartTime) &&
+                    (string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(x.TimeSlot, "all_day", StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(x => string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase))
+                .ThenByDescending(x => x.EffectiveFrom)
+                .ThenBy(x => x.BasePrice)
+                .ToList();
+
+            return applicablePrices.FirstOrDefault()?.BasePrice ?? DefaultBasePrice;
+        }
+
+        private static byte? ResolveDayTypeId(ShowTime showtime, List<DayType> dayTypes)
+        {
+            if (dayTypes.Count == 0)
+            {
+                return null;
+            }
+
+            var candidateNames = showtime.IsSpecial
+                ? new[] { "holiday", "ngay le", "le", "special" }
+                : showtime.StartTime.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday
+                    ? new[] { "weekend", "cuoi tuan" }
+                    : new[] { "weekday", "ngay thuong" };
+
+            foreach (var candidateName in candidateNames)
+            {
+                var dayType = dayTypes.FirstOrDefault(x =>
+                    NormalizeLookup(x.TypeName).Contains(candidateName) ||
+                    (!string.IsNullOrWhiteSpace(x.Description) && NormalizeLookup(x.Description).Contains(candidateName)));
+
+                if (dayType != null)
+                {
+                    return dayType.DayTypeId;
+                }
+            }
+
+            return dayTypes.OrderBy(x => x.DayTypeId).First().DayTypeId;
+        }
+
+        private static string ResolveTimeSlot(DateTime startTime)
+        {
+            var hour = startTime.Hour;
+            if (hour < 12)
+            {
+                return "morning";
+            }
+
+            if (hour < 18)
+            {
+                return "afternoon";
+            }
+
+            return hour < 23 ? "evening" : "late_night";
+        }
+
+        private static string NormalizeLookup(string value)
+        {
+            var formD = value.ToLowerInvariant().Normalize(NormalizationForm.FormD);
+            var builder = new StringBuilder(formD.Length);
+
+            foreach (var character in formD)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                {
+                    builder.Append(character);
+                }
+            }
+
+            return builder.ToString().Normalize(NormalizationForm.FormC);
         }
 
         private static string NormalizeStatus(string? status)

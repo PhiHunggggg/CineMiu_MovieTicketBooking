@@ -1,750 +1,675 @@
-import axios from 'axios'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import Icon from '../../components/Icon'
-
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5001'
-const PAGE_SIZE = 8
-
-const statusOptions = [
-  { value: '', label: 'Tất cả trạng thái' },
-  { value: 'now_showing', label: 'Đang chiếu' },
-  { value: 'coming_soon', label: 'Sắp chiếu' },
-  { value: 'ended', label: 'Đã kết thúc' },
-]
-
-const ageRatingOptions = ['P', 'K', 'T13', 'T16', 'T18', 'C']
-
-const initialForm = {
-  title: '',
-  titleEn: '',
-  countryId: '',
-  durationMins: '',
-  releaseDate: '',
-  endDate: '',
-  ageRating: 'P',
-  status: 'coming_soon',
-  synopsis: '',
-  director: '',
-  castMembers: '',
-  language: '',
-  subtitle: '',
-  posterUrl: '',
-  bannerUrl: '',
-  trailerUrl: '',
-  imdbRating: '',
-  genreIds: [],
-}
-
-function getErrorMessage(error, fallback) {
-  const data = error?.response?.data
-
-  if (typeof data === 'string') return data
-
-  return data?.message || data?.title || error?.message || fallback
-}
-
-function toDateInput(value) {
-  if (!value) return ''
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) {
-    return String(value).slice(0, 10)
-  }
-
-  return date.toISOString().slice(0, 10)
-}
-
-function formatDate(value) {
-  if (!value) return 'Chưa đặt'
-
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return 'Chưa đặt'
-
-  return new Intl.DateTimeFormat('vi-VN').format(date)
-}
-
-function getStatusLabel(value) {
-  return statusOptions.find((option) => option.value === value)?.label ?? 'Chưa rõ'
-}
-
-function toForm(movie) {
-  return {
-    title: movie.title ?? '',
-    titleEn: movie.titleEn ?? '',
-    countryId: movie.countryId ?? '',
-    durationMins: movie.durationMins ?? '',
-    releaseDate: toDateInput(movie.releaseDate),
-    endDate: toDateInput(movie.endDate),
-    ageRating: movie.ageRating ?? 'P',
-    status: movie.status ?? 'coming_soon',
-    synopsis: movie.synopsis ?? '',
-    director: movie.director ?? '',
-    castMembers: movie.castMembers ?? '',
-    language: movie.language ?? '',
-    subtitle: movie.subtitle ?? '',
-    posterUrl: movie.posterUrl ?? '',
-    bannerUrl: movie.bannerUrl ?? '',
-    trailerUrl: movie.trailerUrl ?? '',
-    imdbRating: movie.imdbRating ?? '',
-    genreIds: Array.isArray(movie.genreIds)
-      ? movie.genreIds.map((genreId) => Number(genreId)).filter((genreId) => Number.isInteger(genreId))
-      : [],
-  }
-}
-
-function optionalText(value) {
-  const trimmed = String(value ?? '').trim()
-  return trimmed || null
-}
-
-function optionalNumber(value) {
-  const trimmed = String(value ?? '').trim()
-  return trimmed ? Number(trimmed) : null
-}
-
-function buildPayload(form) {
-  return {
-    title: form.title.trim(),
-    titleEn: optionalText(form.titleEn),
-    countryId: optionalNumber(form.countryId),
-    durationMins: Number(form.durationMins),
-    releaseDate: form.releaseDate || null,
-    endDate: form.endDate || null,
-    ageRating: optionalText(form.ageRating),
-    status: optionalText(form.status),
-    synopsis: optionalText(form.synopsis),
-    director: optionalText(form.director),
-    castMembers: optionalText(form.castMembers),
-    language: optionalText(form.language),
-    subtitle: optionalText(form.subtitle),
-    posterUrl: optionalText(form.posterUrl),
-    bannerUrl: optionalText(form.bannerUrl),
-    trailerUrl: optionalText(form.trailerUrl),
-    imdbRating: optionalNumber(form.imdbRating),
-    genreIds: form.genreIds,
-  }
-}
-
-function validateForm(form) {
-  const errors = {}
-  const duration = Number(form.durationMins)
-  const imdbRating = optionalNumber(form.imdbRating)
-  const countryId = optionalNumber(form.countryId)
-
-  if (!form.title.trim()) {
-    errors.title = 'Vui lòng nhập tên phim.'
-  }
-
-  if (!Number.isFinite(duration) || duration <= 0) {
-    errors.durationMins = 'Thời lượng phải lớn hơn 0.'
-  } else if (duration > 32767) {
-    errors.durationMins = 'Thời lượng không được vượt quá 32767 phút.'
-  }
-
-  if (countryId !== null && (!Number.isInteger(countryId) || countryId <= 0)) {
-    errors.countryId = 'Country ID phải là số nguyên dương.'
-  }
-
-  if (imdbRating !== null && (imdbRating < 0 || imdbRating > 10)) {
-    errors.imdbRating = 'Điểm IMDb phải từ 0 đến 10.'
-  }
-
-  if (
-    !Array.isArray(form.genreIds) ||
-    form.genreIds.some((genreId) => !Number.isInteger(genreId) || genreId <= 0 || genreId > 255)
-  ) {
-    errors.genreIds = 'Vui lòng chọn thể loại phim hợp lệ.'
-  }
-
-  return errors
-}
-
-function Movies() {
-  const [movies, setMovies] = useState([])
-  const [genres, setGenres] = useState([])
-  const [isGenresLoading, setIsGenresLoading] = useState(false)
-  const [pagination, setPagination] = useState({
-    page: 1,
-    pageSize: PAGE_SIZE,
-    totalCount: 0,
-    totalPages: 1,
-  })
-  const [page, setPage] = useState(1)
-  const [keywordInput, setKeywordInput] = useState('')
-  const [keyword, setKeyword] = useState('')
-  const [status, setStatus] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [notice, setNotice] = useState('')
-  const [isFormOpen, setIsFormOpen] = useState(false)
-  const [editingMovie, setEditingMovie] = useState(null)
-  const [form, setForm] = useState(initialForm)
-  const [formErrors, setFormErrors] = useState({})
-  const [isSaving, setIsSaving] = useState(false)
-  const [deletingId, setDeletingId] = useState(null)
-
-  const fetchGenres = useCallback(async () => {
-    setIsGenresLoading(true)
-
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/movies/genres`)
-      setGenres(Array.isArray(response.data) ? response.data : [])
-    } catch (genreError) {
-      setGenres([])
-      setError(getErrorMessage(genreError, 'Không tải được danh sách thể loại phim.'))
-    } finally {
-      setIsGenresLoading(false)
-    }
-  }, [])
-
-  const fetchMovies = useCallback(async () => {
-    setIsLoading(true)
-    setError('')
-
-    try {
-      const response = await axios.get(`${API_BASE_URL}/api/movies`, {
-        params: {
-          keyword: keyword || undefined,
-          status: status || undefined,
-          page,
-          pageSize: PAGE_SIZE,
-        },
-      })
-
-      const data = response.data ?? {}
-      setMovies(Array.isArray(data.items) ? data.items : [])
-      setPagination({
-        page: data.page ?? page,
-        pageSize: data.pageSize ?? PAGE_SIZE,
-        totalCount: data.totalCount ?? 0,
-        totalPages: Math.max(data.totalPages ?? 1, 1),
-      })
-    } catch (movieError) {
-      setMovies([])
-      setError(getErrorMessage(movieError, 'Không tải được danh sách phim.'))
-    } finally {
-      setIsLoading(false)
-    }
-  }, [keyword, page, status])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchGenres()
-  }, [fetchGenres])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    fetchMovies()
-  }, [fetchMovies])
-
-  const shownRange = useMemo(() => {
-    if (pagination.totalCount === 0) return '0'
-
-    const start = (pagination.page - 1) * pagination.pageSize + 1
-    const end = Math.min(pagination.page * pagination.pageSize, pagination.totalCount)
-
-    return `${start}-${end}`
-  }, [pagination])
-
-  const openCreateForm = () => {
-    setEditingMovie(null)
-    setForm(initialForm)
-    setFormErrors({})
-    setError('')
-    setNotice('')
-    setIsFormOpen(true)
-  }
-
-  const openEditForm = (movie) => {
-    setEditingMovie(movie)
-    setForm(toForm(movie))
-    setFormErrors({})
-    setError('')
-    setNotice('')
-    setIsFormOpen(true)
-  }
-
-  const closeForm = () => {
-    if (isSaving) return
-
-    setIsFormOpen(false)
-    setEditingMovie(null)
-    setForm(initialForm)
-    setFormErrors({})
-  }
-
-  const handleFieldChange = (event) => {
-    const { name, value } = event.target
-
-    setForm((current) => ({ ...current, [name]: value }))
-    setFormErrors((current) => {
-      if (!current[name]) return current
-
-      const next = { ...current }
-      delete next[name]
-      return next
-    })
-  }
-
-  const handleGenreChange = (event) => {
-    const genreId = Number(event.target.value)
-    if (!Number.isInteger(genreId)) return
-
-    setForm((current) => {
-      const currentGenreIds = Array.isArray(current.genreIds) ? current.genreIds : []
-      const nextGenreIds = event.target.checked
-        ? [...new Set([...currentGenreIds, genreId])]
-        : currentGenreIds.filter((currentGenreId) => currentGenreId !== genreId)
-
-      return { ...current, genreIds: nextGenreIds }
-    })
-    setFormErrors((current) => {
-      if (!current.genreIds) return current
-
-      const next = { ...current }
-      delete next.genreIds
-      return next
-    })
-  }
-
-  const handleSearch = (event) => {
-    event.preventDefault()
-    setKeyword(keywordInput.trim())
-    setPage(1)
-  }
-
-  const resetFilters = () => {
-    setKeywordInput('')
-    setKeyword('')
-    setStatus('')
-    setPage(1)
-  }
-
-  const handleSubmit = async (event) => {
-    event.preventDefault()
-    const nextErrors = validateForm(form)
-
-    if (Object.keys(nextErrors).length > 0) {
-      setFormErrors(nextErrors)
-      return
-    }
-
-    setIsSaving(true)
-    setError('')
-    setNotice('')
-
-    try {
-      const payload = buildPayload(form)
-
-      if (editingMovie) {
-        await axios.put(`${API_BASE_URL}/api/movies/${editingMovie.movieId}`, payload)
-        setNotice('Đã cập nhật phim.')
-      } else {
-        await axios.post(`${API_BASE_URL}/api/movies`, payload)
-        setNotice('Đã thêm phim mới.')
-      }
-
-      closeForm()
-      await fetchMovies()
-    } catch (saveError) {
-      setError(getErrorMessage(saveError, 'Không lưu được phim.'))
-    } finally {
-      setIsSaving(false)
-    }
-  }
-
-  const handleDelete = async (movie) => {
-    const confirmed = window.confirm(`Xóa phim "${movie.title}"?`)
-    if (!confirmed) return
-
-    setDeletingId(movie.movieId)
-    setError('')
-    setNotice('')
-
-    try {
-      await axios.delete(`${API_BASE_URL}/api/movies/${movie.movieId}`)
-      setNotice('Đã xóa phim.')
-
-      if (movies.length === 1 && page > 1) {
-        setPage((current) => current - 1)
-      } else {
-        await fetchMovies()
-      }
-    } catch (deleteError) {
-      setError(getErrorMessage(deleteError, 'Không xóa được phim.'))
-    } finally {
-      setDeletingId(null)
-    }
-  }
-
-  return (
-    <section className="admin-page movies-page" aria-label="Quản lý phim">
-      <div className="page-surface movies-surface">
-        <div className="movies-toolbar">
-          <div>
-            <p className="section-kicker">Danh sách phim</p>
-            <h2>Quản lý phim</h2>
-            <p className="section-subtitle">
-              Hiển thị {shownRange} trong {pagination.totalCount} phim
-            </p>
-          </div>
-
-          <button className="primary-button" type="button" onClick={openCreateForm}>
-            <Icon name="plus" />
-            Thêm phim
-          </button>
-        </div>
-
-        <form className="movies-filters" onSubmit={handleSearch}>
-          <label className="search-field">
-            <Icon name="search" className="field-icon" />
-            <input
-              type="search"
-              value={keywordInput}
-              onChange={(event) => setKeywordInput(event.target.value)}
-              placeholder="Tìm theo tên phim"
-              aria-label="Tìm kiếm phim"
-            />
-          </label>
-
-          <select
-            value={status}
-            onChange={(event) => {
-              setStatus(event.target.value)
-              setPage(1)
-            }}
-            aria-label="Lọc trạng thái phim"
-          >
-            {statusOptions.map((option) => (
-              <option key={option.value || 'all'} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          <button className="secondary-button" type="submit">
-            <Icon name="search" />
-            Tìm kiếm
-          </button>
-          <button className="ghost-button" type="button" onClick={resetFilters}>
-            <Icon name="refresh" />
-            Đặt lại
-          </button>
-        </form>
-
-        {error ? <div className="alert alert-error">{error}</div> : null}
-        {notice ? <div className="alert alert-success">{notice}</div> : null}
-
-        <div className="movies-table-wrap">
-          <table className="movies-table">
-            <thead>
-              <tr>
-                <th>Phim</th>
-                <th>Trạng thái</th>
-                <th>Thời lượng</th>
-                <th>Khởi chiếu</th>
-                <th>IMDb</th>
-                <th aria-label="Thao tác" />
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading ? (
-                <tr>
-                  <td colSpan="6" className="table-state">
-                    Đang tải danh sách phim...
-                  </td>
-                </tr>
-              ) : movies.length > 0 ? (
-                movies.map((movie) => (
-                  <tr key={movie.movieId}>
-                    <td>
-                      <div className="movie-cell">
-                        <div className="poster-thumb">
-                          {movie.posterUrl ? (
-                            <img src={movie.posterUrl} alt="" />
-                          ) : (
-                            <Icon name="image" />
-                          )}
-                        </div>
-                        <div>
-                          <strong>{movie.title}</strong>
-                          <span>{movie.titleEn || movie.director || 'Chưa có mô tả phụ'}</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`status-badge status-${movie.status || 'unknown'}`}>
-                        {getStatusLabel(movie.status)}
-                      </span>
-                    </td>
-                    <td>{movie.durationMins ? `${movie.durationMins} phút` : 'Chưa đặt'}</td>
-                    <td>{formatDate(movie.releaseDate)}</td>
-                    <td>{movie.imdbRating ?? 'Chưa có'}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          className="icon-button table-action"
-                          type="button"
-                          onClick={() => openEditForm(movie)}
-                          aria-label={`Sửa phim ${movie.title}`}
-                          title="Sửa phim"
-                        >
-                          <Icon name="edit" />
-                        </button>
-                        <button
-                          className="icon-button table-action danger"
-                          type="button"
-                          onClick={() => handleDelete(movie)}
-                          disabled={deletingId === movie.movieId}
-                          aria-label={`Xóa phim ${movie.title}`}
-                          title="Xóa phim"
-                        >
-                          <Icon name="trash" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              ) : (
-                <tr>
-                  <td colSpan="6" className="table-state">
-                    Chưa có phim phù hợp.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="pagination-bar">
-          <span>
-            Trang {pagination.page} / {pagination.totalPages}
-          </span>
-          <div className="pagination-actions">
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => setPage((current) => Math.max(current - 1, 1))}
-              disabled={page <= 1 || isLoading}
-              aria-label="Trang trước"
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { cinemaLookupApi, movieApi } from '../../services/api';
+
+const createEmptyMovie = () => ({
+    title: '',
+    titleEn: '',
+    countryId: '',
+    durationMins: 90,
+    releaseDate: '',
+    endDate: '',
+    ageRating: 'P',
+    status: 'coming_soon',
+    synopsis: '',
+    director: '',
+    castMembers: '',
+    language: '',
+    subtitle: '',
+    posterUrl: '',
+    bannerUrl: '',
+    trailerUrl: '',
+    imdbRating: '',
+    genreIds: [],
+});
+
+const movieStatusOptions = [
+    { value: 'now_showing', label: 'Đang chiếu', badge: 'badge-success' },
+    { value: 'coming_soon', label: 'Sắp chiếu', badge: 'badge-primary' },
+    { value: 'ended', label: 'Đã kết thúc', badge: 'badge-secondary' },
+];
+
+const ageRatingOptions = ['P', 'T13', 'T16', 'T18', 'C'];
+
+const getItems = (data) => data?.items || data?.data || data || [];
+const getMovieId = (movie) => movie?.movieId || movie?.id;
+const toDateInput = (value) => (value ? String(value).substring(0, 10) : '');
+const normalizeStatus = (value) => {
+    const key = String(value || '').trim().toLowerCase().replace(/[\s-]/g, '_');
+    if (key === 'nowshowing' || key === 'now_showing') return 'now_showing';
+    if (key === 'comingsoon' || key === 'coming_soon') return 'coming_soon';
+    if (key === 'ended') return 'ended';
+    return 'coming_soon';
+};
+const genreNameViMap = {
+    action: 'Hành động',
+    adventure: 'Phiêu lưu',
+    animation: 'Hoạt hình',
+    comedy: 'Hài',
+    drama: 'Chính kịch',
+    family: 'Gia đình',
+    horror: 'Kinh dị',
+    mystery: 'Bí ẩn',
+    romance: 'Lãng mạn',
+    scifi: 'Khoa học viễn tưởng',
+    'sci-fi': 'Khoa học viễn tưởng',
+   
+};
+
+const normalizeGenreKey = (value) =>
+    String(value || '')
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/&/g, 'and')
+        .replace(/[\s_]+/g, ' ')
+        .replace(/[^a-z0-9 -]/g, '');
+
+const getGenreNameVi = (genre) => {
+    const name = typeof genre === 'string'
+        ? genre
+        : genre?.genreName || genre?.name || genre?.title || '';
+
+    const key = normalizeGenreKey(name);
+    const compactKey = key.replace(/[\s-]/g, '');
+
+    return genreNameViMap[key] || genreNameViMap[compactKey] || name || '-';
+};
+
+const getGenreText = (movie) => {
+    if (!Array.isArray(movie?.genres) || movie.genres.length === 0) return '-';
+    return movie.genres.map(getGenreNameVi).join(', ');
+};
+
+const getMovieStatus = (value) => movieStatusOptions.find((status) => status.value === normalizeStatus(value));
+const getMovieStatusLabel = (value) => getMovieStatus(value)?.label || '-';
+const getMovieStatusBadge = (value) => getMovieStatus(value)?.badge || 'badge-secondary';
+const getMoviePosterUrl = (movie) => movie?.posterUrl || movie?.poster_url || movie?.PosterUrl || movie?.imageUrl || '';
+// const getGenreText = (movie) => Array.isArray(movie?.genres) && movie.genres.length > 0 ? movie.genres.join(', ') : '-';
+const cleanText = (value) => {
+    if (typeof value !== 'string') return value ?? null;
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+};
+
+const MoviePoster = ({ movie }) => {
+    const [imageError, setImageError] = useState(false);
+    const posterUrl = getMoviePosterUrl(movie);
+
+    if (!posterUrl || imageError) {
+        return (
+            <div
+                className="d-inline-flex align-items-center justify-content-center bg-light border rounded text-muted"
+                style={{ width: '58px', height: '78px' }}
+                title="Chưa có poster"
             >
-              <Icon name="chevronLeft" />
-            </button>
-            <button
-              className="icon-button"
-              type="button"
-              onClick={() => setPage((current) => Math.min(current + 1, pagination.totalPages))}
-              disabled={page >= pagination.totalPages || isLoading}
-              aria-label="Trang sau"
-            >
-              <Icon name="chevronRight" />
-            </button>
-          </div>
-        </div>
-      </div>
+                <i className="fas fa-film"></i>
+            </div>
+        );
+    }
 
-      {isFormOpen ? (
-        <div className="modal-backdrop">
-          <section className="modal-panel movie-form-modal" role="dialog" aria-modal="true">
-            <div className="modal-header">
-              <div>
-                <p className="section-kicker">{editingMovie ? 'Sửa phim' : 'Thêm phim'}</p>
-                <h2>{editingMovie ? editingMovie.title : 'Phim mới'}</h2>
-              </div>
-              <button
-                className="icon-button"
-                type="button"
-                onClick={closeForm}
-                disabled={isSaving}
-                aria-label="Đóng form"
-              >
-                <Icon name="close" />
-              </button>
+    return (
+        <img
+            src={posterUrl}
+            alt={movie?.title ? `Poster ${movie.title}` : 'Poster phim'}
+            className="border rounded"
+            style={{ width: '58px', height: '78px', objectFit: 'cover', backgroundColor: '#f8f9fa' }}
+            onError={() => setImageError(true)}
+        />
+    );
+};
+
+const AdminMovies = () => {
+    const [movies, setMovies] = useState([]);
+    const [lookups, setLookups] = useState({ genres: [], countries: [] });
+    const [keyword, setKeyword] = useState('');
+    const [status, setStatus] = useState('');
+    const [loading, setLoading] = useState(true);
+    const [showModal, setShowModal] = useState(false);
+    const [editingMovie, setEditingMovie] = useState(null);
+    const [formData, setFormData] = useState(createEmptyMovie);
+    const [posterPreviewError, setPosterPreviewError] = useState(false);
+    const [error, setError] = useState('');
+    const [success, setSuccess] = useState('');
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => {
+        loadLookups();
+        loadMovies();
+    }, []);
+
+    const loadLookups = async () => {
+        try {
+            const response = await cinemaLookupApi.getAll();
+            setLookups({
+                genres: response.data?.genres || [],
+                countries: response.data?.countries || [],
+            });
+        } catch (err) {
+            console.error('Failed to load movie lookups:', err);
+            setError('Không tải được danh mục thể loại và quốc gia');
+        }
+    };
+
+    const loadMovies = async () => {
+        setLoading(true);
+        setError('');
+        try {
+            const response = await movieApi.getAll({
+                keyword: keyword || undefined,
+                status: status || undefined,
+                page: 1,
+                pageSize: 100,
+            });
+            setMovies(getItems(response.data));
+        } catch (err) {
+            console.error('Failed to load movies:', err);
+            setError(err.response?.data?.message || 'Không tải được danh sách phim');
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const openModal = async (movie = null) => {
+        setError('');
+        setSuccess('');
+        setEditingMovie(movie);
+        setPosterPreviewError(false);
+
+        if (!movie) {
+            setFormData(createEmptyMovie());
+            setShowModal(true);
+            return;
+        }
+
+        let sourceMovie = movie;
+        let genreIds = Array.isArray(movie.genreIds) ? movie.genreIds : [];
+
+        try {
+            const response = await movieApi.getById(getMovieId(movie));
+            sourceMovie = response.data?.movie || movie;
+            genreIds = response.data?.genreIds || [];
+        } catch (err) {
+            console.error('Failed to load movie details:', err);
+            setError('Không tải được chi tiết phim, đang dùng dữ liệu trên danh sách');
+        }
+
+        setFormData({
+            title: sourceMovie.title || '',
+            titleEn: sourceMovie.titleEn || '',
+            countryId: sourceMovie.countryId ?? '',
+            durationMins: sourceMovie.durationMins || 90,
+            releaseDate: toDateInput(sourceMovie.releaseDate),
+            endDate: toDateInput(sourceMovie.endDate),
+            ageRating: sourceMovie.ageRating || 'P',
+            status: normalizeStatus(sourceMovie.status),
+            synopsis: sourceMovie.synopsis || '',
+            director: sourceMovie.director || '',
+            castMembers: sourceMovie.castMembers || '',
+            language: sourceMovie.language || '',
+            subtitle: sourceMovie.subtitle || '',
+            posterUrl: sourceMovie.posterUrl || '',
+            bannerUrl: sourceMovie.bannerUrl || '',
+            trailerUrl: sourceMovie.trailerUrl || '',
+            imdbRating: sourceMovie.imdbRating ?? '',
+            genreIds: genreIds.map(Number),
+        });
+        setShowModal(true);
+    };
+
+    const closeModal = () => {
+        setShowModal(false);
+        setEditingMovie(null);
+        setPosterPreviewError(false);
+        setError('');
+        setSaving(false);
+    };
+
+    const handleGenreChange = (genreId, checked) => {
+        setFormData((current) => ({
+            ...current,
+            genreIds: checked
+                ? [...current.genreIds, genreId]
+                : current.genreIds.filter((id) => id !== genreId),
+        }));
+    };
+
+    const handlePosterLinkChange = (e) => {
+        setPosterPreviewError(false);
+        setFormData({ ...formData, posterUrl: e.target.value });
+    };
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setSuccess('');
+
+        const durationMins = Number(formData.durationMins);
+        const imdbRating = formData.imdbRating === '' || formData.imdbRating === null ? null : Number(formData.imdbRating);
+
+        if (!formData.title.trim()) {
+            setError('Tên phim là bắt buộc');
+            return;
+        }
+
+        if (!Number.isFinite(durationMins) || durationMins <= 0) {
+            setError('Thời lượng phim phải lớn hơn 0');
+            return;
+        }
+
+        if (imdbRating !== null && (!Number.isFinite(imdbRating) || imdbRating < 0 || imdbRating > 10)) {
+            setError('IMDb phải nằm trong khoảng 0 đến 10');
+            return;
+        }
+
+        const payload = {
+            title: formData.title.trim(),
+            titleEn: cleanText(formData.titleEn),
+            countryId: formData.countryId ? Number(formData.countryId) : null,
+            durationMins,
+            releaseDate: formData.releaseDate || null,
+            endDate: formData.endDate || null,
+            ageRating: cleanText(formData.ageRating) || 'P',
+            status: formData.status,
+            synopsis: cleanText(formData.synopsis),
+            director: cleanText(formData.director),
+            castMembers: cleanText(formData.castMembers),
+            language: cleanText(formData.language),
+            subtitle: cleanText(formData.subtitle),
+            posterUrl: cleanText(formData.posterUrl),
+            bannerUrl: cleanText(formData.bannerUrl),
+            trailerUrl: cleanText(formData.trailerUrl),
+            imdbRating,
+            genreIds: formData.genreIds.map(Number),
+        };
+
+        setSaving(true);
+        try {
+            if (editingMovie) {
+                await movieApi.update(getMovieId(editingMovie), payload);
+                setSuccess('Đã cập nhật phim');
+            } else {
+                await movieApi.create(payload);
+                setSuccess('Đã thêm phim mới');
+            }
+
+            closeModal();
+            await loadMovies();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Lưu phim thất bại');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const handleDelete = async (movie) => {
+        if (!window.confirm(`Xóa phim "${movie.title}"?`)) return;
+
+        setError('');
+        setSuccess('');
+        try {
+            await movieApi.delete(getMovieId(movie));
+            setSuccess('Đã xóa phim');
+            await loadMovies();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Xóa phim thất bại');
+        }
+    };
+
+    return (
+        <div className="content-wrapper">
+            <div className="content-header">
+                <div className="container-fluid">
+                    <h1 className="m-0">Quản lý phim</h1>
+                </div>
             </div>
 
-            <form className="movie-form" onSubmit={handleSubmit}>
-              <div className="form-grid">
-                <label className="form-field required">
-                  <span>Tên phim</span>
-                  <input name="title" value={form.title} onChange={handleFieldChange} />
-                  {formErrors.title ? <em>{formErrors.title}</em> : null}
-                </label>
+            <section className="content">
+                <div className="container-fluid">
+                    {error && !showModal && <div className="alert alert-warning">{error}</div>}
+                    {success && !showModal && <div className="alert alert-success">{success}</div>}
 
-                <label className="form-field">
-                  <span>Tên tiếng Anh</span>
-                  <input name="titleEn" value={form.titleEn} onChange={handleFieldChange} />
-                </label>
+                    <div className="card">
+                        <div className="card-header">
+                            <div className="row align-items-start">
+                                <div className="col-lg-9">
+                                    <form className="form-inline" onSubmit={(e) => { e.preventDefault(); loadMovies(); }}>
+                                        <input
+                                            className="form-control mr-2 mb-2"
+                                            value={keyword}
+                                            onChange={(e) => setKeyword(e.target.value)}
+                                            placeholder="Tìm tên phim..."
+                                        />
+                                        <select
+                                            className="form-control mr-2 mb-2"
+                                            value={status}
+                                            onChange={(e) => setStatus(e.target.value)}
+                                        >
+                                            <option value="">Tất cả trạng thái</option>
+                                            {movieStatusOptions.map((option) => (
+                                                <option key={option.value} value={option.value}>{option.label}</option>
+                                            ))}
+                                        </select>
+                                        <button className="btn btn-primary mr-2 mb-2" type="submit">
+                                            <i className="fas fa-search mr-1"></i> Tìm kiếm
+                                        </button>
+                                        <button className="btn btn-outline-secondary mb-2" type="button" onClick={loadMovies}>
+                                            <i className="fas fa-sync-alt mr-1"></i> Tải lại
+                                        </button>
+                                    </form>
+                                </div>
+                                <div className="col-lg-3 text-lg-right">
+                                    <button className="btn btn-success" onClick={() => openModal()}>
+                                        <i className="fas fa-plus mr-1"></i> Thêm phim
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
 
-                <label className="form-field required">
-                  <span>Thời lượng</span>
-                  <input
-                    name="durationMins"
-                    type="number"
-                    min="1"
-                    value={form.durationMins}
-                    onChange={handleFieldChange}
-                  />
-                  {formErrors.durationMins ? <em>{formErrors.durationMins}</em> : null}
-                </label>
+                        <div className="card-body">
+                            {loading ? (
+                                <div className="text-center py-5">
+                                    <div className="spinner-border text-primary"></div>
+                                </div>
+                            ) : (
+                                <div className="table-responsive">
+                                    <table className="table table-bordered table-striped">
+                                        <thead>
+                                            <tr>
+                                                <th style={{ width: '86px' }}>Poster</th>
+                                                <th>Phim</th>
+                                                <th>Thể loại</th>
+                                                <th>Thời lượng</th>
+                                                <th>Khởi chiếu</th>
+                                                <th>Phân loại</th>
+                                                <th>Trạng thái</th>
+                                                <th style={{ width: '145px' }}>Thao tác</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {movies.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan="8" className="text-center">Không tìm thấy phim</td>
+                                                </tr>
+                                            ) : movies.map((movie) => (
+                                                <tr key={getMovieId(movie)}>
+                                                    <td className="text-center">
+                                                        <MoviePoster movie={movie} />
+                                                    </td>
+                                                    <td>
+                                                        <strong>{movie.title}</strong>
+                                                        <div className="text-muted small">{movie.titleEn || movie.director || '-'}</div>
+                                                    </td>
+                                                    <td>{getGenreText(movie)}</td>
+                                                    <td>{movie.durationMins} phút</td>
+                                                    <td>{toDateInput(movie.releaseDate) || '-'}</td>
+                                                    <td>{movie.ageRating || '-'}</td>
+                                                    <td>
+                                                        <span className={`badge ${getMovieStatusBadge(movie.status)}`}>
+                                                            {getMovieStatusLabel(movie.status)}
+                                                        </span>
+                                                    </td>
+                                                    <td>
+                                                        <Link
+                                                            className="btn btn-sm btn-primary mr-1"
+                                                            to={`/admin/showtimes?create=1&movieId=${getMovieId(movie)}`}
+                                                            title="Tạo lịch chiếu cho phim"
+                                                        >
+                                                            <i className="fas fa-calendar-plus"></i>
+                                                        </Link>
+                                                        <button className="btn btn-sm btn-info mr-1" onClick={() => openModal(movie)} title="Sửa phim">
+                                                            <i className="fas fa-edit"></i>
+                                                        </button>
+                                                        <button className="btn btn-sm btn-danger" onClick={() => handleDelete(movie)} title="Xóa phim">
+                                                            <i className="fas fa-trash"></i>
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-                <label className="form-field">
-                  <span>Trạng thái</span>
-                  <select name="status" value={form.status} onChange={handleFieldChange}>
-                    {statusOptions
-                      .filter((option) => option.value)
-                      .map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                  </select>
-                </label>
+            {showModal && (
+                <div className="modal d-block" tabIndex="-1" style={{ backgroundColor: 'rgba(0,0,0,.5)' }}>
+                    <div className="modal-dialog modal-xl" style={{ marginTop: '20px' }}>
+                        <div className="modal-content">
+                            <form onSubmit={handleSubmit}>
+                                <div className="modal-header">
+                                    <h5 className="modal-title">{editingMovie ? 'Cập nhật phim' : 'Thêm phim'}</h5>
+                                    <button type="button" className="close" onClick={closeModal}>&times;</button>
+                                </div>
+                                <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+                                    {error && <div className="alert alert-danger">{error}</div>}
+                                    <div className="row">
+                                        <div className="col-md-6 form-group">
+                                            <label>Tên phim</label>
+                                            <input
+                                                className="form-control"
+                                                value={formData.title}
+                                                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Tên tiếng Anh</label>
+                                            <input
+                                                className="form-control"
+                                                value={formData.titleEn}
+                                                onChange={(e) => setFormData({ ...formData, titleEn: e.target.value })}
+                                            />
+                                        </div>
 
-                <label className="form-field">
-                  <span>Khởi chiếu</span>
-                  <input
-                    name="releaseDate"
-                    type="date"
-                    value={form.releaseDate}
-                    onChange={handleFieldChange}
-                  />
-                </label>
+                                        <div className="col-md-3 form-group">
+                                            <label>Quốc gia</label>
+                                            <select
+                                                className="form-control"
+                                                value={formData.countryId}
+                                                onChange={(e) => setFormData({ ...formData, countryId: e.target.value })}
+                                            >
+                                                <option value="">Chọn quốc gia</option>
+                                                {lookups.countries.map((country) => (
+                                                    <option key={country.countryId} value={country.countryId}>
+                                                        {country.countryName}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="col-md-3 form-group">
+                                            <label>Thời lượng</label>
+                                            <input
+                                                type="number"
+                                                min="1"
+                                                className="form-control"
+                                                value={formData.durationMins}
+                                                onChange={(e) => setFormData({ ...formData, durationMins: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-md-3 form-group">
+                                            <label>Ngày khởi chiếu</label>
+                                            <input
+                                                type="date"
+                                                className="form-control"
+                                                value={formData.releaseDate}
+                                                onChange={(e) => setFormData({ ...formData, releaseDate: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="col-md-3 form-group">
+                                            <label>Ngày kết thúc</label>
+                                            <input
+                                                type="date"
+                                                className="form-control"
+                                                value={formData.endDate}
+                                                onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
+                                            />
+                                        </div>
 
-                <label className="form-field">
-                  <span>Kết thúc</span>
-                  <input
-                    name="endDate"
-                    type="date"
-                    value={form.endDate}
-                    onChange={handleFieldChange}
-                  />
-                </label>
+                                        <div className="col-md-3 form-group">
+                                            <label>Phân loại</label>
+                                            <select
+                                                className="form-control"
+                                                value={formData.ageRating}
+                                                onChange={(e) => setFormData({ ...formData, ageRating: e.target.value })}
+                                            >
+                                                {ageRatingOptions.map((rating) => (
+                                                    <option key={rating} value={rating}>{rating}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="col-md-3 form-group">
+                                            <label>Trạng thái</label>
+                                            <select
+                                                className="form-control"
+                                                value={formData.status}
+                                                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                                            >
+                                                {movieStatusOptions.map((option) => (
+                                                    <option key={option.value} value={option.value}>{option.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="col-md-3 form-group">
+                                            <label>Ngôn ngữ</label>
+                                            <input
+                                                className="form-control"
+                                                value={formData.language}
+                                                onChange={(e) => setFormData({ ...formData, language: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="col-md-3 form-group">
+                                            <label>IMDb</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="10"
+                                                step="0.1"
+                                                className="form-control"
+                                                value={formData.imdbRating}
+                                                onChange={(e) => setFormData({ ...formData, imdbRating: e.target.value })}
+                                            />
+                                        </div>
 
-                <label className="form-field">
-                  <span>Phân loại tuổi</span>
-                  <select name="ageRating" value={form.ageRating} onChange={handleFieldChange}>
-                    {ageRatingOptions.map((rating) => (
-                      <option key={rating} value={rating}>
-                        {rating}
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                                        <div className="col-md-6 form-group">
+                                            <label>Đạo diễn</label>
+                                            <input
+                                                className="form-control"
+                                                value={formData.director}
+                                                onChange={(e) => setFormData({ ...formData, director: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Diễn viên</label>
+                                            <input
+                                                className="form-control"
+                                                value={formData.castMembers}
+                                                onChange={(e) => setFormData({ ...formData, castMembers: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Phụ đề</label>
+                                            <input
+                                                className="form-control"
+                                                value={formData.subtitle}
+                                                onChange={(e) => setFormData({ ...formData, subtitle: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Link trailer</label>
+                                            <input
+                                                type="url"
+                                                className="form-control"
+                                                value={formData.trailerUrl}
+                                                onChange={(e) => setFormData({ ...formData, trailerUrl: e.target.value })}
+                                                placeholder="https://youtube.com/..."
+                                            />
+                                        </div>
 
-                <label className="form-field">
-                  <span>IMDb</span>
-                  <input
-                    name="imdbRating"
-                    type="number"
-                    min="0"
-                    max="10"
-                    step="0.1"
-                    value={form.imdbRating}
-                    onChange={handleFieldChange}
-                  />
-                  {formErrors.imdbRating ? <em>{formErrors.imdbRating}</em> : null}
-                </label>
+                                        <div className="col-md-6 form-group">
+                                            <label>Link poster</label>
+                                            <input
+                                                type="url"
+                                                className="form-control"
+                                                value={formData.posterUrl}
+                                                onChange={handlePosterLinkChange}
+                                                placeholder="https://.../poster.jpg"
+                                            />
+                                            {formData.posterUrl && !posterPreviewError && (
+                                                <div className="mt-2 border rounded p-2 bg-light" style={{ maxWidth: '180px' }}>
+                                                    <img
+                                                        src={formData.posterUrl}
+                                                        alt="Xem trước poster"
+                                                        style={{ width: '100%', height: '220px', objectFit: 'cover', borderRadius: '4px' }}
+                                                        onError={() => setPosterPreviewError(true)}
+                                                    />
+                                                </div>
+                                            )}
+                                            {formData.posterUrl && posterPreviewError && (
+                                                <small className="form-text text-danger">Không hiển thị được ảnh từ link này.</small>
+                                            )}
+                                        </div>
+                                        <div className="col-md-6 form-group">
+                                            <label>Link banner</label>
+                                            <input
+                                                type="url"
+                                                className="form-control"
+                                                value={formData.bannerUrl}
+                                                onChange={(e) => setFormData({ ...formData, bannerUrl: e.target.value })}
+                                                placeholder="https://.../banner.jpg"
+                                            />
+                                        </div>
 
-                <label className="form-field">
-                  <span>Country ID</span>
-                  <input
-                    name="countryId"
-                    type="number"
-                    min="1"
-                    value={form.countryId}
-                    onChange={handleFieldChange}
-                  />
-                  {formErrors.countryId ? <em>{formErrors.countryId}</em> : null}
-                </label>
+                                        <div className="col-md-12 form-group">
+                                            <label>Thể loại</label>
+                                            <div className="border rounded p-3 bg-light">
+                                                {lookups.genres.length === 0 ? (
+                                                    <span className="text-muted">Chưa có thể loại</span>
+                                                ) : lookups.genres.map((genre) => (
+                                                    <label className="mr-3 mb-2" key={genre.genreId}>
+                                                        <input
+                                                            type="checkbox"
+                                                            className="mr-1"
+                                                            checked={formData.genreIds.includes(Number(genre.genreId))}
+                                                            onChange={(e) => handleGenreChange(Number(genre.genreId), e.target.checked)}
+                                                        />
+                                                       {getGenreNameVi(genre)}
+                                                    </label>
+                                                ))}
+                                            </div>
+                                        </div>
 
-                <label className="form-field">
-                  <span>Đạo diễn</span>
-                  <input name="director" value={form.director} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field">
-                  <span>Diễn viên</span>
-                  <input name="castMembers" value={form.castMembers} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field">
-                  <span>Ngôn ngữ</span>
-                  <input name="language" value={form.language} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field">
-                  <span>Phụ đề</span>
-                  <input name="subtitle" value={form.subtitle} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field wide">
-                  <span>Poster URL</span>
-                  <input name="posterUrl" value={form.posterUrl} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field wide">
-                  <span>Banner URL</span>
-                  <input name="bannerUrl" value={form.bannerUrl} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field wide">
-                  <span>Trailer URL</span>
-                  <input name="trailerUrl" value={form.trailerUrl} onChange={handleFieldChange} />
-                </label>
-
-                <label className="form-field wide">
-                  <span>Tóm tắt</span>
-                  <textarea
-                    name="synopsis"
-                    rows="4"
-                    value={form.synopsis}
-                    onChange={handleFieldChange}
-                  />
-                </label>
-
-                <fieldset className="form-field movie-genre-field wide">
-                  <legend>Thể loại</legend>
-                  <div className="genre-options">
-                    {isGenresLoading ? (
-                      <span className="genre-empty">Đang tải thể loại...</span>
-                    ) : genres.length > 0 ? (
-                      genres.map((genre) => {
-                        const genreId = Number(genre.genreId)
-                        return (
-                          <label className="genre-option" key={genre.genreId}>
-                            <input
-                              type="checkbox"
-                              value={genreId}
-                              checked={form.genreIds.includes(genreId)}
-                              onChange={handleGenreChange}
-                            />
-                            <span>{genre.genreName}</span>
-                          </label>
-                        )
-                      })
-                    ) : (
-                      <span className="genre-empty">Chưa có thể loại phim.</span>
-                    )}
-                  </div>
-                  {formErrors.genreIds ? <em>{formErrors.genreIds}</em> : null}
-                </fieldset>
-              </div>
-
-              <div className="form-actions">
-                <button className="ghost-button" type="button" onClick={closeForm} disabled={isSaving}>
-                  Hủy
-                </button>
-                <button className="primary-button" type="submit" disabled={isSaving}>
-                  <Icon name="save" />
-                  {isSaving ? 'Đang lưu...' : 'Lưu phim'}
-                </button>
-              </div>
-            </form>
-          </section>
+                                        <div className="col-md-12 form-group">
+                                            <label>Tóm tắt</label>
+                                            <textarea
+                                                className="form-control"
+                                                rows="4"
+                                                value={formData.synopsis}
+                                                onChange={(e) => setFormData({ ...formData, synopsis: e.target.value })}
+                                            ></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="modal-footer">
+                                    <button type="button" className="btn btn-secondary" onClick={closeModal} disabled={saving}>
+                                        Đóng
+                                    </button>
+                                    <button type="submit" className="btn btn-primary" disabled={saving}>
+                                        {saving ? 'Đang lưu...' : 'Lưu'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
-      ) : null}
-    </section>
-  )
-}
+    );
+};
 
-export default Movies
+export default AdminMovies;

@@ -1,8 +1,8 @@
-import axios from 'axios'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import Icon from '../../components/Icon'
+import { cinemaApi, movieApi, showtimeApi, ticketPriceApi } from '../../services/api'
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:5001'
 const PAGE_SIZE = 8
 
 const statusOptions = [
@@ -41,6 +41,10 @@ function getErrorMessage(error, fallback) {
 
 function getShowtimeInfo(item) {
   return item?.showtime ?? item ?? {}
+}
+
+function getItems(data) {
+  return data?.items || data?.data || data || []
 }
 
 function toInteger(value) {
@@ -94,12 +98,6 @@ function formatTime(value) {
   }).format(date)
 }
 
-function formatTimeRange(startTime, endTime) {
-  if (!startTime) return 'Chưa đặt giờ'
-
-  return `${formatTime(startTime)} - ${formatTime(endTime)}`
-}
-
 function formatDuration(startTime, endTime) {
   const start = new Date(startTime)
   const end = new Date(endTime)
@@ -109,17 +107,6 @@ function formatDuration(startTime, endTime) {
   }
 
   return `${Math.round((end.getTime() - start.getTime()) / 60000)} phút`
-}
-
-function formatPrice(value) {
-  const amount = Number(value)
-  if (!Number.isFinite(amount)) return 'Chưa đặt giá'
-
-  return new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
-    maximumFractionDigits: 0,
-  }).format(amount)
 }
 
 function getStatusLabel(value) {
@@ -210,10 +197,13 @@ function validateForm(form, halls) {
 }
 
 function Showtimes() {
+  const [searchParams] = useSearchParams()
+  const queryAppliedRef = useRef(false)
   const [showtimes, setShowtimes] = useState([])
   const [movies, setMovies] = useState([])
   const [cinemas, setCinemas] = useState([])
   const [halls, setHalls] = useState([])
+  const [ticketPrices, setTicketPrices] = useState([])
   const [pagination, setPagination] = useState({
     page: 1,
     pageSize: PAGE_SIZE,
@@ -238,23 +228,40 @@ function Showtimes() {
     setIsLookupsLoading(true)
 
     try {
-      const [movieResponse, cinemaResponse, hallResponse] = await Promise.all([
-        axios.get(`${API_BASE_URL}/api/movies`, { params: { page: 1, pageSize: 1000 } }),
-        axios.get(`${API_BASE_URL}/api/cinemas`, { params: { page: 1, pageSize: 1000 } }),
-        axios.get(`${API_BASE_URL}/api/halls`, { params: { page: 1, pageSize: 1000 } }),
+      const [movieResponse, cinemaResponse, priceResponse] = await Promise.all([
+        movieApi.getAll({ page: 1, pageSize: 100 }),
+        cinemaApi.getAll({ activeOnly: true }),
+        ticketPriceApi.getAll(),
       ])
 
-      const movieData = movieResponse.data ?? {}
-      const cinemaData = cinemaResponse.data ?? {}
-      const hallData = hallResponse.data ?? {}
+      const movieItems = getItems(movieResponse.data)
+      const cinemaItems = getItems(cinemaResponse.data)
+      const hallResponses = await Promise.all(
+        cinemaItems.map(async (cinema) => {
+          const cinemaId = cinema.cinemaId || cinema.id
+          try {
+            const response = await cinemaApi.getHalls(cinemaId)
+            return getItems(response.data).map((hall) => ({
+              ...hall,
+              cinemaId,
+              cinemaName: cinema.cinemaName || cinema.name,
+              cinemaCity: cinema.city,
+            }))
+          } catch {
+            return []
+          }
+        }),
+      )
 
-      setMovies(Array.isArray(movieData.items) ? movieData.items : [])
-      setCinemas(Array.isArray(cinemaData.items) ? cinemaData.items : [])
-      setHalls(Array.isArray(hallData.items) ? hallData.items : [])
+      setMovies(movieItems.filter((movie) => movie.status !== 'ended'))
+      setCinemas(cinemaItems)
+      setHalls(hallResponses.flat())
+      setTicketPrices(getItems(priceResponse.data))
     } catch (lookupError) {
       setMovies([])
       setCinemas([])
       setHalls([])
+      setTicketPrices([])
       setError(getErrorMessage(lookupError, 'Không tải được dữ liệu phim, rạp hoặc phòng chiếu.'))
     } finally {
       setIsLookupsLoading(false)
@@ -266,12 +273,10 @@ function Showtimes() {
     setError('')
 
     try {
-      const response = await axios.get(`${API_BASE_URL}/api/showtimes`, {
-        params: {
-          status: status || undefined,
-          page,
-          pageSize: PAGE_SIZE,
-        },
+      const response = await showtimeApi.getAll({
+        status: status || undefined,
+        page,
+        pageSize: PAGE_SIZE,
       })
 
       const data = response.data ?? {}
@@ -291,12 +296,10 @@ function Showtimes() {
   }, [page, status])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLookups()
   }, [fetchLookups])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchShowtimes()
   }, [fetchShowtimes])
 
@@ -310,7 +313,10 @@ function Showtimes() {
   }, [pagination])
 
   const formHallOptions = useMemo(
-    () => halls.filter((hall) => !form.cinemaId || String(hall.cinemaId) === form.cinemaId),
+    () => halls.filter((hall) => (
+      hall.status === 'active'
+      && (!form.cinemaId || String(hall.cinemaId) === form.cinemaId)
+    )),
     [form.cinemaId, halls],
   )
 
@@ -324,14 +330,52 @@ function Showtimes() {
     [form.hallId, halls],
   )
 
-  const openCreateForm = () => {
+  const matchingPriceRules = useMemo(() => {
+    if (!selectedHall || !form.cinemaId) return []
+
+    return ticketPrices.filter((item) => {
+      const price = item?.price || item
+      return Number(price?.cinemaId) === Number(form.cinemaId)
+        && Number(price?.hallTypeId) === Number(selectedHall.hallTypeId)
+    })
+  }, [form.cinemaId, selectedHall, ticketPrices])
+
+  const dependencyCounts = useMemo(() => ({
+    movies: movies.length,
+    cinemas: cinemas.length,
+    halls: halls.filter((hall) => hall.status === 'active').length,
+    prices: ticketPrices.length,
+  }), [cinemas.length, halls, movies.length, ticketPrices.length])
+
+  const openCreateForm = (overrides = {}) => {
     setEditingShowtime(null)
-    setForm(initialForm)
+    setForm({ ...initialForm, ...overrides })
     setFormErrors({})
     setError('')
     setNotice('')
     setIsFormOpen(true)
   }
+
+  useEffect(() => {
+    if (isLookupsLoading || queryAppliedRef.current || searchParams.get('create') !== '1') return
+
+    queryAppliedRef.current = true
+    const movieId = searchParams.get('movieId') || ''
+    const cinemaId = searchParams.get('cinemaId') || ''
+    const hallId = searchParams.get('hallId') || ''
+    const matchingHalls = halls.filter((hall) => hall.status === 'active' && String(hall.cinemaId) === cinemaId)
+    const selectedQueryHall = matchingHalls.find((hall) => String(hall.hallId) === hallId)
+
+    openCreateForm({
+      movieId: movies.some((movie) => String(movie.movieId) === movieId) ? movieId : '',
+      cinemaId: cinemas.some((cinema) => String(cinema.cinemaId || cinema.id) === cinemaId) ? cinemaId : '',
+      hallId: selectedQueryHall
+        ? String(selectedQueryHall.hallId)
+        : matchingHalls.length === 1
+          ? String(matchingHalls[0].hallId)
+          : '',
+    })
+  }, [cinemas, halls, isLookupsLoading, movies, searchParams])
 
   const openEditForm = (showtime) => {
     setEditingShowtime(showtime)
@@ -421,10 +465,10 @@ function Showtimes() {
       const payload = buildPayload(form)
 
       if (editingShowtime) {
-        await axios.put(`${API_BASE_URL}/api/showtimes/${getShowtimeInfo(editingShowtime).showtimeId}`, payload)
+        await showtimeApi.update(getShowtimeInfo(editingShowtime).showtimeId, payload)
         setNotice('Đã cập nhật suất chiếu.')
       } else {
-        await axios.post(`${API_BASE_URL}/api/showtimes`, payload)
+        await showtimeApi.create(payload)
         setNotice('Đã thêm suất chiếu mới.')
       }
 
@@ -448,7 +492,7 @@ function Showtimes() {
     setNotice('')
 
     try {
-      await axios.delete(`${API_BASE_URL}/api/showtimes/${showtime.showtimeId}`)
+      await showtimeApi.delete(showtime.showtimeId)
       setNotice('Đã xóa suất chiếu.')
 
       if (showtimes.length === 1 && page > 1) {
@@ -486,6 +530,29 @@ function Showtimes() {
           </button>
         </div>
 
+        <div className="showtime-dependency-grid" aria-label="Dữ liệu liên kết lịch chiếu">
+          <Link className={`dependency-card ${dependencyCounts.movies ? 'ready' : 'missing'}`} to="/admin/movies">
+            <span><i className="fas fa-film" /></span>
+            <div><strong>{dependencyCounts.movies} phim</strong><small>Thêm và cập nhật phim</small></div>
+            <i className="fas fa-arrow-right" />
+          </Link>
+          <Link className={`dependency-card ${dependencyCounts.cinemas ? 'ready' : 'missing'}`} to="/admin/cinemas">
+            <span><i className="fas fa-building" /></span>
+            <div><strong>{dependencyCounts.cinemas} chi nhánh</strong><small>Quản lý địa điểm chiếu</small></div>
+            <i className="fas fa-arrow-right" />
+          </Link>
+          <Link className={`dependency-card ${dependencyCounts.halls ? 'ready' : 'missing'}`} to="/admin/halls">
+            <span><i className="fas fa-door-open" /></span>
+            <div><strong>{dependencyCounts.halls} phòng hoạt động</strong><small>Tạo phòng trước khi xếp lịch</small></div>
+            <i className="fas fa-arrow-right" />
+          </Link>
+          <Link className={`dependency-card ${dependencyCounts.prices ? 'ready' : 'missing'}`} to="/admin/ticket-prices">
+            <span><i className="fas fa-tags" /></span>
+            <div><strong>{dependencyCounts.prices} mức giá</strong><small>Giá áp dụng theo rạp và loại phòng</small></div>
+            <i className="fas fa-arrow-right" />
+          </Link>
+        </div>
+
         <form className="showtimes-filters" onSubmit={handleSearch}>
           <select
             value={statusInput}
@@ -512,16 +579,21 @@ function Showtimes() {
         {error ? <div className="alert alert-error">{error}</div> : null}
         {notice ? <div className="alert alert-success">{notice}</div> : null}
 
+        <div className="list-heading">
+          <i className="fas fa-table-cells-large" />
+          Danh sách lịch chiếu
+        </div>
+
         <div className="movies-table-wrap">
           <table className="movies-table showtimes-table">
             <thead>
               <tr>
+                <th>Giờ bắt đầu</th>
+                <th>Giờ kết thúc</th>
                 <th>Phim</th>
-                <th>Rạp / Phòng</th>
-                <th>Thời gian</th>
-                <th>Ghế</th>
+                <th>Phòng chiếu</th>
                 <th>Trạng thái</th>
-                <th aria-label="Thao tác" />
+                <th>Thao tác</th>
               </tr>
             </thead>
             <tbody>
@@ -537,56 +609,37 @@ function Showtimes() {
                   const movie = item.movie ?? {}
                   const hall = item.hall ?? {}
                   const cinema = item.cinema ?? {}
-                  const totalSeats = Number(showtime.totalSeats ?? hall.totalSeats ?? 0)
-                  const availableSeats = Number(showtime.availableSeats ?? 0)
-                  const soldSeats = Math.max(totalSeats - availableSeats, 0)
-                  const soldPercent = totalSeats > 0 ? Math.min(Math.max((soldSeats / totalSeats) * 100, 0), 100) : 0
 
                   return (
                     <tr key={showtime.showtimeId}>
                       <td>
-                        <div className="movie-cell">
-                          <div className="poster-thumb">
-                            {movie.posterUrl ? (
-                              <img src={movie.posterUrl} alt="" />
-                            ) : (
-                              <Icon name="movies" />
-                            )}
-                          </div>
-                          <div>
-                            <strong>{movie.title || 'Chưa có phim'}</strong>
-                            <span>{movie.durationMins ? `${movie.durationMins} phút` : 'Chưa rõ thời lượng'}</span>
-                          </div>
+                        <div className="showtime-date-cell">
+                          <strong>{formatTime(showtime.startTime)}</strong>
+                          <span>{formatDate(showtime.startTime)}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="showtime-date-cell">
+                          <strong>{formatTime(showtime.endTime)}</strong>
+                          <span>{formatDate(showtime.endTime || showtime.startTime)}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="showtime-movie-cell">
+                          <strong>{movie.title || 'Chưa có phim'}</strong>
+                          <span>
+                            {getLanguageLabel(showtime.languageType)}
+                            {' · '}
+                            {formatDuration(showtime.startTime, showtime.endTime)}
+                            {showtime.isSpecial ? ' · Suất đặc biệt' : ''}
+                          </span>
                         </div>
                       </td>
                       <td>
                         <div className="showtime-location-cell">
-                          <strong>{cinema.cinemaName || hall.cinemaName || 'Chưa có rạp'}</strong>
-                          <span>{hall.hallName || hall.name || 'Chưa có phòng'}</span>
-                          <small>{hall.hallTypeName || cinema.city || 'Chưa có loại phòng'}</small>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="schedule-cell">
-                          <strong>{formatTimeRange(showtime.startTime, showtime.endTime)}</strong>
-                          <span>{formatDate(showtime.startTime)}</span>
-                          <small>{formatDuration(showtime.startTime, showtime.endTime)}</small>
-                          <div className="showtime-tags">
-                            <span>{getLanguageLabel(showtime.languageType)}</span>
-                            {showtime.isSpecial ? <span>Suất đặc biệt</span> : null}
-                          </div>
-                        </div>
-                      </td>
-                      <td>
-                        <div className="seat-count-cell">
-                          <strong>
-                            {availableSeats}/{totalSeats}
-                          </strong>
-                          <span className="muted-cell">Ghế trống</span>
-                          <div className="seat-progress" aria-hidden="true">
-                            <span style={{ width: `${soldPercent}%` }} />
-                          </div>
-                          <small>{formatPrice(showtime.basePrice)}</small>
+                          <strong>{hall.hallName || hall.name || '-'}</strong>
+                          <span>{cinema.cinemaName || hall.cinemaName || 'Chưa có rạp'}</span>
+                          <small>{hall.hallTypeName || cinema.city || ''}</small>
                         </div>
                       </td>
                       <td>
@@ -662,12 +715,9 @@ function Showtimes() {
         <div className="modal-backdrop">
           <section className="modal-panel showtime-form-modal" role="dialog" aria-modal="true">
             <div className="modal-header">
-              <div>
-                <p className="section-kicker">{editingShowtime ? 'Sửa suất chiếu' : 'Thêm suất chiếu'}</p>
-                <h2>{editingShowtime ? itemTitle(editingShowtime) : 'Suất chiếu mới'}</h2>
-              </div>
+              <h2>{editingShowtime ? `Sửa lịch chiếu: ${itemTitle(editingShowtime)}` : 'Thêm lịch chiếu'}</h2>
               <button
-                className="icon-button"
+                className="close"
                 type="button"
                 onClick={closeForm}
                 disabled={isSaving}
@@ -690,6 +740,11 @@ function Showtimes() {
                     ))}
                   </select>
                   {selectedMovie ? <small className="form-hint">{selectedMovie.durationMins} phút</small> : null}
+                  {movies.length === 0 ? (
+                    <Link className="form-create-link" to="/admin/movies">
+                      <i className="fas fa-plus" /> Tạo phim trước
+                    </Link>
+                  ) : null}
                   {formErrors.movieId ? <em>{formErrors.movieId}</em> : null}
                 </label>
 
@@ -703,6 +758,11 @@ function Showtimes() {
                       </option>
                     ))}
                   </select>
+                  {cinemas.length === 0 ? (
+                    <Link className="form-create-link" to="/admin/cinemas">
+                      <i className="fas fa-plus" /> Tạo chi nhánh trước
+                    </Link>
+                  ) : null}
                   {formErrors.cinemaId ? <em>{formErrors.cinemaId}</em> : null}
                 </label>
 
@@ -720,6 +780,11 @@ function Showtimes() {
                     <small className="form-hint">
                       {selectedHall.totalSeats} ghế, trạng thái {selectedHall.status}
                     </small>
+                  ) : null}
+                  {form.cinemaId && formHallOptions.length === 0 ? (
+                    <Link className="form-create-link" to={`/admin/halls?create=1&cinemaId=${form.cinemaId}`}>
+                      <i className="fas fa-plus" /> Tạo phòng cho chi nhánh này
+                    </Link>
                   ) : null}
                   {formErrors.hallId ? <em>{formErrors.hallId}</em> : null}
                 </label>
@@ -782,15 +847,35 @@ function Showtimes() {
                   />
                   <span>Suất chiếu đặc biệt</span>
                 </label>
+
+                {selectedHall ? (
+                  <div className={`showtime-price-status ${matchingPriceRules.length ? 'ready' : 'missing'}`}>
+                    <i className={`fas ${matchingPriceRules.length ? 'fa-circle-check' : 'fa-triangle-exclamation'}`} />
+                    <div>
+                      <strong>
+                        {matchingPriceRules.length
+                          ? `${matchingPriceRules.length} mức giá phù hợp`
+                          : 'Chưa có bảng giá cho loại phòng này'}
+                      </strong>
+                      <small>
+                        {matchingPriceRules.length
+                          ? 'Giá vé sẽ tự áp dụng theo ngày và khung giờ.'
+                          : 'Nếu vẫn lưu, hệ thống dùng giá mặc định 75.000 đ.'}
+                      </small>
+                    </div>
+                    <Link to={`/admin/ticket-prices?create=1&cinemaId=${form.cinemaId}&hallTypeId=${selectedHall.hallTypeId}`}>
+                      {matchingPriceRules.length ? 'Xem bảng giá' : 'Thêm giá'}
+                    </Link>
+                  </div>
+                ) : null}
               </div>
 
               <div className="form-actions">
-                <button className="ghost-button" type="button" onClick={closeForm} disabled={isSaving}>
-                  Hủy
+                <button className="btn btn-secondary" type="button" onClick={closeForm} disabled={isSaving}>
+                  Đóng
                 </button>
-                <button className="primary-button" type="submit" disabled={isSaving}>
-                  <Icon name="save" />
-                  {isSaving ? 'Đang lưu...' : 'Lưu suất chiếu'}
+                <button className="btn btn-primary" type="submit" disabled={isSaving}>
+                  {isSaving ? 'Đang lưu...' : 'Lưu'}
                 </button>
               </div>
             </form>

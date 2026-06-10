@@ -1,81 +1,174 @@
-using DTO.Promotion;
+using Entities;
+using Repository;
 using Microsoft.AspNetCore.Mvc;
-using Services.Promotion;
+using Microsoft.EntityFrameworkCore;
 
-namespace API_Service.Controllers
+  namespace API_Service.Controllers
 {
     [Route("api/promotions")]
     [ApiController]
-    public class PromotionController(IPromotionService promotionService) : ControllerBase
+    public class PromotionsController : ControllerBase
     {
+        private readonly SqlServerDbContext _context;
+
+        public PromotionsController(SqlServerDbContext context)
+        {
+            _context = context;
+        }
+
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] string? keyword, [FromQuery] string? discountType, [FromQuery] bool? isActive, [FromQuery] int page = 1, [FromQuery] int pageSize = 12)
+        public async Task<IActionResult> GetAll([FromQuery] bool activeOnly = true)
         {
-            var result = await promotionService.GetAllAsync(keyword, discountType, isActive, page, pageSize);
-            return Ok(result);
+            var query = _context.CinemaPromotions.AsNoTracking();
+            if (activeOnly)
+            {
+                var now = DateTime.UtcNow;
+                query = query.Where(x => x.IsActive && x.ValidFrom <= now && x.ValidTo >= now);
+            }
+
+            return Ok(await query.OrderByDescending(x => x.ValidFrom).ToListAsync());
         }
 
-        [HttpGet("active")]
-        public async Task<IActionResult> GetActive([FromQuery] int limit = 8)
+        [HttpGet("{id:int}")]
+        public async Task<IActionResult> GetById(int id)
         {
-            var result = await promotionService.GetActiveAsync(limit);
-            return Ok(result);
+            var promotion = await _context.CinemaPromotions.AsNoTracking().FirstOrDefaultAsync(x => x.PromoId == id);
+            return promotion == null ? NotFound(new { message = "Promotion not found" }) : Ok(promotion);
         }
 
-        [HttpGet("{promoId:int}")]
-        public async Task<IActionResult> GetById(int promoId)
+        // GET /api/promotions/code/SUMMER2025
+        [HttpGet("code/{code}")]
+        public async Task<IActionResult> GetByCode(string code)
         {
-            try
-            {
-                var result = await promotionService.GetByIdAsync(promoId);
-                return Ok(result);
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { message = ex.Message });
-            }
+            var promotion = await _context.CinemaPromotions.AsNoTracking().FirstOrDefaultAsync(x => x.PromoCode == code);
+            return promotion == null ? NotFound(new { message = "Promotion not found" }) : Ok(promotion);
+        }
+
+        // Alias kept for backward compatibility: GET /api/promotions/vouchers/SUMMER2025
+        [HttpGet("vouchers/{code}")]
+        public Task<IActionResult> GetVoucher(string code)
+        {
+            return GetByCode(code);
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] PromotionDto.PromotionRequest request)
+        public async Task<IActionResult> Create([FromBody] PromotionDto dto)
         {
-            try
+            var validation = await Validate(dto);
+            if (validation != null)
             {
-                await promotionService.CreateAsync(request);
-                return Ok(new { message = "Voucher created successfully" });
+                return validation;
             }
-            catch (ArgumentException ex)
+
+            var promotion = new CinemaPromotion
             {
-                return BadRequest(new { message = ex.Message });
-            }
+                PromoCode = dto.PromoCode.Trim().ToUpper(),
+                Description = dto.Description,
+                DiscountType = dto.DiscountType,
+                DiscountValue = dto.DiscountValue,
+                MinOrderAmt = dto.MinOrderAmt,
+                MaxDiscount = dto.MaxDiscount,
+                UsageLimit = dto.UsageLimit,
+                PerUserLimit = dto.PerUserLimit,
+                ValidFrom = dto.ValidFrom,
+                ValidTo = dto.ValidTo,
+                IsActive = dto.IsActive ?? true
+            };
+
+            _context.CinemaPromotions.Add(promotion);
+            await _context.SaveChangesAsync();
+            return Ok(promotion);
         }
 
-        [HttpPut("{promoId:int}")]
-        public async Task<IActionResult> Update(int promoId, [FromBody] PromotionDto.PromotionRequest request)
+        [HttpPut("{id:int}")]
+        public async Task<IActionResult> Update(int id, [FromBody] PromotionDto dto)
         {
-            try
+            var promotion = await _context.CinemaPromotions.FindAsync(id);
+            if (promotion == null)
             {
-                await promotionService.UpdateAsync(promoId, request);
-                return Ok(new { message = "Voucher updated successfully" });
+                return NotFound(new { message = "Promotion not found" });
             }
-            catch (ArgumentException ex)
+
+            var validation = await Validate(dto, id);
+            if (validation != null)
             {
-                return BadRequest(new { message = ex.Message });
+                return validation;
             }
+
+            promotion.PromoCode = dto.PromoCode.Trim().ToUpper();
+            promotion.Description = dto.Description;
+            promotion.DiscountType = dto.DiscountType;
+            promotion.DiscountValue = dto.DiscountValue;
+            promotion.MinOrderAmt = dto.MinOrderAmt;
+            promotion.MaxDiscount = dto.MaxDiscount;
+            promotion.UsageLimit = dto.UsageLimit;
+            promotion.PerUserLimit = dto.PerUserLimit;
+            promotion.ValidFrom = dto.ValidFrom;
+            promotion.ValidTo = dto.ValidTo;
+            promotion.IsActive = dto.IsActive ?? promotion.IsActive;
+
+            await _context.SaveChangesAsync();
+            return Ok(promotion);
         }
 
-        [HttpDelete("{promoId:int}")]
-        public async Task<IActionResult> Delete(int promoId)
+        [HttpDelete("{id:int}")]
+        public async Task<IActionResult> Delete(int id)
         {
-            try
+            var promotion = await _context.CinemaPromotions.FindAsync(id);
+            if (promotion == null)
             {
-                await promotionService.DeleteAsync(promoId);
-                return Ok(new { message = "Voucher deleted or deactivated successfully" });
+                return NotFound(new { message = "Promotion not found" });
             }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
+
+            promotion.IsActive = false;
+            await _context.SaveChangesAsync();
+            return NoContent();
         }
+
+        private async Task<IActionResult?> Validate(PromotionDto dto, int? currentId = null)
+        {
+            if (string.IsNullOrWhiteSpace(dto.PromoCode))
+            {
+                return BadRequest(new { message = "Promotion code is required" });
+            }
+
+            var code = dto.PromoCode.Trim().ToUpper();
+            if (await _context.CinemaPromotions.AnyAsync(x => x.PromoCode == code && (!currentId.HasValue || x.PromoId != currentId.Value)))
+            {
+                return BadRequest(new { message = "Promotion code already exists" });
+            }
+
+            if (dto.DiscountType != "percent" && dto.DiscountType != "fixed" && dto.DiscountType != "free_combo")
+            {
+                return BadRequest(new { message = "Discount type is invalid" });
+            }
+
+            if (dto.DiscountValue < 0 || dto.MinOrderAmt < 0)
+            {
+                return BadRequest(new { message = "Discount and minimum order must be greater than or equal to 0" });
+            }
+
+            if (dto.ValidTo < dto.ValidFrom)
+            {
+                return BadRequest(new { message = "Valid to must be after valid from" });
+            }
+
+            return null;
+        }
+    }
+
+    public class PromotionDto
+    {
+        public string PromoCode { get; set; } = "";
+        public string? Description { get; set; }
+        public string DiscountType { get; set; } = "percent";
+        public decimal DiscountValue { get; set; }
+        public decimal MinOrderAmt { get; set; }
+        public decimal? MaxDiscount { get; set; }
+        public int? UsageLimit { get; set; }
+        public byte PerUserLimit { get; set; } = 1;
+        public DateTime ValidFrom { get; set; }
+        public DateTime ValidTo { get; set; }
+        public bool? IsActive { get; set; }
     }
 }

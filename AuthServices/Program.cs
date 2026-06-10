@@ -1,17 +1,13 @@
-using Common;
 using Entities;
-using Libs.Auth;
+using Repository;
+using Repository.EFCore.Authen;
+using Services.Authen;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
-using Repository;
-using Repository.EFCore;
-using Repository.EFCore.Authen;
-using Services.Authen;
-using System.Data;
-using System.IO;
+using Microsoft.OpenApi.Models;
+using Libs.Auth;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -27,7 +23,6 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-        options.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
     });
 builder.Services.AddEndpointsApiExplorer();
 
@@ -41,31 +36,7 @@ builder.Services.AddCors(options =>
     });
 });
 
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "BaseCore Auth Service API",
-        Version = "v1",
-        Description = "Authentication Microservice – Login, Register, User Management"
-    });
-    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-    {
-        In = ParameterLocation.Header,
-        Description = "Please enter JWT token",
-        Name = "Authorization",
-        Type = SecuritySchemeType.Http,
-        BearerFormat = "JWT",
-        Scheme = "bearer"
-    });
-    c.AddSecurityRequirement(doc => new OpenApiSecurityRequirement
-    {
-        {
-            new OpenApiSecuritySchemeReference("Bearer"),
-            new List<string>()
-        }
-    });
-});
+builder.Services.AddSwaggerGen();
 
 var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection")
     ?? "Server=(localdb)\\MSSQLLocalDB;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";

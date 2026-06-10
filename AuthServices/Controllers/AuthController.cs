@@ -1,36 +1,32 @@
-﻿using DTO.Authen;
+﻿using Common;
 using Entities;
+using Repository;
+using Services.Authen;
 using Libs.Auth;
-using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.DataProtection.Repositories;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Ocelot.Values;
-using Services.Authen;
-using Repository;
-namespace AuthServices.Controllers
+
+namespace BaseCore.AuthService.Controllers
 {
-    [Microsoft.AspNetCore.Mvc.Route("api/[controller]")]
-    [Microsoft.AspNetCore.Mvc.ApiController]
-    public class AuthController : Microsoft.AspNetCore.Mvc.ControllerBase
+    [Route("api/[controller]")]
+    [ApiController]
+    public class AuthController : ControllerBase
     {
         private readonly IUserService _userService;
-        private readonly IConfiguration _configuration;
         private readonly SqlServerDbContext _context;
-        private readonly string _secretKey;
+        private const string SecretKey = "YourSecretKeyForAuthenticationShouldBeLongEnough";
         private const int TokenExpirationMinutes = 480;
-        public AuthController(IUserService userService, IConfiguration configuration, SqlServerDbContext context)
+
+        public AuthController(IUserService userService, SqlServerDbContext context)
         {
-                _userService = userService;
-                _configuration = configuration;
-                _context = context;
-                _secretKey = _configuration["Jwt:SecretKey"] ?? "default_secret_key_12345";
-            }
+            _userService = userService;
+            _context = context;
+        }
+
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto.LoginRequest request)
+        public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {
-            var identifier = request.Username ?? request.Email;
+            var identifier = request?.Email ?? request?.Username;
             if (request == null || string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(request.Password))
             {
                 return BadRequest(new { message = "Email and password are required" });
@@ -41,26 +37,32 @@ namespace AuthServices.Controllers
             {
                 return Unauthorized(new { message = "Invalid email or password" });
             }
-            var roleName = await _userService.ResolveRoleName(user.RoleId);
-            var token = TokenHelper.GenerateToken(_secretKey, TokenExpirationMinutes, user.UserId.ToString(), user.Email, roleName, user.CinemaId);
 
-            return Ok(new DTO.Authen.LoginDto.LoginResponse
+            var roleName = await ResolveRoleName(user.RoleId);
+            var token = TokenHelper.GenerateToken(
+                SecretKey,
+                TokenExpirationMinutes,
+                user.UserId.ToString(),
+                user.Email,
+                roleName,
+                user.CinemaId);
+
+            return Ok(new LoginResponse
             {
                 Token = token,
                 UserId = user.UserId.ToString(),
                 RoleId = user.RoleId,
-                CinemaId = user.CinemaId,
                 FullName = user.FullName,
                 Email = user.Email,
                 Phone = user.Phone,
                 AvatarUrl = user.AvatarUrl,
-                Role = roleName ?? "User",
+                Role = roleName,
                 ExpiresIn = TokenExpirationMinutes * 60
-
             });
         }
+
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterDto.RegisterRequest request)
+        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
             if (request == null)
             {
@@ -77,7 +79,7 @@ namespace AuthServices.Controllers
                 return BadRequest(new { message = "Password must be at least 6 characters" });
             }
 
-            if (await _context.Users.AnyAsync(x => x.Email == request.Email))
+            if (await _context.CinemaUsers.AnyAsync(x => x.Email == request.Email))
             {
                 return BadRequest(new { message = "Email already exists" });
             }
@@ -86,17 +88,18 @@ namespace AuthServices.Controllers
             {
                 var user = new Users
                 {
-                    RoleId = request.RoleId,
-                    CinemaId = request.CinemaId,
+                    RoleId = request.RoleId ?? 1,
                     FullName = request.FullName,
                     Email = request.Email,
                     Phone = request.Phone,
                     DateOfBirth = request.DateOfBirth,
                     Gender = request.Gender,
-                    AvatarUrl = request.AvatarUrl
+                    AvatarUrl = request.AvatarUrl,
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow
                 };
 
-                var createdUser = await _userService.CreateAsync(user, request.Password,request.RoleId);
+                var createdUser = await _userService.CreateAsync(user, request.Password, request.RoleId.GetValueOrDefault(1));
                 return Ok(new { message = "Registration successful", userId = createdUser.UserId });
             }
             catch (Exception ex)
@@ -105,6 +108,44 @@ namespace AuthServices.Controllers
             }
         }
 
+        private async Task<string> ResolveRoleName(byte roleId)
+        {
+            return await _context.CinemaRoles
+                .Where(x => x.RoleId == roleId)
+                .Select(x => x.RoleName)
+                .FirstOrDefaultAsync() ?? "customer";
+        }
+    }
+
+    public class LoginRequest
+    {
+        public string? Username { get; set; }
+        public string? Email { get; set; }
+        public string Password { get; set; } = "";
+    }
+
+    public class LoginResponse
+    {
+        public string Token { get; set; } = "";
+        public string UserId { get; set; } = "";
+        public byte RoleId { get; set; }
+        public string FullName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string? Phone { get; set; }
+        public string? AvatarUrl { get; set; }
+        public string Role { get; set; } = "";
+        public int ExpiresIn { get; set; }
+    }
+
+    public class RegisterRequest
+    {
+        public byte? RoleId { get; set; }
+        public string FullName { get; set; } = "";
+        public string Email { get; set; } = "";
+        public string Password { get; set; } = "";
+        public string? Phone { get; set; }
+        public DateTime? DateOfBirth { get; set; }
+        public string? Gender { get; set; }
+        public string? AvatarUrl { get; set; }
     }
 }
-
