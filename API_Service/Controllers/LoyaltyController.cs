@@ -8,7 +8,7 @@ namespace API_Service.Controllers
     [ApiController]
     public class LoyaltyController(SqlServerDbContext context) : ControllerBase
     {
-        [HttpGet("user/{userId:int}")]
+        [HttpGet("users/{userId:int}")]
         public async Task<IActionResult> GetByUser(int userId)
         {
             var membership = await context.UserMemberships

@@ -105,6 +105,24 @@
         "DELETE",
         "OPTIONS"
       ]
+    },
+        {
+      "DownstreamPathTemplate": "/api/loyalty/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5001
+        }
+      ],
+      "UpstreamPathTemplate": "/api/loyalty/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS"
+      ]
     }
   ],
 
