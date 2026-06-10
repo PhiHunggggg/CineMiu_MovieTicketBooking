@@ -19,6 +19,7 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  const authBridgeUrl = (import.meta.env.VITE_AUTH_BRIDGE_URL || 'http://localhost:5000').replace(/\/$/, '');
 
   if (isLoggedIn) {
     navigate('/', { replace: true });
@@ -235,10 +236,18 @@ export default function RegisterPage() {
         <div className="auth-divider"><span>hoặc đăng ký bằng</span></div>
 
         <div className="auth-social">
-          <button className="auth-social-btn auth-social-btn--google" type="button">
+          <button
+            className="auth-social-btn auth-social-btn--google"
+            type="button"
+            onClick={() => window.location.href = `${authBridgeUrl}/auth/google`}
+          >
             <span>G</span> Google
           </button>
-          <button className="auth-social-btn auth-social-btn--facebook" type="button">
+          <button
+            className="auth-social-btn auth-social-btn--facebook"
+            type="button"
+            onClick={() => window.location.href = `${authBridgeUrl}/auth/facebook`}
+          >
             <span>f</span> Facebook
           </button>
         </div>
