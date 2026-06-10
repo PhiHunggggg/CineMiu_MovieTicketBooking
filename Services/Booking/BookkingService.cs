@@ -33,17 +33,21 @@ namespace Services.Booking
         {
             return bookingRepository.GetByBookingCodeAsync(bookingCode);
         }
-        public Task<DTO.Booking.BookingDto.BookingResponse?> GetByUserAsync(int userId)
+        public Task<List<DTO.Booking.BookingDto.BookingResponse>> GetByUserAsync(int userId)
         {
             return bookingRepository.GetByUser(userId);
         }
-        public Task<DTO.Booking.BookingDto.BookingResponse?> GetByUserEmailAsync(string email)
+        public Task<List<DTO.Booking.BookingDto.BookingResponse>> GetByUserEmailAsync(string email)
         {
             return bookingRepository.GetByUserEmail(email);
         }
         public Task<int> Create(DTO.Booking.BookingDto.BookingCreateRequest request)
         {
             return bookingRepository.Create(request);
+        }
+        public Task<DTO.Booking.BookingDto.BookingResponse?> AddPaymentAsync(int bookingId, DTO.Booking.BookingDto.BookingPaymentCreateRequest request, int currentUserId)
+        {
+            return bookingRepository.AddPaymentAsync(bookingId, request, currentUserId);
         }
         public Task Cancel(int bookingId, DTO.Booking.BookingDto.CancelBookingDto cancel, int currentUserId, string currentUserRole, int? currentUserCinemaId)
         {

@@ -1283,11 +1283,8 @@ namespace Repository.Migrations
             modelBuilder.Entity("Entities.UserMembership", b =>
                 {
                     b.Property<int>("UserId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasColumnName("user_id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UserId"));
 
                     b.Property<int>("TierId")
                         .HasColumnType("int")

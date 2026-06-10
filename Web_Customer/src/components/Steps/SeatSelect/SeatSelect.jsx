@@ -29,45 +29,53 @@ export default function SeatSelect() {
   const { user } = useAuth();
   const [showtimeSeats, setShowtimeSeats] = useState([]);
   const [seatTypes, setSeatTypes] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [isFetchingSeats, setIsFetchingSeats] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    if (!showtime || !hall) {
-      setLoading(false);
-      return;
-    }
+    const hasValidShowtime = Boolean(showtime && hall && getShowtimeId(showtime));
+    const loading = hasValidShowtime && isFetchingSeats;
+
+    const fetchSeats = async (showtimeId) => {
+        setIsFetchingSeats(true);
+        setError('');
+
+        try {
+            const [stData, lookups] = await Promise.all([
+                showtimeApi.getById(showtimeId),
+                lookupApi.getAll(),
+            ]);
+
+            setShowtimeSeats(stData.seats || []);
+            setSeatTypes(lookups.seatTypes || []);
+        } catch (err) {
+            console.error(err);
+            setError(err.message || 'Không thể tải sơ đồ ghế.');
+            setShowtimeSeats([]);
+            setSeatTypes([]);
+        } finally {
+            setIsFetchingSeats(false);
+        }
+    };
+    useEffect(() => {
+        if (!showtime || !hall) return;
+
+        const showtimeId = getShowtimeId(showtime);
+        if (!showtimeId) return;
+
+        setTimeout(() => {
+            fetchSeats(showtimeId);
+        }, 0);
+    }, [showtime, hall]);
+
     const showtimeId = getShowtimeId(showtime);
-    if (!showtimeId) {
-      setLoading(false);
-      setError('Thiếu thông tin suất chiếu. Vui lòng quay lại chọn suất chiếu.');
-      return;
-    }
 
-    setLoading(true);
-    setError('');
-    Promise.all([
-      showtimeApi.getById(showtimeId),
-      lookupApi.getAll(),
-    ])
-    .then(([stData, lookups]) => {
-        const seats = stData.seats || [];
-        const types = lookups.seatTypes || [];
-        setShowtimeSeats(seats);
-        setSeatTypes(types);
-      })
-      .catch(err => {
-        console.error(err);
-        setError(err.message || 'Không thể tải sơ đồ ghế.');
-        setShowtimeSeats([]);
-        setSeatTypes([]);
-      })
-      .finally(() => setLoading(false));
-    
-     },[showtime, hall]);
+    const missingShowtimeError =
+        showtime && hall && !showtimeId
+            ? 'Thiếu thông tin suất chiếu. Vui lòng quay lại chọn suất chiếu.'
+            : '';
 
-
+    const displayError = missingShowtimeError || error;
   // Map seat info with showtime seat status
   const seatMap = useMemo(() => {
     const map = {};
@@ -107,7 +115,7 @@ export default function SeatSelect() {
     setProcessing(true);
     setError('');
     try {
-      const userId = getUserId(user);
+        const userId = getUserId(user);
       if (!userId) {
         setError('Vui lòng đăng nhập lại trước khi giữ ghế.');
         return;
@@ -216,7 +224,7 @@ export default function SeatSelect() {
     );
   }
 
-  if (error && showtimeSeats.length === 0) {
+if (displayError && showtimeSeats.length === 0) {
     return (
       <div className="seat-select" id="seat-select-step">
         <h2 className="section-title">Chọn ghế</h2>
@@ -332,7 +340,7 @@ export default function SeatSelect() {
               <strong>{formatPrice(subtotalTickets)}</strong>
             </div>
 
-            {error && <p className="seat-summary-error">{error}</p>}
+               {displayError && <p className="seat-summary-error">{displayError}</p>}
 
             <button
               className="seat-summary__btn"

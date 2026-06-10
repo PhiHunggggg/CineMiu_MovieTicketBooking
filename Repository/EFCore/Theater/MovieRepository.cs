@@ -19,10 +19,18 @@ namespace Repository.EFCore.Theater
                 query = query.Where(m => m.Title.Contains(keyword) || (m.TitleEn != null && m.TitleEn.Contains(keyword)));
             }
 
-            // now_showing, coming_soon, ended
-            if(!string.IsNullOrEmpty(status))
+            // Accept both API aliases used by the customer web and database values.
+            if (!string.IsNullOrWhiteSpace(status))
             {
-                query = query.Where(x => status.Contains(x.Status!));
+                var normalizedStatus = status.Trim().ToLowerInvariant() switch
+                {
+                    "now_showing" => "NowShowing",
+                    "coming_soon" => "ComingSoon",
+                    "ended" => "Ended",
+                    _ => status.Trim()
+                };
+
+                query = query.Where(x => x.Status == normalizedStatus);
             }
 
             // Tìm theo id phim

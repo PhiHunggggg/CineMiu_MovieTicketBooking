@@ -40,7 +40,7 @@ function postKeepalive(endpoint, body) {
 }
 
 const initialState = {
-  step: 1, // 1-7 depending on flow
+  step: 1, // 1-6 depending on flow
   bookingFlow: 'cinema_first', // 'cinema_first' | 'movie_first'
   cinema: null,
   movie: null,
@@ -218,12 +218,6 @@ function bookingReducer(state, action) {
       return {
         ...state,
         step: 6,
-        totalAmount: Math.max(0, state.subtotalTickets + state.subtotalProducts - state.discountAmount)
-      };
-    case 'CONFIRM_VOUCHER':
-      return {
-        ...state,
-        step: 7,
         totalAmount: Math.max(0, state.subtotalTickets + state.subtotalProducts - state.discountAmount)
       };
     case 'SET_ORDER':
@@ -483,7 +477,6 @@ export function BookingProvider({ children }) {
   const setVoucher = useCallback((voucher, code, discount) => dispatch({ type: 'SET_VOUCHER', payload: { voucher, code, discount } }), []);
   const clearVoucher = useCallback(() => dispatch({ type: 'CLEAR_VOUCHER' }), []);
   const confirmFood = useCallback(() => dispatch({ type: 'CONFIRM_FOOD' }), []);
-  const confirmVoucher = useCallback(() => dispatch({ type: 'CONFIRM_VOUCHER' }), []);
   const stopTimer = useCallback(() => dispatch({ type: 'STOP_TIMER' }), []);
   const setPaymentWaiting = useCallback((flag) => dispatch({ type: 'SET_PAYMENT_WAITING', payload: flag }), []);
   const setOrder = useCallback((order) => {
@@ -499,7 +492,7 @@ export function BookingProvider({ children }) {
 
     // Case 2: an order was created (booking exists) and user navigates back before payment completes
     // → cancel the pending order so seats are freed on the server
-    if (state.order && shouldCancelOrder(state.order) && targetStep <= 6) {
+    if (state.order && shouldCancelOrder(state.order) && targetStep <= 5) {
       const orderId = state.order.bookingId ?? state.order.BookingId;
       if (orderId) {
         bookingApi
@@ -532,7 +525,6 @@ export function BookingProvider({ children }) {
         setVoucher,
         clearVoucher,
         confirmFood,
-        confirmVoucher,
         setOrder,
         setStep,
         setSessionId,

@@ -21,7 +21,6 @@ export default function MovieCard({ movie }) {
   };
 
   const movieId = movie.id || movie.movieId;
-  const genres = Array.isArray(movie.genres) ? movie.genres : [];
 
   return (
     <>
@@ -40,11 +39,11 @@ export default function MovieCard({ movie }) {
 
           {/* Overlay với 2 lựa chọn */}
           <div className="movie-card-v2__overlay">
+            <Link to={`/movies/${movieId}`} className="movie-card-v2__btn movie-card-v2__btn--detail">
+              Chi tiết
+            </Link>
             <Link to={`/bookings?flow=movie_first&movieId=${movieId}`} className="movie-card-v2__btn movie-card-v2__btn--book">
               🎟️ Đặt vé
-            </Link>
-            <Link to={`/movies/${movieId}`} className="movie-card-v2__btn movie-card-v2__btn--trailer">
-              Chi tiết
             </Link>
             {movie.trailerUrl && (
               <button
@@ -58,10 +57,8 @@ export default function MovieCard({ movie }) {
         </div>
 
         <div className="movie-card-v2__info">
-          <h3 className="movie-card-v2__title">{movie.title}</h3>
-          {genres.length > 0 && (
-            <h3 className="movie-card-v2__genre">Thể loại: {genres.join(', ')}.</h3>
-          )}
+          <Link to={`/movies/${movieId}`} className="movie-card-v2__title">{movie.title}</Link>
+          <h3 className="movie-card-v2__genre">Thể loại : {movie.genres.map((genre) => genre).join(', ')}.</h3>
           <div className="movie-card-v2__meta">
             <span>⏱ {movie.durationMins}p</span>
             {movie.releaseDate && <span>📅 {formatDate(movie.releaseDate)}</span>}

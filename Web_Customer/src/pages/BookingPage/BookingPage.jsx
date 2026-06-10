@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BookingProvider, useBooking } from '../../context/BookingContext';
 import { useAuth } from '../../context/AuthContext';
@@ -11,7 +11,6 @@ import CinemaForMovieSelect from '../../components/Steps/CinemaForMovieSelect/Ci
 import ShowtimeSelect from '../../components/Steps/ShowtimeSelect/ShowtimeSelect';
 import SeatSelect from '../../components/Steps/SeatSelect/SeatSelect';
 import FoodSelect from '../../components/Steps/FoodSelect/FoodSelect';
-import VoucherSelect from '../../components/Steps/VoucherSelect/VoucherSelect';
 import Invoice from '../../components/Steps/Invoice/Invoice';
 import LoginGateModal from '../../components/LoginGateModal/LoginGateModal';
 import './BookingPage.css';
@@ -19,13 +18,13 @@ import './BookingPage.css';
 function BookingContent() {
   const { step, bookingFlow, setBookingFlow, selectCinema, selectMovieFirst, selectCinemaForMovie } = useBooking();
   const { isLoggedIn } = useAuth();
-  const [showLoginModal, setShowLoginModal] = useState(false);
   const [searchParams] = useSearchParams();
-  const [initialized, setInitialized] = useState(false);
+  const initializedRef = useRef(false);
 
   // Handle URL params for deep linking
   useEffect(() => {
-    if (initialized) return;
+    if (initializedRef.current) return;
+    initializedRef.current = true;
     const flowParam = searchParams.get('flow');
     const movieIdParam = searchParams.get('movieId');
     const cinemaIdParam = searchParams.get('cinemaId');
@@ -86,22 +85,14 @@ function BookingContent() {
         })
         .catch(console.error);
     }
-    setInitialized(true);
-  }, [searchParams, initialized, setBookingFlow, selectMovieFirst, selectCinema, selectCinemaForMovie]);
+    
+ }, [searchParams, setBookingFlow, selectMovieFirst, selectCinema, selectCinemaForMovie]);
 
-  // If step >= 3 and user is NOT logged in, show login gate
+  // Require login before choosing a showtime and continuing the booking flow.
   const needsLogin = step >= 3 && !isLoggedIn;
-
   const renderStep = () => {
-    // Show login modal overlay when trying to access step 3+ without login
     if (needsLogin) {
-      return (
-        <>
-          <LoginGateModal
-            onClose={() => setShowLoginModal(false)}
-          />
-        </>
-      );
+      return <LoginGateModal />;
     }
 
     if (bookingFlow === 'movie_first') {
@@ -111,8 +102,7 @@ function BookingContent() {
         case 3: return <ShowtimeSelect />;
         case 4: return <SeatSelect />;
         case 5: return <FoodSelect />;
-        case 6: return <VoucherSelect />;
-        case 7: return <Invoice />;
+        case 6: return <Invoice />;
         default: return <MovieSelectFirst />;
       }
     } else {
@@ -122,8 +112,7 @@ function BookingContent() {
         case 3: return <ShowtimeSelect />;
         case 4: return <SeatSelect />;
         case 5: return <FoodSelect />;
-        case 6: return <VoucherSelect />;
-        case 7: return <Invoice />;
+        case 6: return <Invoice />;
         default: return <CinemaSelect />;
       }
     }

@@ -31,6 +31,7 @@ namespace Entities
     {
         [Key]
         [Column("user_id")]
+        [DatabaseGenerated(DatabaseGeneratedOption.None)]
         public int UserId { get; set; }
 
         [Column("total_points")]

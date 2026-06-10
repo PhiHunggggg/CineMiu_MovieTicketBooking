@@ -18,7 +18,7 @@ namespace API_Service.Controllers
         }
 
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] int? movieId, [FromQuery] int? cinemaId)
+        public async Task<IActionResult> GetAll([FromQuery] int? movieId, [FromQuery] int? cinemaId, [FromQuery] DateTime? date, [FromQuery] DateTime? dateFrom, [FromQuery] DateTime? dateTo)
         {
             var query =
                 from st in context.ShowTimes.AsNoTracking()
@@ -36,6 +36,26 @@ namespace API_Service.Controllers
             if (cinemaId.HasValue)
             {
                 query = query.Where(x => x.hall.CinemaId == cinemaId.Value);
+            }
+
+            if (date.HasValue)
+            {
+                var selectedDate = date.Value.Date;
+                query = query.Where(x => x.st.StartTime.Date == selectedDate);
+            }
+            else
+            {
+                if (dateFrom.HasValue)
+                {
+                    var from = dateFrom.Value.Date;
+                    query = query.Where(x => x.st.StartTime >= from);
+                }
+
+                if (dateTo.HasValue)
+                {
+                    var toExclusive = dateTo.Value.Date.AddDays(1);
+                    query = query.Where(x => x.st.StartTime < toExclusive);
+                }
             }
 
             var rows = await query.OrderBy(x => x.st.StartTime).ToListAsync();
@@ -213,6 +233,7 @@ namespace API_Service.Controllers
         }
 
         [HttpPost("{id:int}/lock-seats")]
+        [HttpPost("{id:int}/locks")]
         public async Task<IActionResult> LockSeats(int id, [FromBody] SeatLockRequest request)
         {
             if (string.IsNullOrWhiteSpace(request.SessionId) || request.SeatIds.Count == 0)

@@ -81,6 +81,8 @@ export const showtimeApi = {
     if (params.movieId) qs.set('movieId', params.movieId);
     if (params.cinemaId) qs.set('cinemaId', params.cinemaId);
     if (params.date) qs.set('date', params.date);
+    if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params.dateTo) qs.set('dateTo', params.dateTo);
     return request(`/showtimes?${qs.toString()}`);
   },
   getById: (id) => request(`/showtimes/${id}`),

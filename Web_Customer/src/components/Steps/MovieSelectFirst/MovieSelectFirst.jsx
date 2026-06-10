@@ -10,13 +10,32 @@ export default function MovieSelectFirst() {
   const [filter, setFilter] = useState('now_showing');
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    setLoading(true);
-    movieApi.getAll({ status: filter, pageSize: 50 })
-      .then(data => setMovies(data.items || []))
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [filter]);
+    useEffect(() => {
+        let ignore = false;
+
+        const fetchMovies = async () => {
+            setLoading(true);
+
+            try {
+                const data = await movieApi.getAll({ status: filter, pageSize: 50 });
+                if (!ignore) {
+                    setMovies(data.items || []);
+                }
+            } catch (error) {
+                console.error(error);
+            } finally {
+                if (!ignore) {
+                    setLoading(false);
+                }
+            }
+        };
+
+        fetchMovies();
+
+        return () => {
+            ignore = true;
+        };
+    }, [filter]);
 
   const filtered = movies.filter(m =>
     !search || m.title.toLowerCase().includes(search.toLowerCase())
@@ -42,13 +61,13 @@ export default function MovieSelectFirst() {
         <div className="movie-select-first__tabs">
           <button
             className={`movie-select-first__tab ${filter === 'now_showing' ? 'movie-select-first__tab--active' : ''}`}
-            onClick={() => { setFilter('now_showing'); setLoading(true); }}
+            onClick={() =>  setFilter('now_showing')}
           >
             🎬 Đang chiếu
           </button>
           <button
             className={`movie-select-first__tab ${filter === 'coming_soon' ? 'movie-select-first__tab--active' : ''}`}
-            onClick={() => { setFilter('coming_soon'); setLoading(true); }}
+            onClick={() => setFilter('coming_soon')}
           >
             ⏳ Sắp chiếu
           </button>

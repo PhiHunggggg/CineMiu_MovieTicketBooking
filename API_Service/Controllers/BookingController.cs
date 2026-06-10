@@ -71,6 +71,7 @@ namespace API_Service.Controllers
                 {
                     return Unauthorized(new { message = "User ID not found in token" });
                 }
+
                 request.UserId = userId;
                 var bookingId = await bookingService.Create(request);
                 return Ok(new { message = "Booking created successfully", bookingId });

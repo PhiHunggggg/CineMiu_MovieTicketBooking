@@ -8,7 +8,7 @@
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  min-width: 700px;
+  min-width: 820px;
 }
 
 .stepper__item-wrapper {
@@ -98,7 +98,7 @@
   }
 
   .stepper__track {
-    min-width: 600px;
+    min-width: 760px;
   }
 
   .stepper__circle {

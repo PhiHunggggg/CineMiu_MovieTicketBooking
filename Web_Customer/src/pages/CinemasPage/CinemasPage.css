@@ -1,0 +1,236 @@
+.cinemas-page {
+  padding-top: 70px;
+  min-height: 100vh;
+}
+
+.cinemas-page__container {
+  padding-bottom: 3rem;
+}
+
+.cinemas-page__container-header {
+  padding-top: 30px;
+  margin-bottom: 2rem;
+}
+
+.cinemas-page__controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.cinemas-page__title {
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+
+/* Filters */
+.cinemas-page__filters {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.cinemas-page__search {
+  position: relative;
+  max-width: 480px;
+}
+
+.cinemas-page__search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1rem;
+}
+
+.cinemas-page__search-input {
+  width: 100%;
+  padding: 12px 16px 12px 42px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-full);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  transition: var(--transition-fast);
+}
+
+.cinemas-page__search-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(235, 20, 20, 0.15);
+}
+
+.cinemas-page__search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.cinemas-page__city-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.cinemas-page__city-tab {
+  padding: 8px 18px;
+  border-radius: var(--radius-full);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  border: 1px solid var(--border-color);
+  transition: var(--transition-fast);
+}
+
+.cinemas-page__city-tab:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.cinemas-page__city-tab--active {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  font-weight: 700;
+}
+
+/* Cinema Grid */
+.cinemas-page__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+/* Cinema Card */
+.cp-cinema-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  transition: var(--transition-normal);
+}
+
+.cp-cinema-card:hover {
+  border-color: var(--border-light);
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+.cp-cinema-card__img {
+  position: relative;
+  height: 160px;
+  overflow: hidden;
+  background: var(--bg-secondary);
+}
+
+.cp-cinema-card__img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: var(--transition-slow);
+}
+
+.cp-cinema-card:hover .cp-cinema-card__img img {
+  transform: scale(1.05);
+}
+
+.cp-cinema-card__placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 3rem;
+  background: linear-gradient(135deg, var(--bg-card-hover), var(--bg-card));
+}
+
+.cp-cinema-card__city-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  padding: 4px 12px;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  color: var(--primary);
+  border-radius: var(--radius-full);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.cp-cinema-card__body {
+  padding: 1.25rem;
+}
+
+.cp-cinema-card__name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.cp-cinema-card__address {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  margin-bottom: 8px;
+}
+
+.cp-cinema-card__district {
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 2px 10px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.cp-cinema-card__actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.cp-cinema-card__book-btn {
+  display: block;
+  width: 100%;
+  padding: 10px;
+  background: rgba(235, 20, 20, 0.1);
+  color: var(--primary);
+  border-radius: var(--radius-md);
+  font-weight: 700;
+  font-size: 0.85rem;
+  text-align: center;
+  transition: var(--transition-fast);
+  border: 1px solid transparent;
+}
+
+.cp-cinema-card__book-btn:hover {
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+}
+
+/* Empty state */
+.cinemas-page__empty {
+  text-align: center;
+  padding: 5rem 2rem;
+  font-size: 3rem;
+  color: var(--text-muted);
+}
+
+.cinemas-page__empty p {
+  font-size: 1rem;
+  margin-top: 1rem;
+}
+
+@media (max-width: 768px) {
+  .cinemas-page__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .cinemas-page__title {
+    font-size: 1.6rem;
+  }
+}

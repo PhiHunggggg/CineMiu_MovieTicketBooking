@@ -30,11 +30,26 @@ function toLocalDateString(value) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+function getNext7Days() {
+  const days = [];
+  const today = new Date();
+  for (let i = 0; i < 7; i += 1) {
+    const date = new Date(today);
+    date.setHours(0, 0, 0, 0);
+    date.setDate(today.getDate() + i);
+    days.push(toLocalDateString(date));
+  }
+  return days;
+}
+
 export default function ShowtimeSelect() {
   const { cinema, movie, selectShowDate, selectShowtime, showDate } = useBooking();
   const [showtimes, setShowtimes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const weekDates = useMemo(() => getNext7Days(), []);
+  const weekStart = weekDates[0];
+  const weekEnd = weekDates[weekDates.length - 1];
 
   useEffect(() => {
     const movieId = getMovieId(movie);
@@ -46,7 +61,7 @@ export default function ShowtimeSelect() {
     setLoading(true);
     setError('');
     showtimeApi
-      .getAll({ movieId, cinemaId })
+      .getAll({ movieId, cinemaId, dateFrom: weekStart, dateTo: weekEnd })
       .then(data => setShowtimes(Array.isArray(data) ? data : []))
       .catch(err => {
         console.error(err);
@@ -54,44 +69,28 @@ export default function ShowtimeSelect() {
         setShowtimes([]);
       })
       .finally(() => setLoading(false));
-  }, [cinema, movie]);
+  }, [cinema, movie, weekStart, weekEnd]);
 
   const dateGroups = useMemo(() => {
     const groups = {};
     showtimes.forEach(item => {
       const startTime = item.showtime?.startTime ?? item.showtime?.StartTime;
       const dateStr = toLocalDateString(startTime);
+      if (!weekDates.includes(dateStr)) return;
       if (!dateStr) return;
 
       if (!groups[dateStr]) groups[dateStr] = [];
       groups[dateStr].push(item);
     });
     return groups;
-  }, [showtimes]);
+  }, [showtimes, weekDates]);
 
   const dates = Object.keys(dateGroups).sort();
 
-  // Generate date tabs based on available showtimes
+  // Only display the next 7 days to keep this step fast and easy to scan.
   const dateTabs = useMemo(() => {
     const tabs = [];
-    const sortedDates = Object.keys(dateGroups).sort();
-
-    // Generate next 7 days in YYYY-MM-DD local format
-    const next7Days = [];
-    const now = new Date();
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(now);
-      d.setDate(now.getDate() + i);
-      const ds = d.getFullYear() + '-' +
-        String(d.getMonth() + 1).padStart(2, '0') + '-' +
-        String(d.getDate()).padStart(2, '0');
-      next7Days.push(ds);
-    }
-
-    // Combine with actual dates from DB and unique them
-    const allDates = [...new Set([...next7Days, ...sortedDates])].sort();
-
-    allDates.forEach(dateStr => {
+    weekDates.forEach(dateStr => {
       // Parse YYYY-MM-DD manually to create a Local Date object
       const parts = dateStr.split('-');
       const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
@@ -114,7 +113,7 @@ export default function ShowtimeSelect() {
       });
     });
     return tabs;
-  }, [dateGroups]);
+  }, [dateGroups, weekDates]);
 
   useEffect(() => {
     if (!showDate && dates.length > 0) {
