@@ -123,7 +123,7 @@ export default function SeatSelect() {
       const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const showtimeId = getShowtimeId(showtime);
       if (!showtimeId) {
-        setError('Thiáº¿u thÃ´ng tin suáº¥t chiáº¿u. Vui lÃ²ng chá»n láº¡i suáº¥t chiáº¿u.');
+        setError('Thiếu thông tin suất chiếu. Vui lòng chọn lại suất chiếu.');
         return;
       }
       

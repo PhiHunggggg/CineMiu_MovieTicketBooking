@@ -189,7 +189,7 @@ export default function ShowtimeSelect() {
   if (error) {
     return (
       <div className="showtime-select" id="showtime-select-step">
-        <h2 className="section-title">Chá»n suáº¥t chiáº¿u</h2>
+        <h2 className="section-title">Chọn suất chiếu</h2>
         <div className="showtime-select__empty">
           <span>!</span>
           <p>{error}</p>
