@@ -2,25 +2,60 @@ import { useState, useEffect } from 'react';
 import { productApi, promotionApi } from '../../../services/api';
 import { useBooking } from '../../../context/BookingContext';
 import { useAuth } from '../../../context/AuthContext';
+import { getUserId } from '../../../utils/authUser';
 import './FoodSelect.css';
+
+function normalizeProduct(product) {
+  return {
+    ...product,
+    itemId: product.itemId ?? product.ItemId ?? product.id ?? product.Id,
+    catId: product.catId ?? product.CatId,
+    itemName: product.itemName ?? product.ItemName ?? product.name ?? product.Name ?? 'Sản phẩm',
+    description: product.description ?? product.Description,
+    price: Number(product.price ?? product.Price ?? 0),
+    imageUrl: product.imageUrl ?? product.ImageUrl,
+  };
+}
+
+function getStartTime(showtime) {
+  return showtime?.startTime ?? showtime?.StartTime ?? null;
+}
 
 export default function FoodSelect() {
   const {
-    selectedProducts, setProductQty, confirmFood,
-    subtotalTickets, subtotalProducts, discountAmount,
-    voucherCode, setVoucher, clearVoucher, selectedSeats, movie, cinema, hall, showtime,
+    selectedProducts,
+    setProductQty,
+    confirmFood,
+    subtotalTickets,
+    subtotalProducts,
+    selectedSeats,
+    movie,
+    cinema,
+    hall,
+    showtime,
+    discountAmount,
+    voucherCode,
+    setVoucher,
+    clearVoucher,
   } = useBooking();
   const { user } = useAuth();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [productError, setProductError] = useState('');
   const [voucherInput, setVoucherInput] = useState(voucherCode || '');
   const [voucherError, setVoucherError] = useState('');
   const [voucherLoading, setVoucherLoading] = useState(false);
 
   useEffect(() => {
+    setLoading(true);
+    setProductError('');
     productApi.getAll()
-      .then(setProducts)
-      .catch(console.error)
+      .then(data => setProducts(Array.isArray(data) ? data.map(normalizeProduct) : []))
+      .catch(err => {
+        console.error(err);
+        setProductError(err.message || 'Không thể tải danh sách đồ ăn.');
+        setProducts([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -29,83 +64,57 @@ export default function FoodSelect() {
     return found ? found.quantity : 0;
   };
 
-  const handleApplyVoucher = async () => {
-    if (!voucherInput.trim()) return;
-    const userId = user?.userId ?? user?.UserId;
-    const total = subtotalTickets + subtotalProducts;
-    if (!userId) {
-      setVoucherError('Vui lòng đăng nhập để dùng voucher');
-      return;
-    }
-    if (total <= 0) {
-      setVoucherError('Đơn hàng chưa có giá trị để áp dụng voucher');
-      return;
-    }
-
-    setVoucherLoading(true);
-    setVoucherError('');
-    try {
-      const result = await promotionApi.validate({
-        promoCode: voucherInput.trim(),
-        userId,
-        orderAmount: total,
-      });
-      const appliedVoucher = result.promotion;
-      setVoucher(
-        appliedVoucher,
-        appliedVoucher?.promoCode || voucherInput.trim().toUpperCase(),
-        Number(result.discountAmount || 0)
-      );
-    } catch (err) {
-      setVoucherError(err.message || 'Voucher không hợp lệ');
-    } finally {
-      setVoucherLoading(false);
-    }
-  };
-
-  const handleConfirmFood = async () => {
-    if (!voucherCode) {
-      confirmFood();
-      return;
-    }
-
-    const userId = user?.userId ?? user?.UserId;
-    const total = subtotalTickets + subtotalProducts;
-    if (!userId) {
-      clearVoucher();
-      setVoucherError('Vui lòng đăng nhập để dùng voucher');
-      return;
-    }
-
-    setVoucherLoading(true);
-    setVoucherError('');
-    try {
-      const result = await promotionApi.validate({
-        promoCode: voucherCode,
-        userId,
-        orderAmount: total,
-      });
-      const appliedVoucher = result.promotion;
-      setVoucher(
-        appliedVoucher,
-        appliedVoucher?.promoCode || voucherCode,
-        Number(result.discountAmount || 0)
-      );
-      confirmFood();
-    } catch (err) {
-      clearVoucher();
-      setVoucherError(err.message || 'Voucher không hợp lệ với đơn hàng hiện tại');
-    } finally {
-      setVoucherLoading(false);
-    }
-  };
-
-  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ';
+  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p || 0) + 'đ';
+  const totalBeforeDiscount = subtotalTickets + subtotalProducts;
+  const totalAfterDiscount = Math.max(0, totalBeforeDiscount - discountAmount);
+  const startTime = getStartTime(showtime);
 
   const combos = products.filter(p => p.catId === 1 || p.itemName.toLowerCase().includes('combo'));
   const singles = products.filter(p => p.catId !== 1 && !p.itemName.toLowerCase().includes('combo'));
-  const totalBeforeDiscount = subtotalTickets + subtotalProducts;
-  const finalTotal = totalBeforeDiscount - discountAmount;
+
+  const handleApplyVoucher = async () => {
+    const normalizedCode = voucherInput.trim().toUpperCase();
+    if (!normalizedCode) return;
+
+    if (totalBeforeDiscount <= 0) {
+      setVoucherError('Đơn hàng chưa có giá trị để áp dụng voucher.');
+      return;
+    }
+
+    const userId = getUserId(user);
+    if (!userId) {
+      setVoucherError('Vui lòng đăng nhập để dùng voucher.');
+      return;
+    }
+
+    setVoucherLoading(true);
+    setVoucherError('');
+    try {
+      const result = await promotionApi.validate({
+        promoCode: normalizedCode,
+        userId,
+        orderAmount: totalBeforeDiscount,
+      });
+      const appliedVoucher = result.promotion;
+      setVoucher(
+        appliedVoucher,
+        appliedVoucher?.promoCode || normalizedCode,
+        Number(result.discountAmount || 0)
+      );
+      setVoucherInput(appliedVoucher?.promoCode || normalizedCode);
+    } catch (err) {
+      clearVoucher();
+      setVoucherError(err.message || 'Voucher không hợp lệ.');
+    } finally {
+      setVoucherLoading(false);
+    }
+  };
+
+  const handleRemoveVoucher = () => {
+    clearVoucher();
+    setVoucherInput('');
+    setVoucherError('');
+  };
 
   return (
     <div className="food-select" id="food-select-step">
@@ -121,9 +130,16 @@ export default function FoodSelect() {
             </div>
           ) : (
             <>
+              {productError && (
+                <div className="food-select__empty">
+                  <span>!</span>
+                  <p>{productError}</p>
+                </div>
+              )}
+
               {combos.length > 0 && (
                 <div className="food-section">
-                  <h3 className="food-section__title">🍿 Combo tiết kiệm</h3>
+                  <h3 className="food-section__title">Combo tiết kiệm</h3>
                   <div className="food-select__grid">
                     {combos.map(product => (
                       <FoodCard
@@ -140,7 +156,7 @@ export default function FoodSelect() {
 
               {singles.length > 0 && (
                 <div className="food-section">
-                  <h3 className="food-section__title">🥤 Đồ ăn & Thức uống</h3>
+                  <h3 className="food-section__title">Đồ ăn & thức uống</h3>
                   <div className="food-select__grid">
                     {singles.map(product => (
                       <FoodCard
@@ -155,9 +171,9 @@ export default function FoodSelect() {
                 </div>
               )}
 
-              {products.length === 0 && (
+              {!productError && products.length === 0 && (
                 <div className="food-select__empty">
-                  <span>🍿</span>
+                  <span>Food</span>
                   <p>Chưa có sản phẩm nào</p>
                 </div>
               )}
@@ -165,19 +181,18 @@ export default function FoodSelect() {
           )}
         </div>
 
-        {/* Summary */}
         <div className="food-select__sidebar">
           <div className="food-summary">
             <h3 className="food-summary__title">Tóm tắt đơn hàng</h3>
 
             <div className="food-summary__section">
-              <h4>🎬 {movie?.title}</h4>
-              <p>{cinema?.cinemaName} • {hall?.hallName}</p>
-              <p>{showtime?.startTime?.split('T')[0]} • {showtime?.startTime?.split('T')[1]?.split(':').slice(0, 2).join(':')}</p>
+              <h4>Phim {movie?.title}</h4>
+              <p>{cinema?.cinemaName || cinema?.CinemaName || cinema?.name || cinema?.Name} - {hall?.hallName || hall?.HallName || hall?.name || hall?.Name}</p>
+              <p>{startTime?.split('T')[0]} - {startTime?.split('T')[1]?.split(':').slice(0, 2).join(':')}</p>
             </div>
 
             <div className="food-summary__section">
-              <h4>💺 Ghế ({selectedSeats.length})</h4>
+              <h4>Ghế ({selectedSeats.length})</h4>
               <div className="food-summary__seat-tags">
                 {selectedSeats.map(s => (
                   <span key={s.id} className="food-summary__seat-tag">{s.seatCode}</span>
@@ -187,7 +202,7 @@ export default function FoodSelect() {
 
             {selectedProducts.length > 0 && (
               <div className="food-summary__section">
-                <h4>🍿 Đồ ăn</h4>
+                <h4>Đồ ăn</h4>
                 {selectedProducts.map(p => (
                   <div key={p.product.itemId} className="food-summary__product-row">
                     <span>{p.product.itemName} x{p.quantity}</span>
@@ -197,14 +212,20 @@ export default function FoodSelect() {
               </div>
             )}
 
-            {/* Voucher */}
             <div className="food-summary__voucher">
-              <h4>🎁 Mã giảm giá</h4>
+              <h4>Mã giảm giá</h4>
               {voucherCode && discountAmount > 0 ? (
                 <div className="food-summary__voucher-applied">
                   <span className="food-summary__voucher-code">{voucherCode}</span>
                   <span className="food-summary__voucher-discount">-{formatPrice(discountAmount)}</span>
-                  <button className="food-summary__voucher-remove" onClick={clearVoucher}>✕</button>
+                  <button
+                    className="food-summary__voucher-remove"
+                    onClick={handleRemoveVoucher}
+                    type="button"
+                    aria-label="Xóa voucher"
+                  >
+                    x
+                  </button>
                 </div>
               ) : (
                 <div className="food-summary__voucher-input">
@@ -212,10 +233,21 @@ export default function FoodSelect() {
                     type="text"
                     placeholder="Nhập mã voucher"
                     value={voucherInput}
-                    onChange={e => setVoucherInput(e.target.value)}
+                    onChange={e => {
+                      setVoucherInput(e.target.value.toUpperCase());
+                      setVoucherError('');
+                    }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') handleApplyVoucher();
+                    }}
                     id="voucher-input"
                   />
-                  <button onClick={handleApplyVoucher} disabled={voucherLoading} id="apply-voucher-btn">
+                  <button
+                    onClick={handleApplyVoucher}
+                    disabled={voucherLoading || !voucherInput.trim()}
+                    id="apply-voucher-btn"
+                    type="button"
+                  >
                     {voucherLoading ? '...' : 'Áp dụng'}
                   </button>
                 </div>
@@ -234,7 +266,7 @@ export default function FoodSelect() {
               </div>
               {discountAmount > 0 && (
                 <div className="food-summary__line food-summary__line--discount">
-                  <span>Giảm giá</span>
+                  <span>Giảm giá {voucherCode && `(${voucherCode})`}</span>
                   <span>-{formatPrice(discountAmount)}</span>
                 </div>
               )}
@@ -242,20 +274,15 @@ export default function FoodSelect() {
 
             <div className="food-summary__total">
               <span>Tổng cộng</span>
-              <strong>{formatPrice(finalTotal > 0 ? finalTotal : 0)}</strong>
+              <strong>{formatPrice(totalAfterDiscount)}</strong>
             </div>
 
-            <button className="food-summary__btn" onClick={handleConfirmFood} disabled={voucherLoading} id="confirm-food-btn">
-              Tiếp tục thanh toán →
+            <button className="food-summary__btn" onClick={confirmFood} disabled={voucherLoading} id="confirm-food-btn">
+              Tiếp tục thanh toán
             </button>
 
-            <button
-              className="food-summary__skip"
-              onClick={handleConfirmFood}
-              disabled={voucherLoading}
-              id="skip-food-btn"
-            >
-              Bỏ qua, không mua đồ ăn
+            <button className="food-summary__skip" onClick={confirmFood} disabled={voucherLoading} id="skip-food-btn">
+              Bỏ qua đồ ăn
             </button>
           </div>
         </div>
@@ -273,7 +300,7 @@ function FoodCard({ product, quantity, onQtyChange, formatPrice }) {
           <img src={product.imageUrl} alt={product.itemName} loading="lazy" />
         ) : (
           <div className="food-card__img-placeholder">
-            {isCombo ? '🍿' : '🥤'}
+            {isCombo ? 'Combo' : 'Food'}
           </div>
         )}
         {isCombo && <span className="food-card__combo-badge">COMBO</span>}
@@ -290,13 +317,15 @@ function FoodCard({ product, quantity, onQtyChange, formatPrice }) {
               className="food-card__qty-btn"
               onClick={() => onQtyChange(quantity - 1)}
               disabled={quantity <= 0}
+              type="button"
             >
-              −
+              -
             </button>
             <span className="food-card__qty-num">{quantity}</span>
             <button
               className="food-card__qty-btn"
               onClick={() => onQtyChange(quantity + 1)}
+              type="button"
             >
               +
             </button>

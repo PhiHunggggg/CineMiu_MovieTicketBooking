@@ -14,7 +14,7 @@ namespace Repository.EFCore.Bookings
 {
     public class BookingRepository(SqlServerDbContext context) : IBookingRepository
     {
-        public Task<List<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? cinemaId, DateTime? date)
+        public async Task<List<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? cinemaId, DateTime? date)
         {
             var query = from booking in context.Bookings.AsNoTracking()
                         join user in context.Users.AsNoTracking() on booking.UserId equals user.UserId
@@ -46,7 +46,7 @@ namespace Repository.EFCore.Bookings
                 var dateOnly = date.Value.Date;
                 query = query.Where(x => x.showtime.StartTime.Date == dateOnly);
             }
-            var result = query.Select(x => new BookingDto.BookingResponse
+            var result = await query.Select(x => new BookingDto.BookingResponse
             {
                 BookingId = x.booking.BookingId,
                 BookingCode = x.booking.BookingCode,
@@ -73,7 +73,7 @@ namespace Repository.EFCore.Bookings
                 UsedTicketCount = context.Tickets.Count(t => t.BookingId == x.booking.BookingId && t.IsUsed)
             }).ToListAsync();
 
-            return result;
+            return await EnrichBookingResponsesAsync(result);
         }
         public async Task<BookingDto.BookingResponse?> GetByIdAsync(int id)
         {
@@ -110,7 +110,7 @@ namespace Repository.EFCore.Bookings
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
                                     UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
                                 }).FirstOrDefaultAsync();
-            return result;
+            return result == null ? null : await EnrichBookingResponseAsync(result);
         }
         public async Task<BookingDto.BookingResponse?> GetByBookingCodeAsync(string bookingCode)
         {
@@ -147,9 +147,9 @@ namespace Repository.EFCore.Bookings
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
                                     UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
                                 }).FirstOrDefaultAsync();
-            return result;
+            return result == null ? null : await EnrichBookingResponseAsync(result);
         }
-        public async Task<BookingDto.BookingResponse?> GetByUser(int userId)
+        public async Task<List<BookingDto.BookingResponse>> GetByUser(int userId)
         {
             var result = await (from booking in context.Bookings.AsNoTracking()
                                 join user in context.Users.AsNoTracking() on booking.UserId equals user.UserId
@@ -183,10 +183,12 @@ namespace Repository.EFCore.Bookings
                                     EndTime = showtime.EndTime,
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
                                     UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
-                                }).FirstOrDefaultAsync();
-            return result;
+                                })
+                                .OrderByDescending(x => x.CreatedAt)
+                                .ToListAsync();
+            return await EnrichBookingResponsesAsync(result);
         }
-        public async Task<BookingDto.BookingResponse?> GetByUserEmail(string email)
+        public async Task<List<BookingDto.BookingResponse>> GetByUserEmail(string email)
         {
             var result = await (from booking in context.Bookings.AsNoTracking()
                                 join user in context.Users.AsNoTracking() on booking.UserId equals user.UserId
@@ -220,8 +222,10 @@ namespace Repository.EFCore.Bookings
                                     EndTime = showtime.EndTime,
                                     TicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId),
                                     UsedTicketCount = context.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed)
-                                }).FirstOrDefaultAsync();
-            return result;
+                                })
+                                .OrderByDescending(x => x.CreatedAt)
+                                .ToListAsync();
+            return await EnrichBookingResponsesAsync(result);
         }
         public async Task<int> Create(BookingDto.BookingCreateRequest request)
         {
@@ -367,6 +371,50 @@ namespace Repository.EFCore.Bookings
                 Console.WriteLine($"[BookingsController] Error: {ex}");
                 throw new Exception(ex.Message);
             }
+        }
+        public async Task<BookingDto.BookingResponse?> AddPaymentAsync(int bookingId, BookingDto.BookingPaymentCreateRequest request, int currentUserId)
+        {
+            var booking = await context.Bookings.FirstOrDefaultAsync(x => x.BookingId == bookingId);
+            if (booking == null)
+            {
+                return null;
+            }
+
+            if (booking.UserId != currentUserId)
+            {
+                throw new Exception("You are not authorized to pay this booking");
+            }
+
+            if (booking.Status == "cancelled")
+            {
+                throw new Exception("Cancelled booking cannot be paid");
+            }
+
+            var paidAt = request.PaidAt ?? DateTime.UtcNow;
+            var paymentStatus = string.IsNullOrWhiteSpace(request.Status)
+                ? "success"
+                : request.Status.Trim().ToLowerInvariant();
+
+            context.Payments.Add(new Entities.Bookings.Payment
+            {
+                BookingId = booking.BookingId,
+                MethodId = request.MethodId,
+                Amount = request.Amount > 0 ? request.Amount : booking.FinalAmount,
+                Status = paymentStatus,
+                TransactionRef = string.IsNullOrWhiteSpace(request.TransactionRef)
+                    ? $"PAY{DateTime.UtcNow:yyyyMMddHHmmssfff}"
+                    : request.TransactionRef,
+                PaidAt = paymentStatus == "success" ? paidAt : null
+            });
+
+            if (paymentStatus == "success" || paymentStatus == "paid")
+            {
+                booking.Status = "confirmed";
+                booking.ConfirmedAt = paidAt;
+            }
+
+            await context.SaveChangesAsync();
+            return await GetByIdAsync(bookingId);
         }
         public async Task Cancel(int bookingId, BookingDto.CancelBookingDto cancelReason, int currentUserId, string currentUserRole, int? currentUserCinemaId)
         {
@@ -549,6 +597,61 @@ namespace Repository.EFCore.Bookings
         public async Task SaveChangesAsync()
         {
             await context.SaveChangesAsync();
+        }
+        private async Task<List<BookingDto.BookingResponse>> EnrichBookingResponsesAsync(List<BookingDto.BookingResponse> bookings)
+        {
+            foreach (var booking in bookings)
+            {
+                await EnrichBookingResponseAsync(booking);
+            }
+
+            return bookings;
+        }
+        private async Task<BookingDto.BookingResponse> EnrichBookingResponseAsync(BookingDto.BookingResponse booking)
+        {
+            booking.Tickets = await (from ticket in context.Tickets.AsNoTracking()
+                                     join seat in context.Seats.AsNoTracking() on ticket.SeatId equals seat.SeatId
+                                     where ticket.BookingId == booking.BookingId
+                                     orderby seat.RowLabel, seat.ColNumber
+                                     select new BookingDto.BookingTicketResponse
+                                     {
+                                         TicketId = ticket.TicketId,
+                                         SeatId = ticket.SeatId,
+                                         SeatCode = seat.SeatCode,
+                                         Price = ticket.Price,
+                                         QrCode = ticket.QrCode,
+                                         IsUsed = ticket.IsUsed,
+                                         UsedAt = ticket.UsedAt
+                                     }).ToListAsync();
+
+            booking.Concessions = await (from concession in context.BookingConcessions.AsNoTracking()
+                                         join item in context.ConcessionItems.AsNoTracking() on concession.ItemId equals item.ItemId
+                                         where concession.BookingId == booking.BookingId
+                                         select new BookingDto.BookingConcessionResponse
+                                         {
+                                             ItemId = concession.ItemId,
+                                             ItemName = item.ItemName,
+                                             Quantity = concession.Quantity,
+                                             UnitPrice = concession.UnitPrice,
+                                             Subtotal = concession.Subtotal
+                                         }).ToListAsync();
+
+            booking.Payments = await context.Payments
+                .AsNoTracking()
+                .Where(payment => payment.BookingId == booking.BookingId)
+                .OrderByDescending(payment => payment.PaymentId)
+                .Select(payment => new BookingDto.BookingPaymentResponse
+                {
+                    PaymentId = payment.PaymentId,
+                    MethodId = payment.MethodId,
+                    Amount = payment.Amount,
+                    Status = payment.Status,
+                    TransactionRef = payment.TransactionRef,
+                    PaidAt = payment.PaidAt
+                })
+                .ToListAsync();
+
+            return booking;
         }
     }
 }

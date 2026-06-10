@@ -6,9 +6,11 @@ using Microsoft.AspNetCore.DataProtection.Repositories;
 using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Authorization;
 using Ocelot.Values;
 using Services.Authen;
 using Repository;
+using System.Security.Claims;
 namespace AuthServices.Controllers
 {
     [Microsoft.AspNetCore.Mvc.Route("api/[controller]")]
@@ -103,6 +105,79 @@ namespace AuthServices.Controllers
             {
                 return BadRequest(new { message = "Registration failed: " + ex.Message });
             }
+        }
+
+        public class UpdateProfileRequest
+        {
+            public string? FullName { get; set; }
+            public string? Phone { get; set; }
+            public string? AvatarUrl { get; set; }
+            public DateTime? DateOfBirth { get; set; }
+            public string? Gender { get; set; }
+        }
+
+        [Authorize]
+        [HttpGet("profile")]
+        public async Task<IActionResult> Profile()
+        {
+            var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(claimValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID not found in token" });
+            }
+
+            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found" });
+            }
+
+            var role = await _context.Roles.AsNoTracking().FirstOrDefaultAsync(x => x.RoleId == user.RoleId);
+
+            return Ok(new
+            {
+                user.UserId,
+                user.RoleId,
+                user.CinemaId,
+                user.FullName,
+                user.Email,
+                user.Phone,
+                user.AvatarUrl,
+                user.DateOfBirth,
+                user.Gender,
+                Role = role?.RoleName ?? "customer"
+            });
+        }
+
+        [Authorize]
+        [HttpPut("profile")]
+        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+        {
+            var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(claimValue, out var userId))
+            {
+                return Unauthorized(new { message = "User ID not found in token" });
+            }
+
+            var user = await _context.Users.FirstOrDefaultAsync(x => x.UserId == userId);
+            if (user == null)
+            {
+                return NotFound(new { message = "User not found" });
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.FullName))
+            {
+                user.FullName = request.FullName.Trim();
+            }
+
+            user.Phone = request.Phone;
+            user.AvatarUrl = request.AvatarUrl;
+            user.DateOfBirth = request.DateOfBirth;
+            user.Gender = request.Gender;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return await Profile();
         }
 
     }

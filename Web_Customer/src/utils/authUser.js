@@ -1,7 +1,9 @@
 export function getUserId(user) {
-    return user?.userId ?? user?.UserId ?? user?.id ?? user?.Id ?? null;
+  const rawId = user?.userId ?? user?.UserId ?? user?.id ?? user?.Id;
+  const numericId = Number(rawId);
+  return Number.isInteger(numericId) && numericId > 0 ? numericId : null;
 }
 
 export function getUserEmail(user) {
-    return user?.email ?? user?.Email ?? null;
+  return user?.email ?? user?.Email ?? null;
 }

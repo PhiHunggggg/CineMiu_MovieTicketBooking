@@ -8,6 +8,18 @@ import { generateQrCodeUrl, BANK_ID, ACCOUNT_NO, ACCOUNT_NAME } from '../../../s
 
 const PAYMENT_TIMEOUT_SECONDS = 5 * 60; // 5 phút
 
+function getBookingId(order) {
+  return order?.bookingId ?? order?.BookingId ?? null;
+}
+
+function getStartTime(showtime) {
+  return showtime?.startTime ?? showtime?.StartTime ?? null;
+}
+
+function getTicketQrUrl(code) {
+  return `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(code)}`;
+}
+
 export default function Invoice() {
   const {
     cinema, movie, hall, showtime, selectedSeats, selectedProducts,
@@ -55,7 +67,7 @@ export default function Invoice() {
         const response = await bookingApi.getById(orderId);
         // Backend trả { booking, tickets, ... }
         const updatedBooking = response.booking ?? response;
-        const status = updatedBooking.status ?? updatedBooking.Status;
+        const status = (updatedBooking.status ?? updatedBooking.Status ?? '').toString().toLowerCase();
 
         console.log(`[Polling] Order ${orderId} status: ${status}`);
 
@@ -105,6 +117,40 @@ export default function Invoice() {
     return `${m}:${s}`;
   };
 
+  const confirmQrPaymentDemo = async () => {
+    if (!order) return;
+    setProcessing(true);
+    setError('');
+    try {
+      const bookingId = getBookingId(order);
+      if (!bookingId) {
+        throw new Error('Không tìm thấy mã booking để xác nhận thanh toán.');
+      }
+
+      const payAmount = order.finalAmount ?? order.FinalAmount ?? order.totalAmount ?? order.TotalAmount ?? totalAmount;
+      const paidOrder = await bookingApi.addPayment(bookingId, {
+        methodId: 1,
+        amount: payAmount,
+        status: 'success',
+        promoCode: voucherCode || voucher?.promoCode || null,
+        transactionRef: `QR${Date.now()}`,
+        paidAt: new Date().toISOString(),
+      });
+
+      clearInterval(pollingRef.current);
+      clearInterval(countdownRef.current);
+      setOrder(paidOrder || { ...order, status: 'confirmed' });
+      setIsWaiting(false);
+      setPaymentWaiting(false);
+      setSuccess(true);
+    } catch (err) {
+      console.error('[Booking] QR demo confirm failed:', err);
+      setError(err.message || 'Không thể xác nhận thanh toán QR demo.');
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   // ─── Submit thanh toán ───────────────────────────────────────────────────────
   const handleSubmit = async () => {
     setProcessing(true);
@@ -113,8 +159,8 @@ export default function Invoice() {
     try {
       const userId = getUserId(user);
       const stId = showtime?.showtimeId ?? showtime?.ShowtimeId ?? showtime?.id ?? showtime?.Id;
-      const cinemaId = cinema?.cinemaId ?? cinema?.CinemaId;
-      const hallId = hall?.hallId ?? hall?.HallId;
+      const cinemaId = cinema?.cinemaId ?? cinema?.CinemaId ?? cinema?.id ?? cinema?.Id;
+      const hallId = hall?.hallId ?? hall?.HallId ?? hall?.id ?? hall?.Id;
 
       if (!userId) {
         setError('Vui lòng đăng nhập lại trước khi đặt vé.');
@@ -158,21 +204,33 @@ export default function Invoice() {
         seats: selectedSeats.map(s => ({
           seatId: s.seatId,
           price: s.finalPrice || 85000,
-        })),
+        })).filter(s => s.seatId),
         concessions: selectedProducts
           .filter(p => p.product && p.quantity > 0)
           .map(p => ({
-            itemId: p.product.itemId,
+            itemId: p.product.itemId ?? p.product.ItemId,
             quantity: p.quantity,
-          })),
+          }))
+          .filter(x => x.itemId),
         discountAmount: serverDiscountAmount,
         promoCode: appliedPromoCode || undefined,
         bookingChannel: 'web',
       };
 
       const createdOrder = await bookingApi.create(bookingData);
-      console.log('[Booking] Created order:', createdOrder);
-      setOrder(createdOrder);
+      const bookingId = getBookingId(createdOrder);
+      if (!bookingId) {
+        throw new Error('Không nhận được mã booking từ server.');
+      }
+
+      let bookingDetail = createdOrder;
+      try {
+        bookingDetail = await bookingApi.getById(bookingId);
+      } catch (detailErr) {
+        console.warn('[Booking] Created order but failed to reload detail:', detailErr);
+      }
+      console.log('[Booking] Created order:', bookingDetail);
+      setOrder(bookingDetail);
 
       // QR Bank → vào trạng thái chờ webhook
       if (payMethod === 'qrbank') {
@@ -190,10 +248,9 @@ export default function Invoice() {
               payMethod === 'visa' ? 4 :
                 payMethod === 'atm' ? 5 : 1;
 
-      const bookingId = createdOrder.bookingId ?? createdOrder.BookingId;
-      const payAmount = createdOrder.finalAmount ?? createdOrder.FinalAmount ?? totalAmount;
+      const payAmount = bookingDetail.finalAmount ?? bookingDetail.FinalAmount ?? totalAmount;
 
-      await bookingApi.addPayment(bookingId, {
+      const paidOrder = await bookingApi.addPayment(bookingId, {
         methodId: payMethodId,
         amount: payAmount,
         status: 'success',
@@ -203,22 +260,9 @@ export default function Invoice() {
       });
 
       console.log('[Booking] Payment added successfully');
-      let paidOrder = { ...createdOrder, methodId: payMethodId };
-      try {
-        const orderDetail = await bookingApi.getById(bookingId);
-        paidOrder = {
-          ...paidOrder,
-          ...(orderDetail?.booking || {}),
-          tickets: orderDetail?.tickets || [],
-          concessions: orderDetail?.concessions || [],
-          payments: orderDetail?.payments || [],
-          promotions: orderDetail?.promotions || [],
-        };
-      } catch (detailErr) {
-        console.warn('[Booking] Created order but failed to reload detail:', detailErr);
-      }
-      setOrder(paidOrder);
-      setOrder({ ...createdOrder, status: 'confirmed', methodId: payMethodId });
+      stopTimer();
+      setPaymentWaiting(false);
+      setOrder(paidOrder || { ...bookingDetail, status: 'confirmed', methodId: payMethodId });
       setSuccess(true);
     } catch (err) {
       console.error('[Booking] Error:', err);
@@ -318,6 +362,17 @@ export default function Invoice() {
             <p>⚠️ <strong>Lưu ý:</strong> Vui lòng giữ nguyên nội dung chuyển khoản để hệ thống tự động xác nhận đơn hàng. Nhấn vào mã để sao chép nhanh.</p>
           </div>
 
+          {error && <p className="invoice-total-card__error">{error}</p>}
+
+          <button
+            className="invoice-total-card__btn"
+            onClick={confirmQrPaymentDemo}
+            disabled={processing}
+            style={{ marginBottom: '0.75rem' }}
+          >
+            {processing ? 'Đang xác nhận...' : 'Tôi đã thanh toán (demo)'}
+          </button>
+
           <button className="invoice-waiting__cancel" onClick={handleTimeout}>
             Hủy đơn hàng
           </button>
@@ -330,7 +385,7 @@ export default function Invoice() {
   if (success) {
     const qrAmount = order?.finalAmount ?? order?.FinalAmount ?? order?.totalAmount ?? order?.TotalAmount ?? totalAmount;
     const qrCode = order?.bookingCode ?? order?.BookingCode ?? 'BOOKING';
-    const qrUrl = generateQrCodeUrl(qrAmount, qrCode);
+    const tickets = order?.tickets ?? order?.Tickets ?? [];
     return (
       <div className="invoice-success" id="booking-success">
         <div className="invoice-success__card">
@@ -351,11 +406,11 @@ export default function Invoice() {
               </div>
               <div className="invoice-success__ticket-row">
                 <span className="invoice-success__ticket-label">Rạp</span>
-                <span>{cinema?.name || cinema?.cinemaName || 'Chưa xác định'} • {hall?.name || hall?.hallName || 'Chưa xác định'}</span>
+                <span>{cinema?.name || cinema?.Name || cinema?.cinemaName || cinema?.CinemaName || 'Chưa xác định'} • {hall?.name || hall?.Name || hall?.hallName || hall?.HallName || 'Chưa xác định'}</span>
               </div>
               <div className="invoice-success__ticket-row">
                 <span className="invoice-success__ticket-label">Suất chiếu</span>
-                <span>{(showtime?.startTime)?.split('T')[0]} • {(showtime?.startTime)?.split('T')[1]?.split(':').slice(0, 2).join(':')}</span>
+                <span>{getStartTime(showtime)?.split('T')[0]} • {getStartTime(showtime)?.split('T')[1]?.split(':').slice(0, 2).join(':')}</span>
               </div>
               <div className="invoice-success__ticket-row">
                 <span className="invoice-success__ticket-label">Ghế</span>
@@ -372,14 +427,30 @@ export default function Invoice() {
             <div className="invoice-success__ticket-qr">
               <div className="invoice-success__qr-placeholder">
                 <div className="invoice-success__qr-container">
-                  <img src={qrUrl} alt="QR Code" className="invoice-success__qr-img" />
-                  <div className="invoice-success__bank-info">
-                    <p><strong>Ngân hàng:</strong> {BANK_ID}</p>
-                    <p><strong>STK:</strong> {ACCOUNT_NO}</p>
-                    <p><strong>Chủ tài khoản:</strong> {ACCOUNT_NAME}</p>
-                    <p><strong>Số tiền:</strong> {formatPrice(qrAmount)}</p>
-                    <p><strong>Nội dung:</strong> {qrCode}</p>
-                  </div>
+                  {tickets.length > 0 ? (
+                    <div className="invoice-success__checkin-list">
+                      <h3>Mã QR check-in</h3>
+                      <p>Xuất trình mã QR từng ghế tại quầy soát vé.</p>
+                      {tickets.map(ticket => {
+                        const ticketCode = ticket.qrCode ?? ticket.QrCode;
+                        const seatCode = ticket.seatCode ?? ticket.SeatCode;
+                        return (
+                          <div key={ticket.ticketId ?? ticket.TicketId ?? ticketCode} className="invoice-success__checkin-item">
+                            <img src={getTicketQrUrl(ticketCode)} alt={`QR ${seatCode}`} />
+                            <div>
+                              <span>{seatCode}</span>
+                              <code>{ticketCode}</code>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="invoice-success__bank-info">
+                      <p><strong>Mã booking:</strong> {qrCode}</p>
+                      <p><strong>Số tiền:</strong> {formatPrice(qrAmount)}</p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -412,9 +483,9 @@ export default function Invoice() {
                 <div>
                   <strong className="invoice-card__movie-title">{movie?.title}</strong>
                   <p>{movie?.durationMins} phút • {movie?.ageRating || 'P'}</p>
-                  <p>{cinema?.cinemaName || cinema?.name}</p>
-                  <p>{hall?.hallName || hall?.name}</p>
-                  <p>{showtime?.startTime?.split('T')[0]} • {showtime?.startTime?.split('T')[1]?.split(':').slice(0, 2).join(':')}</p>
+                  <p>{cinema?.cinemaName || cinema?.CinemaName || cinema?.name || cinema?.Name}</p>
+                  <p>{hall?.hallName || hall?.HallName || hall?.name || hall?.Name}</p>
+                  <p>{getStartTime(showtime)?.split('T')[0]} • {getStartTime(showtime)?.split('T')[1]?.split(':').slice(0, 2).join(':')}</p>
                 </div>
               </div>
             </div>

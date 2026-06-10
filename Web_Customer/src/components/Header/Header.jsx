@@ -24,19 +24,36 @@ export default function Header() {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  useEffect(() => {
-    const userId = getUserId(user);
-    const email = getUserEmail(user);
-    if (!isLoggedIn || (!userId && !email)) {
-      setMembership(null);
-      return;
-    }
+    useEffect(() => {
+        const userId = getUserId(user);
+        const email = getUserEmail(user);
 
-    const request = userId ? loyaltyApi.getByUser(userId) : loyaltyApi.getByEmail(email);
-    request
-      .then(setMembership)
-      .catch(() => setMembership(null));
-  }, [isLoggedIn, user]);
+        if (!isLoggedIn || (!userId && !email)) {
+            return;
+        }
+
+        let cancelled = false;
+
+        const request = userId
+            ? loyaltyApi.getByUser(userId)
+            : loyaltyApi.getByEmail(email);
+
+        request
+            .then((data) => {
+                if (!cancelled) {
+                    setMembership(data);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setMembership(null);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isLoggedIn, user]);
 
   const navLinks = [
     { path: '/', label: 'Trang chủ' },
@@ -62,14 +79,12 @@ export default function Header() {
   return (
     <header className="header" id="main-header">
       <div className="header__container container">
-        <Link to="/" className="header__logo" id="logo-link">
-          <span className="header__logo-icon">
-            <img src="/icon.png" alt="logo" />
-          </span>
-          <span className="header__logo-text">
-            CINE<span className="header__logo-accent">MIU</span>
-          </span>
-        </Link>
+            <Link to="/" className="header__logo" id="logo-link">
+                <span className="header__logo-icon" aria-hidden="true">🐱</span>
+                <span className="header__logo-text">
+                    CINE<span className="header__logo-accent">MIU</span>
+                </span>
+            </Link>
 
         <nav className={`header__nav ${menuOpen ? 'header__nav--open' : ''}`} id="main-nav">
           {navLinks.map((link) => (
@@ -137,7 +152,7 @@ export default function Header() {
                     <span>🎫</span>Vé của tôi
                   </Link>
                   <div className="header__dropdown-divider" />
-                  <button className="header__dropdown-item header__dropdown-item--danger" onClick={() => { logout(); setDropdownOpen(false); }} id="logout-btn">
+                                  <button className="header__dropdown-item header__dropdown-item--danger" onClick={() => { setMembership(null); logout(); setDropdownOpen(false); }} id="logout-btn">
                     <span>🚪</span>Đăng xuất
                   </button>
                 </div>

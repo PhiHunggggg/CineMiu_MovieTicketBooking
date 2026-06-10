@@ -7,7 +7,7 @@ export default function Footer() {
         <div className="footer__grid">
           <div className="footer__brand">
             <div className="footer__logo">
-              <span className="footer__logo-icon"><img src="./public/icon.png" alt="logo"></img></span>
+                          <span className="footer__logo-icon" aria-hidden="true">🐱</span>
               <span className="footer__logo-text">CINE<span className="footer__logo-accent">MIU</span></span>
             </div>
             <p className="footer__desc">

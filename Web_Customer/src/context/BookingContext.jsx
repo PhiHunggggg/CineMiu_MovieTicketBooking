@@ -17,10 +17,23 @@ function getShowtimeId(showtime) {
   return showtime?.showtimeId ?? showtime?.ShowtimeId ?? showtime?.id ?? showtime?.Id ?? null;
 }
 
+function getToken() {
+  try {
+    const data = JSON.parse(localStorage.getItem('cineverse_auth') || '{}');
+    return data.token || null;
+  } catch {
+    return null;
+  }
+}
+
 function postKeepalive(endpoint, body) {
+  const token = getToken();
   return fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify(body),
     keepalive: true,
   });
@@ -183,10 +196,24 @@ function bookingReducer(state, action) {
         totalAmount: 0
       };
     }
-    case 'SET_VOUCHER':
-      return { ...state, voucher: action.payload.voucher, voucherCode: action.payload.code, discountAmount: action.payload.discount };
+    case 'SET_VOUCHER': {
+      const discount = action.payload.discount;
+      return {
+        ...state,
+        voucher: action.payload.voucher,
+        voucherCode: action.payload.code,
+        discountAmount: discount,
+        totalAmount: Math.max(0, state.subtotalTickets + state.subtotalProducts - discount)
+      };
+    }
     case 'CLEAR_VOUCHER':
-      return { ...state, voucher: null, voucherCode: '', discountAmount: 0 };
+      return {
+        ...state,
+        voucher: null,
+        voucherCode: '',
+        discountAmount: 0,
+        totalAmount: state.subtotalTickets + state.subtotalProducts
+      };
     case 'CONFIRM_FOOD':
       return {
         ...state,
@@ -298,10 +325,14 @@ export function BookingProvider({ children }) {
       if (orderRef.current && shouldCancelOrder(orderRef.current)) {
         const orderId = orderRef.current.bookingId ?? orderRef.current.BookingId;
         if (orderId) {
+          const token = getToken();
           // Use fetch with keepalive for exit cleanup
           fetch(`/api/bookings/${orderId}/cancel`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
             body: JSON.stringify({ reason: 'Người dùng đóng trình duyệt' }),
             keepalive: true
           });

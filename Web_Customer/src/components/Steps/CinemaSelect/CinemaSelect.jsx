@@ -3,25 +3,49 @@ import { cinemaApi } from '../../../services/api';
 import { useBooking } from '../../../context/BookingContext';
 import './CinemaSelect.css';
 
+function normalizeCinema(cinema) {
+  return {
+    ...cinema,
+    cinemaId: cinema.cinemaId ?? cinema.CinemaId ?? cinema.id ?? cinema.Id,
+    name: cinema.name ?? cinema.Name ?? cinema.cinemaName ?? cinema.CinemaName ?? 'Rạp phim',
+    cinemaName: cinema.cinemaName ?? cinema.CinemaName ?? cinema.name ?? cinema.Name ?? 'Rạp phim',
+    address: cinema.address ?? cinema.Address ?? '',
+    city: cinema.city ?? cinema.City ?? '',
+    district: cinema.district ?? cinema.District ?? '',
+    imageUrl: cinema.imageUrl ?? cinema.ImageUrl ?? '',
+  };
+}
+
 export default function CinemaSelect() {
   const { selectCinema, cinema: selectedCinema } = useBooking();
   const [cinemas, setCinemas] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('');
 
   useEffect(() => {
+    setLoading(true);
+    setError('');
     cinemaApi.getAll()
-      .then(setCinemas)
-      .catch(console.error)
+      .then(data => setCinemas(Array.isArray(data) ? data.map(normalizeCinema) : []))
+      .catch(err => {
+        console.error(err);
+        setError(err.message || 'Không thể tải danh sách rạp từ database.');
+        setCinemas([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
-  const cities = [...new Set(cinemas.map(c => c.city))].sort();
+  const cities = [...new Set(cinemas.map(c => c.city).filter(Boolean))].sort();
+  const searchText = search.trim().toLowerCase();
 
   const filtered = cinemas.filter(c => {
     const matchCity = !cityFilter || c.city === cityFilter;
-    const matchSearch = !search || c.name?.toLowerCase().includes(search.toLowerCase()) || c.address?.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !searchText
+      || c.name.toLowerCase().includes(searchText)
+      || c.address.toLowerCase().includes(searchText)
+      || c.district.toLowerCase().includes(searchText);
     return matchCity && matchSearch;
   });
 
@@ -73,7 +97,12 @@ export default function CinemaSelect() {
         </div>
       </div>
 
-      {filtered.length === 0 ? (
+      {error ? (
+        <div className="cinema-select__empty">
+          <span className="cinema-select__empty-icon">!</span>
+          <p>{error}</p>
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="cinema-select__empty">
           <span className="cinema-select__empty-icon">🎭</span>
           <p>Không tìm thấy rạp phim phù hợp</p>
@@ -98,10 +127,10 @@ export default function CinemaSelect() {
                 <h3 className="cinema-card__name">{cinema.name}</h3>
                 <p className="cinema-card__address">
                   <span className="cinema-card__pin">📍</span>
-                  {cinema.address}
+                  {cinema.address || 'Chưa cập nhật địa chỉ'}
                 </p>
                 <div className="cinema-card__meta">
-                  <span className="cinema-card__city">{cinema.city}</span>
+                  {cinema.city && <span className="cinema-card__city">{cinema.city}</span>}
                   {cinema.district && <span className="cinema-card__district">{cinema.district}</span>}
                 </div>
               </div>

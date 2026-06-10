@@ -12,7 +12,7 @@ using Repository;
 namespace Repository.Migrations
 {
     [DbContext(typeof(SqlServerDbContext))]
-    [Migration("20260602072514_InitialCreate")]
+    [Migration("20260607012159_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -1286,11 +1286,8 @@ namespace Repository.Migrations
             modelBuilder.Entity("Entities.UserMembership", b =>
                 {
                     b.Property<int>("UserId")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("int")
                         .HasColumnName("user_id");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("UserId"));
 
                     b.Property<int>("TierId")
                         .HasColumnType("int")

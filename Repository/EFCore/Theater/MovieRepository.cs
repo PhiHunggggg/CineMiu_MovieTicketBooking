@@ -19,10 +19,18 @@ namespace Repository.EFCore.Theater
                 query = query.Where(m => m.Title.Contains(keyword) || (m.TitleEn != null && m.TitleEn.Contains(keyword)));
             }
 
-            // now_showing, coming_soon, ended
-            if(!string.IsNullOrEmpty(status))
+            // Accept both API aliases used by the customer web and database values.
+            if (!string.IsNullOrWhiteSpace(status))
             {
-                query = query.Where(x => status.Contains(x.Status!));
+                var normalizedStatus = status.Trim().ToLowerInvariant() switch
+                {
+                    "now_showing" => "NowShowing",
+                    "coming_soon" => "ComingSoon",
+                    "ended" => "Ended",
+                    _ => status.Trim()
+                };
+
+                query = query.Where(x => x.Status == normalizedStatus);
             }
 
             // Tìm theo id phim
@@ -39,13 +47,22 @@ namespace Repository.EFCore.Theater
             var movies = await query.ToListAsync();
             var movieIdsList = movies.Select(m => m.MovieId).ToList();
             var movieGenres = await context.MovieGenres
-                .AsNoTracking()
-                .Where(mg => movieIdsList.Contains(mg.MovieId))
-                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.MovieId, g.GenreId })
-                .ToListAsync();
+                 .AsNoTracking()
+                 .Where(mg => movieIdsList.Contains(mg.MovieId))
+                 .Join(context.Genres,
+                     mg => mg.GenreId,
+                     g => g.GenreId,
+                     (mg, g) => new { mg.MovieId, mg.GenreId, g.GenreName })
+                 .ToListAsync();
+
             var genreIdsLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreId);
+            var genreLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreName);
             var items = movies.Select(x => new MovieDTO.MovieResponse
             {
+                MovieId = x.MovieId,
+
+                Genres = genreLookup[x.MovieId].ToList(),
+
                 Title = x.Title,
                 TitleEn = x.TitleEn,
                 CountryId = x.CountryId,
@@ -76,13 +93,14 @@ namespace Repository.EFCore.Theater
             {
                 throw new ArgumentException("Movie not found");
             }
-            var genreIds = await context.MovieGenres
+            var genres = await context.MovieGenres
                 .AsNoTracking()
                 .Where(mg => mg.MovieId == movieId)
-                .Select(mg => mg.GenreId)
+                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.GenreId, g.GenreName })
                 .ToListAsync();
             return new MovieDTO.MovieResponse
             {
+                MovieId = movie.MovieId,
                 Title = movie.Title,
                 TitleEn = movie.TitleEn,
                 CountryId = movie.CountryId,
@@ -100,7 +118,8 @@ namespace Repository.EFCore.Theater
                 TrailerUrl = movie.TrailerUrl,
                 ImdbRating = movie.ImdbRating,
                 Status = movie.Status,
-                GenreIds = genreIds
+                GenreIds = genres.Select(g => g.GenreId).ToList(),
+                Genres = genres.Select(g => g.GenreName).ToList()
             };
         }
         public async Task CreateAsync(MovieDTO.MovieRequest movieRequest)
