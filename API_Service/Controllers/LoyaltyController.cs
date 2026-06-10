@@ -36,7 +36,7 @@ namespace API_Service.Controllers
             return user == null ? NotFound() : await GetByUser(user.UserId);
         }
 
-        [HttpGet("user/{userId:int}/transactions")]
+        [HttpGet("users/{userId:int}/transactions")]
         public async Task<IActionResult> GetTransactions(int userId)
         {
             var transactions = await context.PointTransactions
