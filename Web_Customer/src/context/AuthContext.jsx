@@ -1,16 +1,17 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi } from '../services/api';
+import { STORAGE_KEY, getStoredAuth } from './AuthStorage';
 
-const AuthContext = createContext(null);
+export const AuthContext = createContext(null);
 
-const STORAGE_KEY = 'cineverse_auth';
+export function useAuth() {
+  const ctx = useContext(AuthContext);
 
-function getStoredAuth() {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-  } catch {
-    return null;
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider');
   }
+
+  return ctx;
 }
 
 export function AuthProvider({ children }) {
@@ -18,11 +19,31 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => getStoredAuth()?.token || null);
   const [loading, setLoading] = useState(true);
 
+  const normalizeAuthResult = useCallback((result) => {
+    const tokenValue = result?.token ?? result?.Token ?? null;
+    const userValue = result?.user ?? {
+      userId: result?.userId ?? result?.UserId,
+      roleId: result?.roleId ?? result?.RoleId,
+      cinemaId: result?.cinemaId ?? result?.CinemaId,
+      fullName: result?.fullName ?? result?.FullName,
+      email: result?.email ?? result?.Email,
+      phone: result?.phone ?? result?.Phone,
+      avatarUrl: result?.avatarUrl ?? result?.AvatarUrl,
+      role: result?.role ?? result?.Role,
+    };
+
+    return {
+      ...result,
+      token: tokenValue,
+      user: userValue,
+    };
+  }, []);
+
   // Validate token on mount
   useEffect(() => {
     if (!token) {
-      setLoading(false);
-      return;
+        setLoading(false);
+        return;
     }
     authApi.getProfile()
       .then(profile => {
@@ -41,11 +62,12 @@ export function AuthProvider({ children }) {
 
   const login = useCallback(async (email, password) => {
     const result = await authApi.login({ email, password });
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
-    setToken(result.token);
-    setUser(result.user);
-    return result;
-  }, []);
+    const auth = normalizeAuthResult(result);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+    setToken(auth.token);
+    setUser(auth.user);
+    return auth;
+  }, [normalizeAuthResult]);
 
   const register = useCallback(async (data) => {
     const result = await authApi.register(data);
@@ -91,10 +113,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
 }

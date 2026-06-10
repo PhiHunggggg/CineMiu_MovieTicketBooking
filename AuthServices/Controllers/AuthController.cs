@@ -13,7 +13,7 @@ using Repository;
 using System.Security.Claims;
 namespace AuthServices.Controllers
 {
-    [Microsoft.AspNetCore.Mvc.Route("api/[controller]")]
+    [Microsoft.AspNetCore.Mvc.Route("api/auth")]
     [Microsoft.AspNetCore.Mvc.ApiController]
     public class AuthController : Microsoft.AspNetCore.Mvc.ControllerBase
     {

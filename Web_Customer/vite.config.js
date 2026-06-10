@@ -14,7 +14,7 @@ export default defineConfig({
     open: true,        // tự mở browser khi chạy npm run dev
     proxy: {
       '/api': {
-        target: 'http://localhost:5001',
+        target: 'http://localhost:5000',
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
@@ -22,7 +22,7 @@ export default defineConfig({
             console.log('[Proxy Error]', err.message);
             if (!res.headersSent) {
               res.writeHead(502, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ message: 'Backend unavailable. Ensure API Service is running on port 5001.' }));
+              res.end(JSON.stringify({ message: 'Backend unavailable. Ensure API Gateway is running on port 5000.' }));
             }
           });
         }
