@@ -21,6 +21,20 @@ const getItems = (data) => data?.items || data?.data || data || [];
 const getHallId = (hall) => hall?.hallId || hall?.id;
 const getErrorMessage = (error, fallback) => error?.response?.data?.message || error?.message || fallback;
 
+function getSeatTypeKey(typeName) {
+    const normalizedName = String(typeName || '').toLowerCase();
+    if (normalizedName.includes('vip')) return 'vip';
+    if (normalizedName.includes('couple')) return 'couple';
+    return 'standard';
+}
+
+function getSeatTypeLabel(typeName) {
+    const key = getSeatTypeKey(typeName);
+    if (key === 'vip') return 'Ghế VIP';
+    if (key === 'couple') return 'Ghế Couple';
+    return 'Ghế thường';
+}
+
 function getStatusLabel(status) {
     return statusOptions.find((item) => item.value === status)?.label || status || '-';
 }
@@ -30,6 +44,7 @@ export default function Halls() {
     const queryAppliedRef = useRef(false);
     const [cinemas, setCinemas] = useState([]);
     const [hallTypes, setHallTypes] = useState([]);
+    const [seatTypes, setSeatTypes] = useState([]);
     const [halls, setHalls] = useState([]);
     const [cinemaFilter, setCinemaFilter] = useState('');
     const [statusFilter, setStatusFilter] = useState('');
@@ -40,6 +55,12 @@ export default function Halls() {
     const [editingHall, setEditingHall] = useState(null);
     const [form, setForm] = useState(emptyForm);
     const [saving, setSaving] = useState(false);
+    const [seatEditorHall, setSeatEditorHall] = useState(null);
+    const [seatLayout, setSeatLayout] = useState([]);
+    const [selectedSeatTypeId, setSelectedSeatTypeId] = useState('');
+    const [seatLoading, setSeatLoading] = useState(false);
+    const [seatSaving, setSeatSaving] = useState(false);
+    const [seatError, setSeatError] = useState('');
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -69,6 +90,7 @@ export default function Halls() {
 
             setCinemas(cinemaItems);
             setHallTypes(lookupData.hallTypes || []);
+            setSeatTypes(lookupData.seatTypes || []);
             setHalls(hallResponses.flat());
         } catch (requestError) {
             setError(getErrorMessage(requestError, 'Không tải được dữ liệu phòng chiếu.'));
@@ -85,6 +107,25 @@ export default function Halls() {
         () => new Map(hallTypes.map((item) => [Number(item.hallTypeId), item])),
         [hallTypes],
     );
+
+    const seatTypeById = useMemo(
+        () => new Map(seatTypes.map((item) => [Number(item.seatTypeId), item])),
+        [seatTypes],
+    );
+
+    const seatRows = useMemo(() => {
+        const rows = new Map();
+        seatLayout.forEach((seat) => {
+            const rowLabel = seat.rowLabel || '';
+            if (!rows.has(rowLabel)) rows.set(rowLabel, []);
+            rows.get(rowLabel).push(seat);
+        });
+
+        return [...rows.entries()].map(([rowLabel, seats]) => ({
+            rowLabel,
+            seats: seats.sort((left, right) => Number(left.colNumber) - Number(right.colNumber)),
+        }));
+    }, [seatLayout]);
 
     const visibleHalls = useMemo(
         () => halls.filter((hall) => (
@@ -216,6 +257,64 @@ export default function Halls() {
         }
     };
 
+    const openSeatEditor = async (hall) => {
+        setSeatEditorHall(hall);
+        setSeatLayout([]);
+        setSeatError('');
+        setSeatLoading(true);
+        setSelectedSeatTypeId(String(seatTypes[0]?.seatTypeId || ''));
+
+        try {
+            const response = await cinemaApi.getHallSeats(getHallId(hall));
+            const seats = getItems(response.data);
+            setSeatLayout(seats);
+            setSelectedSeatTypeId(String(seats[0]?.seatTypeId || seatTypes[0]?.seatTypeId || ''));
+        } catch (requestError) {
+            setSeatError(getErrorMessage(requestError, 'Không tải được sơ đồ ghế.'));
+        } finally {
+            setSeatLoading(false);
+        }
+    };
+
+    const closeSeatEditor = () => {
+        if (seatSaving) return;
+        setSeatEditorHall(null);
+        setSeatLayout([]);
+        setSeatError('');
+    };
+
+    const changeSeatType = (seatId) => {
+        if (!selectedSeatTypeId) return;
+        setSeatLayout((currentSeats) => currentSeats.map((seat) => (
+            Number(seat.seatId || seat.id) === Number(seatId)
+                ? { ...seat, seatTypeId: Number(selectedSeatTypeId) }
+                : seat
+        )));
+    };
+
+    const saveSeatLayout = async () => {
+        if (!seatEditorHall || seatLayout.length === 0) return;
+
+        setSeatSaving(true);
+        setSeatError('');
+        try {
+            await cinemaApi.updateHallSeats(getHallId(seatEditorHall), seatLayout.map((seat) => ({
+                seatTypeId: Number(seat.seatTypeId),
+                rowLabel: seat.rowLabel,
+                colNumber: Number(seat.colNumber),
+                seatCode: seat.seatCode,
+                isActive: seat.isActive !== false,
+            })));
+            setNotice(`Đã cập nhật loại ghế cho ${seatEditorHall.hallName || seatEditorHall.name}.`);
+            setSeatEditorHall(null);
+            setSeatLayout([]);
+        } catch (requestError) {
+            setSeatError(getErrorMessage(requestError, 'Không lưu được sơ đồ ghế.'));
+        } finally {
+            setSeatSaving(false);
+        }
+    };
+
     return (
         <div className="theater-page">
             <header className="management-page-header">
@@ -331,6 +430,9 @@ export default function Halls() {
                                                     <button className="icon-button" type="button" onClick={() => openEdit(hall)} title="Sửa phòng">
                                                         <i className="fas fa-pen" />
                                                     </button>
+                                                    <button className="icon-button seat-action" type="button" onClick={() => openSeatEditor(hall)} title="Chọn ghế thường, VIP hoặc Couple">
+                                                        <i className="fas fa-chair" />
+                                                    </button>
                                                     <button className="icon-button danger" type="button" onClick={() => deleteHall(hall)} title="Xóa phòng">
                                                         <i className="fas fa-trash" />
                                                     </button>
@@ -411,6 +513,89 @@ export default function Halls() {
                                         <button className="btn btn-primary" type="submit" disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu phòng'}</button>
                                     </div>
                                 </form>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="modal-backdrop show" />
+                </>
+            ) : null}
+
+            {seatEditorHall ? (
+                <>
+                    <div className="modal d-block">
+                        <div className="modal-dialog seat-layout-dialog">
+                            <div className="modal-content">
+                                <div className="modal-header">
+                                    <div>
+                                        <h2>Sơ đồ ghế - {seatEditorHall.hallName || seatEditorHall.name}</h2>
+                                        <small>Chọn loại ghế, sau đó bấm vào từng ghế để thay đổi.</small>
+                                    </div>
+                                    <button className="close" type="button" onClick={closeSeatEditor}>&times;</button>
+                                </div>
+                                <div className="modal-body seat-layout-body">
+                                    {seatError ? <div className="alert alert-danger">{seatError}</div> : null}
+
+                                    <div className="seat-type-toolbar">
+                                        {seatTypes.map((type) => {
+                                            const typeId = String(type.seatTypeId);
+                                            const typeKey = getSeatTypeKey(type.typeName);
+                                            const count = seatLayout.filter((seat) => Number(seat.seatTypeId) === Number(type.seatTypeId)).length;
+                                            return (
+                                                <button
+                                                    key={type.seatTypeId}
+                                                    className={`seat-type-option seat-${typeKey} ${selectedSeatTypeId === typeId ? 'selected' : ''}`}
+                                                    type="button"
+                                                    onClick={() => setSelectedSeatTypeId(typeId)}
+                                                >
+                                                    <i className="fas fa-chair" />
+                                                    <span>{getSeatTypeLabel(type.typeName)}</span>
+                                                    <strong>{count}</strong>
+                                                </button>
+                                            );
+                                        })}
+                                    </div>
+
+                                    {seatLoading ? (
+                                        <div className="seat-layout-state">
+                                            <div className="spinner-border text-primary" />
+                                            <span>Đang tải sơ đồ ghế...</span>
+                                        </div>
+                                    ) : (
+                                        <div className="seat-layout-editor">
+                                            <div className="cinema-screen">MÀN HÌNH</div>
+                                            <div className="seat-layout-grid">
+                                                {seatRows.map((row) => (
+                                                    <div className="seat-layout-row" key={row.rowLabel}>
+                                                        <strong className="seat-row-label">{row.rowLabel}</strong>
+                                                        <div className="seat-layout-seats">
+                                                            {row.seats.map((seat) => {
+                                                                const type = seatTypeById.get(Number(seat.seatTypeId));
+                                                                const typeKey = getSeatTypeKey(type?.typeName);
+                                                                return (
+                                                                    <button
+                                                                        key={seat.seatId || seat.id || seat.seatCode}
+                                                                        className={`seat-layout-seat seat-${typeKey}`}
+                                                                        type="button"
+                                                                        title={`${seat.seatCode} - ${getSeatTypeLabel(type?.typeName)}`}
+                                                                        onClick={() => changeSeatType(seat.seatId || seat.id)}
+                                                                    >
+                                                                        {seat.seatCode}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="modal-footer">
+                                    <button className="btn btn-secondary" type="button" onClick={closeSeatEditor}>Đóng</button>
+                                    <button className="btn btn-primary" type="button" onClick={saveSeatLayout} disabled={seatSaving || seatLoading || seatLayout.length === 0}>
+                                        {seatSaving ? 'Đang lưu...' : 'Lưu sơ đồ ghế'}
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </div>

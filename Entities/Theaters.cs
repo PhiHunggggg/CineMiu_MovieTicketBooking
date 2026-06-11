@@ -7,6 +7,7 @@ using System.Text;
 
 namespace Entities
 {
+    [Table("Chains")]
     public class Chain
     {
         [Key]

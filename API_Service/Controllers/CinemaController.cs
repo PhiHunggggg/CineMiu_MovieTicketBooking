@@ -164,20 +164,67 @@ namespace API_Service.Controllers
                 return NotFound(new { message = "Cinema not found" });
             }
 
+            var hallName = dto.HallName?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(hallName))
+            {
+                return BadRequest(new { message = "Hall name is required" });
+            }
+
+            if (dto.TotalRows is < 1 or > 26 || dto.TotalCols is < 1 or > 50)
+            {
+                return BadRequest(new { message = "Hall layout must be between 1-26 rows and 1-50 seats per row" });
+            }
+
+            if (!await _context.CinemaHallTypes.AnyAsync(x => x.HallTypeId == dto.HallTypeId))
+            {
+                return BadRequest(new { message = "Hall type not found" });
+            }
+
+            if (await _context.CinemaHalls.AnyAsync(x => x.CinemaId == cinemaId && x.HallName == hallName))
+            {
+                return Conflict(new { message = "Hall name already exists in the selected cinema" });
+            }
+
+            var seatTypes = await _context.CinemaSeatTypes.AsNoTracking()
+                .OrderBy(x => x.SeatTypeId)
+                .Select(x => x.SeatTypeId)
+                .ToListAsync();
+            if (seatTypes.Count == 0)
+            {
+                return BadRequest(new { message = "At least one seat type is required before creating a hall" });
+            }
+
+            var now = DateTime.UtcNow;
             var hall = new CinemaHall
             {
                 CinemaId = cinemaId,
                 HallTypeId = dto.HallTypeId,
-                HallName = dto.HallName,
+                HallName = hallName,
                 TotalRows = dto.TotalRows,
                 TotalCols = dto.TotalCols,
-                TotalSeats = dto.TotalSeats,
-                Status = dto.Status ?? "active"
+                TotalSeats = checked((short)(dto.TotalRows * dto.TotalCols)),
+                Status = dto.Status ?? "active",
+                CreatedAt = now,
+                UpdatedAt = now
             };
 
-            _context.CinemaHalls.Add(hall);
-            await _context.SaveChangesAsync();
-            await CreateSeatsForHall(hall);
+            var strategy = _context.Database.CreateExecutionStrategy();
+            try
+            {
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await _context.Database.BeginTransactionAsync();
+                    _context.CinemaHalls.Add(hall);
+                    await _context.SaveChangesAsync();
+                    await CreateSeatsForHall(hall, seatTypes, now);
+                    await transaction.CommitAsync();
+                });
+            }
+            catch (DbUpdateException)
+            {
+                return Conflict(new { message = "Could not create hall because its data conflicts with existing records" });
+            }
+
             return Ok(hall);
         }
 
@@ -368,14 +415,9 @@ namespace API_Service.Controllers
                 .ToListAsync());
         }
 
-        private async Task CreateSeatsForHall(Hall hall)
+        private async Task CreateSeatsForHall(Hall hall, IReadOnlyList<byte> seatTypes, DateTime now)
         {
-            var seatTypes = await _context.CinemaSeatTypes.AsNoTracking()
-                .OrderBy(x => x.SeatTypeId)
-                .Select(x => x.SeatTypeId)
-                .ToListAsync();
-
-            if (seatTypes.Count == 0 || await _context.CinemaSeats.AnyAsync(x => x.HallId == hall.HallId))
+            if (await _context.CinemaSeats.AnyAsync(x => x.HallId == hall.HallId))
             {
                 return;
             }
@@ -403,7 +445,9 @@ namespace API_Service.Controllers
                         RowLabel = rowLabel,
                         ColNumber = (byte)col,
                         SeatCode = $"{rowLabel}{col}",
-                        IsActive = true
+                        IsActive = true,
+                        CreatedAt = now,
+                        UpdatedAt = now
                     });
                 }
             }
