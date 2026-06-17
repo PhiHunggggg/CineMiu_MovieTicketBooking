@@ -11,15 +11,23 @@ namespace Services.Theater
         IShowtimeRepository showtimeRepository,
         SqlServerDbContext context) : IShowtimeService
     {
-        public async Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, string? status, int page = 1, int pageSize = 12)
+        public async Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, string? status, int page = 1, int pageSize = 12, bool upcomingOnly = false)
         {
             page = Math.Max(page, 1);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
-            var showtimes = await showtimeRepository.GetAllShowtimesAsync(keyword, movieId, cinemaId, hallId, date, status);
-            var totalCount = showtimes.Count;
+            var result = await showtimeRepository.GetShowtimesPageAsync(
+                keyword,
+                movieId,
+                cinemaId,
+                hallId,
+                date,
+                status,
+                page,
+                pageSize,
+                upcomingOnly);
+            var totalCount = result.TotalCount;
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-            var items = showtimes.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
             return new Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>
             {
@@ -27,7 +35,7 @@ namespace Services.Theater
                 PageSize = pageSize,
                 TotalCount = totalCount,
                 TotalPages = totalPages,
-                Items = items
+                Items = result.Items
             };
         }
 
@@ -83,7 +91,7 @@ namespace Services.Theater
             var existing = await context.ShowTimes
                 .Where(x => x.StartTime >= today && x.StartTime < rangeEnd)
                 .ToListAsync();
-            var created = new List<ShowTime>();
+            var candidates = new List<ShowTime>();
             var slots = new[] { 9, 12, 15, 18, 21 };
             var now = DateTime.Now;
 
@@ -105,7 +113,7 @@ namespace Services.Theater
                                             hallIndex * slots.Length +
                                             slotIndex) % movies.Count];
                         var endTime = startTime.AddMinutes(movie.DurationMins);
-                        var overlaps = existing.Concat(created).Any(x =>
+                        var overlaps = existing.Concat(candidates).Any(x =>
                             x.HallId == hall.HallId &&
                             x.Status != "cancelled" &&
                             x.StartTime < endTime &&
@@ -115,7 +123,7 @@ namespace Services.Theater
                             continue;
                         }
 
-                        created.Add(new ShowTime
+                        candidates.Add(new ShowTime
                         {
                             MovieId = movie.MovieId,
                             HallId = hall.HallId,
@@ -131,15 +139,39 @@ namespace Services.Theater
                 }
             }
 
-            if (created.Count == 0)
+            if (candidates.Count == 0)
             {
                 return [];
             }
 
-            context.ShowTimes.AddRange(created);
-            await context.SaveChangesAsync();
+            var createdIds = new HashSet<int>();
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    var showtimeId = await showtimeRepository.CreateAsync(new ShowtimeDTO.ShowtimeRequest
+                    {
+                        MovieId = candidate.MovieId,
+                        HallId = candidate.HallId,
+                        StartTime = candidate.StartTime,
+                        EndTime = candidate.EndTime,
+                        LanguageType = candidate.LanguageType,
+                        IsSpecial = candidate.IsSpecial,
+                        Status = candidate.Status
+                    });
+                    createdIds.Add(showtimeId);
+                }
+                catch (ArgumentException)
+                {
+                    // Another request may have filled this room slot after candidates were calculated.
+                }
+            }
 
-            var createdIds = created.Select(x => x.ShowtimeId).ToHashSet();
+            if (createdIds.Count == 0)
+            {
+                return [];
+            }
+
             var responses = await showtimeRepository.GetAllShowtimesAsync(
                 null, null, null, null, null, null);
             return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
@@ -165,9 +197,18 @@ namespace Services.Theater
                 throw new InvalidOperationException("Showtime not found");
             }
 
-            if (showtime.Status == "cancelled" || showtime.EndTime <= DateTime.Now)
+            if (showtime.Status == "cancelled" ||
+                showtime.Status == "completed" ||
+                showtime.EndTime <= DateTime.Now)
             {
                 throw new InvalidOperationException("Showtime is not available");
+            }
+
+            var hallIsActive = await context.Halls.AsNoTracking()
+                .AnyAsync(x => x.HallId == showtime.HallId && x.Status == "active");
+            if (!hallIsActive)
+            {
+                throw new InvalidOperationException("The hall is currently unavailable");
             }
 
             if (!await context.Users.AnyAsync(x => x.UserId == userId && x.IsActive))

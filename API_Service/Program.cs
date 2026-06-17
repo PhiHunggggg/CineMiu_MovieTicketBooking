@@ -131,8 +131,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-Console.WriteLine("Cinema Booking API Service running on port 5001");
-Console.WriteLine("Endpoints: /api/movies, /api/cinemas, /api/showtimes, /api/bookings");
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    Console.WriteLine($"Cinema Booking API Service running at {string.Join(", ", app.Urls)}");
+    Console.WriteLine("Endpoints: /api/movies, /api/cinemas, /api/showtimes, /api/bookings");
+});
+
 app.Run();
 
 static async Task EnsureCinemaRolesAsync(IServiceProvider services)

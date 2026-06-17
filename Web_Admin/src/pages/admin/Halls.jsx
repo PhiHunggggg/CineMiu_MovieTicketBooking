@@ -224,25 +224,6 @@ export default function Halls() {
         }
     };
 
-    const updateStatus = async (hall, status) => {
-        setError('');
-        setNotice('');
-        try {
-            await cinemaApi.updateHall(getHallId(hall), {
-                hallTypeId: Number(hall.hallTypeId),
-                hallName: hall.hallName || hall.name,
-                totalRows: Number(hall.totalRows),
-                totalCols: Number(hall.totalCols),
-                totalSeats: Number(hall.totalSeats),
-                status,
-            });
-            setNotice(`Đã chuyển ${hall.hallName || hall.name} sang trạng thái ${getStatusLabel(status).toLowerCase()}.`);
-            await loadData();
-        } catch (requestError) {
-            setError(getErrorMessage(requestError, 'Không cập nhật được trạng thái phòng.'));
-        }
-    };
-
     const deleteHall = async (hall) => {
         if (!window.confirm(`Xóa phòng "${hall.hallName || hall.name}"? Phòng đã có lịch chiếu sẽ không thể xóa.`)) return;
 
@@ -403,30 +384,29 @@ export default function Halls() {
                                             <td>
                                                 <div className="hall-name-cell">
                                                     <span><i className="fas fa-door-open" /></span>
-                                                    <div><strong>{hall.hallName || hall.name}</strong><small>#{getHallId(hall)}</small></div>
+                                                    <div><strong>{hall.hallName || hall.name}</strong></div>
                                                 </div>
                                             </td>
                                             <td><strong>{hall.cinemaName}</strong><div className="small text-muted">{hall.cinemaCity || '-'}</div></td>
                                             <td>{hall.hallTypeName || hallType?.typeName || '-'}</td>
                                             <td>{hall.totalRows} hàng × {hall.totalCols} cột</td>
-                                            <td><strong>{Number(hall.totalSeats || 0).toLocaleString('vi-VN')} ghế</strong></td>
+                                            <td>
+                                                <strong>{Number(hall.activeSeatCount ?? hall.totalSeats ?? 0).toLocaleString('vi-VN')} ghế hoạt động</strong>
+                                                {Number(hall.upcomingShowtimeCount || 0) > 0 ? (
+                                                    <Link
+                                                        className="hall-showtime-link"
+                                                        to={`/admin/showtimes?cinemaId=${hall.cinemaId}&hallId=${getHallId(hall)}&upcoming=1`}
+                                                        title={`Xem lịch chiếu sắp tới của ${hall.hallName || hall.name}`}
+                                                    >
+                                                        {Number(hall.upcomingShowtimeCount).toLocaleString('vi-VN')} lịch chiếu sắp tới
+                                                    </Link>
+                                                ) : (
+                                                    <div className="small text-muted">Chưa có lịch chiếu sắp tới</div>
+                                                )}
+                                            </td>
                                             <td><span className={`hall-status status-${hall.status || 'inactive'}`}>{getStatusLabel(hall.status)}</span></td>
                                             <td>
                                                 <div className="row-actions">
-                                                    <Link
-                                                        className="icon-button linked-action"
-                                                        to={`/admin/showtimes?create=1&cinemaId=${hall.cinemaId}&hallId=${getHallId(hall)}`}
-                                                        title="Tạo lịch chiếu cho phòng"
-                                                    >
-                                                        <i className="fas fa-calendar-plus" />
-                                                    </Link>
-                                                    <Link
-                                                        className="icon-button linked-action price"
-                                                        to={`/admin/ticket-prices?create=1&cinemaId=${hall.cinemaId}&hallTypeId=${hall.hallTypeId}`}
-                                                        title="Tạo giá vé cho loại phòng"
-                                                    >
-                                                        <i className="fas fa-tags" />
-                                                    </Link>
                                                     <button className="icon-button" type="button" onClick={() => openEdit(hall)} title="Sửa phòng">
                                                         <i className="fas fa-pen" />
                                                     </button>
@@ -436,14 +416,6 @@ export default function Halls() {
                                                     <button className="icon-button danger" type="button" onClick={() => deleteHall(hall)} title="Xóa phòng">
                                                         <i className="fas fa-trash" />
                                                     </button>
-                                                    <select
-                                                        className="hall-status-select"
-                                                        value={hall.status || 'active'}
-                                                        onChange={(event) => updateStatus(hall, event.target.value)}
-                                                        aria-label={`Trạng thái ${hall.hallName || hall.name}`}
-                                                    >
-                                                        {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                                                    </select>
                                                 </div>
                                             </td>
                                         </tr>

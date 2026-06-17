@@ -5,8 +5,9 @@ using Services.Booking;
 using Services.Theater;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Repository.Pricing;
 
-  namespace API_Service.Controllers
+namespace API_Service.Controllers
 {
     [Route("api/showtimes")]
     [ApiController]
@@ -31,6 +32,7 @@ using Microsoft.EntityFrameworkCore;
             [FromQuery] string? status,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 12,
+            [FromQuery] bool upcomingOnly = false,
             [FromQuery] int? seatTypeId = null,
             [FromQuery] int? dayTypeId = null,
             [FromQuery] int? hallTypeId = null)
@@ -43,7 +45,8 @@ using Microsoft.EntityFrameworkCore;
                 date,
                 status,
                 page,
-                pageSize);
+                pageSize,
+                upcomingOnly);
             return Ok(response);
         }
 
@@ -74,7 +77,22 @@ using Microsoft.EntityFrameworkCore;
                 return NotFound(new { message = "Showtime not found" });
             }
 
+            if (!string.Equals(details.Hall.Status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new { message = "This hall is currently unavailable" });
+            }
+
+            if (string.Equals(details.Status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(details.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(details.Status, "ended", StringComparison.OrdinalIgnoreCase) ||
+                details.EndTime <= DateTime.Now)
+            {
+                return Conflict(new { message = "This showtime is no longer available" });
+            }
+
             var now = DateTime.UtcNow;
+            var showtime = await _context.CinemaShowtimes.AsNoTracking()
+                .FirstAsync(x => x.ShowtimeId == id);
             var seats = await _context.CinemaSeats.AsNoTracking()
                 .Where(x => x.HallId == details.HallId && x.IsActive)
                 .OrderBy(x => x.RowLabel)
@@ -84,6 +102,27 @@ using Microsoft.EntityFrameworkCore;
             var seatTypes = await _context.CinemaSeatTypes.AsNoTracking()
                 .Where(x => seats.Select(seat => seat.SeatTypeId).Contains(x.SeatTypeId))
                 .ToDictionaryAsync(x => x.SeatTypeId);
+            var standardSeatTypeId = await _context.CinemaSeatTypes.AsNoTracking()
+                .Where(x => x.TypeName.ToLower().Contains("standard"))
+                .OrderBy(x => x.SeatTypeId)
+                .Select(x => x.SeatTypeId)
+                .FirstOrDefaultAsync();
+            if (standardSeatTypeId == 0)
+            {
+                standardSeatTypeId = await _context.CinemaSeatTypes.AsNoTracking()
+                    .OrderBy(x => x.SeatTypeId)
+                    .Select(x => x.SeatTypeId)
+                    .FirstOrDefaultAsync();
+            }
+
+            var dayTypes = await _context.CinemaDayTypes.AsNoTracking().ToListAsync();
+            var priceSeatTypeIds = seatTypes.Keys.Append(standardSeatTypeId).Distinct().ToList();
+            var priceRules = await _context.CinemaTicketPrices.AsNoTracking()
+                .Where(x =>
+                    x.CinemaId == details.Hall.CinemaId &&
+                    x.HallTypeId == details.Hall.HallTypeId &&
+                    priceSeatTypeIds.Contains(x.SeatTypeId))
+                .ToListAsync();
             var bookedSeatIds = await _context.CinemaTickets.AsNoTracking()
                 .Join(
                     _context.CinemaBookings.AsNoTracking()
@@ -116,7 +155,15 @@ using Microsoft.EntityFrameworkCore;
                     seat.RowLabel,
                     seat.ColNumber,
                     seat.SeatCode,
-                    price = Math.Max(0, details.BasePrice + (seatType?.PriceModifier ?? 0)),
+                    price = TicketPriceCalculator.ResolvePrice(
+                        showtime,
+                        details.Hall.CinemaId,
+                        details.Hall.HallTypeId,
+                        seat.SeatTypeId,
+                        seatType?.PriceModifier ?? 0,
+                        standardSeatTypeId,
+                        dayTypes,
+                        priceRules),
                     isBooked = bookedSeatIds.Contains(seat.SeatId),
                     isLocked = seatLock != null && !isCurrentSession,
                     isLockedByCurrentSession = isCurrentSession,

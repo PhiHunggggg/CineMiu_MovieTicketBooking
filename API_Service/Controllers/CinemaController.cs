@@ -9,6 +9,13 @@ namespace API_Service.Controllers
     [ApiController]
     public class CinemasController : ControllerBase
     {
+        private static readonly HashSet<string> AllowedHallStatuses = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "active",
+            "maintenance",
+            "inactive"
+        };
+
         private readonly SqlServerDbContext _context;
 
         public CinemasController(SqlServerDbContext context)
@@ -79,7 +86,44 @@ namespace API_Service.Controllers
                 .OrderBy(x => x.HallName)
                 .ToListAsync();
 
-            return Ok(halls);
+            var hallIds = halls.Select(x => x.HallId).ToList();
+            var hallTypeIds = halls.Select(x => x.HallTypeId).Distinct().ToList();
+            var hallTypes = await _context.CinemaHallTypes.AsNoTracking()
+                .Where(x => hallTypeIds.Contains(x.HallTypeId))
+                .ToDictionaryAsync(x => x.HallTypeId, x => x.TypeName);
+            var activeSeatCounts = await _context.CinemaSeats.AsNoTracking()
+                .Where(x => hallIds.Contains(x.HallId) && x.IsActive)
+                .GroupBy(x => x.HallId)
+                .Select(group => new { HallId = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(x => x.HallId, x => x.Count);
+            var now = DateTime.Now;
+            var upcomingShowtimeCounts = await _context.CinemaShowtimes.AsNoTracking()
+                .Where(x =>
+                    hallIds.Contains(x.HallId) &&
+                    x.EndTime > now &&
+                    x.Status != "cancelled" &&
+                    x.Status != "completed")
+                .GroupBy(x => x.HallId)
+                .Select(group => new { HallId = group.Key, Count = group.Count() })
+                .ToDictionaryAsync(x => x.HallId, x => x.Count);
+
+            return Ok(halls.Select(hall => new
+            {
+                hall.HallId,
+                hall.CinemaId,
+                hall.HallTypeId,
+                hallTypeName = hallTypes.GetValueOrDefault(hall.HallTypeId),
+                hall.HallName,
+                name = hall.HallName,
+                hall.TotalRows,
+                hall.TotalCols,
+                hall.TotalSeats,
+                activeSeatCount = activeSeatCounts.GetValueOrDefault(hall.HallId),
+                upcomingShowtimeCount = upcomingShowtimeCounts.GetValueOrDefault(hall.HallId),
+                hall.Status,
+                hall.CreatedAt,
+                hall.UpdatedAt
+            }));
         }
 
         [HttpPost]
@@ -180,6 +224,12 @@ namespace API_Service.Controllers
                 return BadRequest(new { message = "Hall type not found" });
             }
 
+            var status = NormalizeHallStatus(dto.Status);
+            if (!AllowedHallStatuses.Contains(status))
+            {
+                return BadRequest(new { message = "Hall status is invalid" });
+            }
+
             if (await _context.CinemaHalls.AnyAsync(x => x.CinemaId == cinemaId && x.HallName == hallName))
             {
                 return Conflict(new { message = "Hall name already exists in the selected cinema" });
@@ -203,7 +253,7 @@ namespace API_Service.Controllers
                 TotalRows = dto.TotalRows,
                 TotalCols = dto.TotalCols,
                 TotalSeats = checked((short)(dto.TotalRows * dto.TotalCols)),
-                Status = dto.Status ?? "active",
+                Status = status,
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -242,15 +292,100 @@ namespace API_Service.Controllers
                 return NotFound(new { message = "Cinema not found" });
             }
 
+            var hallName = dto.HallName?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(hallName))
+            {
+                return BadRequest(new { message = "Hall name is required" });
+            }
+
+            if (!await _context.CinemaHallTypes.AnyAsync(x => x.HallTypeId == dto.HallTypeId))
+            {
+                return BadRequest(new { message = "Hall type not found" });
+            }
+
+            if (dto.TotalRows is < 1 or > 26 || dto.TotalCols is < 1 or > 50)
+            {
+                return BadRequest(new { message = "Hall layout must be between 1-26 rows and 1-50 seats per row" });
+            }
+
+            if (hall.TotalRows != dto.TotalRows || hall.TotalCols != dto.TotalCols)
+            {
+                return Conflict(new { message = "Use the seat layout editor to change an existing hall layout" });
+            }
+
+            if (await _context.CinemaHalls.AnyAsync(x =>
+                    x.HallId != hallId &&
+                    x.CinemaId == hall.CinemaId &&
+                    x.HallName == hallName))
+            {
+                return Conflict(new { message = "Hall name already exists in the selected cinema" });
+            }
+
+            var status = NormalizeHallStatus(dto.Status ?? hall.Status);
+            if (!AllowedHallStatuses.Contains(status))
+            {
+                return BadRequest(new { message = "Hall status is invalid" });
+            }
+
+            if (!string.Equals(hall.Status, status, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                var upcomingShowtimeCount = await GetUpcomingShowtimeCount(hallId);
+                if (upcomingShowtimeCount > 0)
+                {
+                    return Conflict(new
+                    {
+                        message = "Cancel or move upcoming showtimes before taking this hall out of service",
+                        upcomingShowtimeCount
+                    });
+                }
+            }
+
             hall.HallTypeId = dto.HallTypeId;
-            hall.HallName = dto.HallName;
-            hall.TotalRows = dto.TotalRows;
-            hall.TotalCols = dto.TotalCols;
-            hall.TotalSeats = dto.TotalSeats;
-            hall.Status = dto.Status ?? hall.Status;
+            hall.HallName = hallName;
+            hall.Status = status;
+            hall.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
             return Ok(hall);
+        }
+
+        [HttpPatch("halls/{hallId:int}/status")]
+        public async Task<IActionResult> UpdateHallStatus(int hallId, [FromBody] HallStatusDto dto)
+        {
+            var hall = await _context.CinemaHalls.FindAsync(hallId);
+            if (hall == null)
+            {
+                return NotFound(new { message = "Hall not found" });
+            }
+
+            var status = NormalizeHallStatus(dto.Status);
+            if (!AllowedHallStatuses.Contains(status))
+            {
+                return BadRequest(new { message = "Hall status is invalid" });
+            }
+
+            if (string.Equals(hall.Status, status, StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(new { hall.HallId, hall.Status, upcomingShowtimeCount = await GetUpcomingShowtimeCount(hallId) });
+            }
+
+            var upcomingShowtimeCount = await GetUpcomingShowtimeCount(hallId);
+            if (!string.Equals(status, "active", StringComparison.OrdinalIgnoreCase) &&
+                upcomingShowtimeCount > 0)
+            {
+                return Conflict(new
+                {
+                    message = "Cancel or move upcoming showtimes before taking this hall out of service",
+                    upcomingShowtimeCount
+                });
+            }
+
+            hall.Status = status;
+            hall.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { hall.HallId, hall.Status, upcomingShowtimeCount });
         }
 
         [HttpDelete("halls/{hallId:int}")]
@@ -468,6 +603,22 @@ namespace API_Service.Controllers
 
             return label;
         }
+
+        private async Task<int> GetUpcomingShowtimeCount(int hallId)
+        {
+            var now = DateTime.Now;
+            return await _context.CinemaShowtimes.CountAsync(x =>
+                x.HallId == hallId &&
+                x.EndTime > now &&
+                x.Status != "cancelled" &&
+                x.Status != "completed");
+        }
+
+        private static string NormalizeHallStatus(string? status)
+        {
+            var normalized = status?.Trim().ToLowerInvariant();
+            return string.IsNullOrWhiteSpace(normalized) ? "active" : normalized;
+        }
     }
 
     public class CinemaDto
@@ -494,6 +645,11 @@ namespace API_Service.Controllers
         public byte TotalCols { get; set; }
         public short TotalSeats { get; set; }
         public string? Status { get; set; }
+    }
+
+    public class HallStatusDto
+    {
+        public string Status { get; set; } = "";
     }
 
     public class SeatDto

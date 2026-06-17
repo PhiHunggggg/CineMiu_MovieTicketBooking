@@ -10,6 +10,7 @@ using Services.Loyalty;
 using DTO.Common;
 using DTO.Booking;
 using System.Security.Claims;
+using Repository.Pricing;
 
 namespace API_Service.Controllers
 {
@@ -313,6 +314,25 @@ namespace API_Service.Controllers
                 return NotFound(new { message = "Showtime not found" });
             }
 
+            if (string.Equals(showtime.Status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(showtime.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                showtime.EndTime <= DateTime.Now)
+            {
+                return Conflict(new { message = "This showtime is no longer available" });
+            }
+
+            var hall = await _context.CinemaHalls.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.HallId == showtime.HallId);
+            if (hall == null)
+            {
+                return BadRequest(new { message = "Hall not found" });
+            }
+
+            if (!string.Equals(hall.Status, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                return Conflict(new { message = "This hall is currently unavailable" });
+            }
+
             if (dto.Seats.Count == 0)
             {
                 return BadRequest(new { message = "At least one seat is required" });
@@ -323,10 +343,15 @@ namespace API_Service.Controllers
                 return BadRequest(new { message = "Duplicate seats are not allowed" });
             }
 
-            var seats = await _context.CinemaSeats.Where(x => dto.SeatIds.Contains(x.SeatId) && x.HallId == showtime.HallId).ToListAsync();
+            var seats = await _context.CinemaSeats
+                .Where(x =>
+                    dto.SeatIds.Contains(x.SeatId) &&
+                    x.HallId == showtime.HallId &&
+                    x.IsActive)
+                .ToListAsync();
             if (seats.Count != dto.SeatIds.Distinct().Count())
             {
-                return BadRequest(new { message = "Some seats were not found" });
+                return BadRequest(new { message = "Some seats were not found or are inactive" });
             }
 
             var unavailableSeatIds = await _context.CinemaTickets
@@ -338,7 +363,56 @@ namespace API_Service.Controllers
                 return BadRequest(new { message = "Some seats are already booked", seatIds = unavailableSeatIds });
             }
 
-            var ticketTotal = dto.Seats.Sum(x => x.Price);
+            var seatTypeIds = seats.Select(x => x.SeatTypeId).Distinct().ToList();
+            var seatTypes = await _context.CinemaSeatTypes.AsNoTracking()
+                .Where(x => seatTypeIds.Contains(x.SeatTypeId))
+                .ToDictionaryAsync(x => x.SeatTypeId);
+            var standardSeatTypeId = await _context.CinemaSeatTypes.AsNoTracking()
+                .Where(x => x.TypeName.ToLower().Contains("standard"))
+                .OrderBy(x => x.SeatTypeId)
+                .Select(x => x.SeatTypeId)
+                .FirstOrDefaultAsync();
+            if (standardSeatTypeId == 0)
+            {
+                standardSeatTypeId = await _context.CinemaSeatTypes.AsNoTracking()
+                    .OrderBy(x => x.SeatTypeId)
+                    .Select(x => x.SeatTypeId)
+                    .FirstOrDefaultAsync();
+            }
+
+            var dayTypes = await _context.CinemaDayTypes.AsNoTracking().ToListAsync();
+            var priceSeatTypeIds = seatTypeIds.Append(standardSeatTypeId).Distinct().ToList();
+            var priceRules = await _context.CinemaTicketPrices.AsNoTracking()
+                .Where(x =>
+                    x.CinemaId == hall.CinemaId &&
+                    x.HallTypeId == hall.HallTypeId &&
+                    priceSeatTypeIds.Contains(x.SeatTypeId))
+                .ToListAsync();
+            var calculatedPrices = seats.ToDictionary(
+                seat => seat.SeatId,
+                seat => TicketPriceCalculator.ResolvePrice(
+                    showtime,
+                    hall.CinemaId,
+                    hall.HallTypeId,
+                    seat.SeatTypeId,
+                    seatTypes.GetValueOrDefault(seat.SeatTypeId)?.PriceModifier ?? 0,
+                    standardSeatTypeId,
+                    dayTypes,
+                    priceRules));
+
+            var hasStalePrice = dto.Seats.Any(x =>
+                !calculatedPrices.TryGetValue(x.SeatId, out var calculatedPrice) ||
+                x.Price != calculatedPrice);
+            if (hasStalePrice)
+            {
+                return Conflict(new
+                {
+                    message = "Ticket prices have changed. Please refresh the seat map before booking",
+                    prices = calculatedPrices.Select(x => new { seatId = x.Key, price = x.Value })
+                });
+            }
+
+            var ticketTotal = calculatedPrices.Values.Sum();
             var itemIds = dto.Concessions.Select(x => x.ItemId).Distinct().ToList();
             var items = await _context.CinemaConcessionItems.Where(x => itemIds.Contains(x.ItemId)).ToDictionaryAsync(x => x.ItemId);
             if (dto.Concessions.Any(x => x.Quantity <= 0))
@@ -390,7 +464,7 @@ namespace API_Service.Controllers
                     BookingId = booking.BookingId,
                     SeatId = seat.SeatId,
                     SeatTypeId = seat.SeatTypeId,
-                    Price = requestedSeat.Price,
+                    Price = calculatedPrices[requestedSeat.SeatId],
                     QrCode = string.IsNullOrWhiteSpace(requestedSeat.QrCode)
                         ? Guid.NewGuid().ToString("N")
                         : requestedSeat.QrCode

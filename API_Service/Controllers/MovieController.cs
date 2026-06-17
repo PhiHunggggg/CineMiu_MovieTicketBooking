@@ -272,7 +272,7 @@ using Microsoft.EntityFrameworkCore;
             _context.CinemaMovieGenres.RemoveRange(_context.CinemaMovieGenres.Where(x => x.MovieId == movieId));
             if (genreIds != null)
             {
-                _context.CinemaMovieGenres.AddRange(genreIds.Distinct().Select(genreId => new CinemaMovieGenre { MovieId = movieId, GenreId = (byte)genreId }));
+                _context.CinemaMovieGenres.AddRange(genreIds.Distinct().Select(genreId => new CinemaMovieGenre { MovieId = movieId, GenreId = genreId }));
             }
 
             await _context.SaveChangesAsync();

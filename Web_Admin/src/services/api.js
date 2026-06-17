@@ -72,6 +72,7 @@ export const cinemaApi = {
     getHalls: (cinemaId) => api.get(`/cinemas/${cinemaId}/halls`),
     createHall: (cinemaId, data) => api.post(`/cinemas/${cinemaId}/halls`, data),
     updateHall: (hallId, data) => api.put(`/cinemas/halls/${hallId}`, data),
+    updateHallStatus: (hallId, status) => api.patch(`/cinemas/halls/${hallId}/status`, { status }),
     deleteHall: (hallId) => api.delete(`/cinemas/halls/${hallId}`),
     getHallSeats: (hallId) => api.get(`/cinemas/halls/${hallId}/seats`),
     updateHallSeats: (hallId, data) => api.put(`/cinemas/halls/${hallId}/seats`, data),

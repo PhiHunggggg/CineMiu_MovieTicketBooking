@@ -850,6 +850,7 @@ label {
 .form-control,
 .custom-select,
 .showtimes-filters select,
+.showtimes-filters input[type="date"],
 .form-field input,
 .form-field select,
 .form-field textarea {
@@ -873,6 +874,7 @@ textarea.form-control,
 .form-control:focus,
 .custom-select:focus,
 .showtimes-filters select:focus,
+.showtimes-filters input[type="date"]:focus,
 .form-field input:focus,
 .form-field select:focus,
 .form-field textarea:focus {
@@ -1048,13 +1050,15 @@ textarea.form-control,
 
 .badge-success,
 .status-selling,
-.status-completed {
+.status-completed,
+.status-showing {
     color: #087647;
     background: #dcfce7;
 }
 
 .badge-primary,
-.status-scheduled {
+.status-scheduled,
+.status-upcoming {
     color: #1d4ed8;
     background: #dbeafe;
 }
@@ -1078,6 +1082,7 @@ textarea.form-control,
 
 .badge-secondary,
 .badge-light,
+.status-ended,
 .status-unknown {
     color: #5f6b7c;
     background: #e9eef4;
@@ -1247,6 +1252,7 @@ textarea.form-control,
 .showtimes-filters {
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     gap: 8px;
     padding: 14px 20px;
     border-bottom: 1px solid var(--admin-border);
@@ -1323,7 +1329,8 @@ textarea.form-control,
     font-size: 9px;
 }
 
-.showtimes-filters select {
+.showtimes-filters select,
+.showtimes-filters input[type="date"] {
     width: min(100%, 260px);
 }
 
@@ -1358,7 +1365,9 @@ textarea.form-control,
 .showtime-movie-cell span,
 .showtime-location-cell strong,
 .showtime-location-cell span,
-.showtime-location-cell small {
+.showtime-location-cell small,
+.showtime-price-cell strong,
+.showtime-price-cell span {
     display: block;
 }
 
@@ -1370,7 +1379,8 @@ textarea.form-control,
 .showtime-date-cell span,
 .showtime-movie-cell span,
 .showtime-location-cell span,
-.showtime-location-cell small {
+.showtime-location-cell small,
+.showtime-price-cell span {
     margin-top: 3px;
     color: var(--admin-muted);
     font-size: 11px;
@@ -1818,6 +1828,96 @@ textarea.form-control,
     width: 220px;
 }
 
+.price-page-size {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    color: var(--admin-muted);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.price-page-size .form-control {
+    width: 112px;
+}
+
+.price-search-panel {
+    padding: 15px;
+    border-bottom: 1px solid var(--admin-border);
+    background: #f8fafc;
+}
+
+.price-search-row {
+    display: grid;
+    grid-template-columns: minmax(260px, 1fr) auto auto;
+    gap: 9px;
+}
+
+.price-search-input {
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 40px;
+    padding: 0 11px;
+    border: 1px solid #cfd9e6;
+    border-radius: 6px;
+    background: #fff;
+    transition: border-color 0.16s ease, box-shadow 0.16s ease;
+}
+
+.price-search-input:focus-within {
+    border-color: #62a7c5;
+    box-shadow: 0 0 0 3px rgba(8, 124, 167, 0.12);
+}
+
+.price-search-input i {
+    flex: 0 0 auto;
+    color: #7b899b;
+}
+
+.price-search-input input {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    padding: 0;
+    border: 0;
+    outline: 0;
+    color: #344258;
+    background: transparent;
+}
+
+.price-search-input input::placeholder {
+    color: #8b98a9;
+}
+
+.price-advanced-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 14px;
+}
+
+.price-advanced-grid .form-field {
+    gap: 5px;
+}
+
+.price-advanced-grid .form-field > span {
+    font-size: 12px;
+}
+
+.price-pagination-footer {
+    min-height: 58px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 11px 15px;
+    border-top: 1px solid var(--admin-border);
+    color: var(--admin-muted);
+    font-size: 12px;
+}
+
 .theater-alert {
     margin: 14px 15px 0;
 }
@@ -1853,6 +1953,20 @@ textarea.form-control,
 .hall-name-cell small {
     margin-top: 2px;
     color: var(--admin-muted);
+}
+
+.hall-showtime-link {
+    display: inline-flex;
+    align-items: center;
+    margin-top: 3px;
+    color: #087ca7;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.hall-showtime-link:hover {
+    color: #065f7f;
+    text-decoration: underline;
 }
 
 .hall-status {
@@ -1941,6 +2055,33 @@ textarea.form-control,
     background: #dbeafe;
     font-size: 11px;
     font-weight: 700;
+}
+
+.price-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 24px;
+    margin-bottom: 4px;
+    padding: 3px 8px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.price-status.status-active {
+    color: #087647;
+    background: #dcfce7;
+}
+
+.price-status.status-upcoming {
+    color: #1d4ed8;
+    background: #dbeafe;
+}
+
+.price-status.status-expired {
+    color: #5f6b7c;
+    background: #e9eef4;
 }
 
 .price-value {
@@ -2090,6 +2231,10 @@ code {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .price-advanced-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
     .col-xl-3,
     .col-xl-4,
     .col-xl-6,
@@ -2117,6 +2262,10 @@ code {
 
     .system-summary-grid {
         grid-template-columns: 1fr;
+    }
+
+    .price-advanced-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 
@@ -2219,7 +2368,8 @@ code {
         margin-right: 0 !important;
     }
 
-    .showtimes-filters select {
+    .showtimes-filters select,
+    .showtimes-filters input[type="date"] {
         width: 100%;
     }
 
@@ -2235,6 +2385,28 @@ code {
 
     .theater-filter-controls .form-control {
         width: 100%;
+    }
+
+    .price-page-size {
+        justify-content: space-between;
+    }
+
+    .price-search-row {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .price-search-input {
+        grid-column: 1 / -1;
+    }
+
+    .price-pagination-footer {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .price-pagination-footer .pagination {
+        max-width: 100%;
+        overflow-x: auto;
     }
 
     .modal {
@@ -2258,6 +2430,19 @@ code {
     .showtime-dependency-grid {
         grid-template-columns: 1fr;
         padding: 10px;
+    }
+
+    .price-search-row,
+    .price-advanced-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .price-search-input {
+        grid-column: auto;
+    }
+
+    .price-search-row .btn {
+        width: 100%;
     }
 
     .showtime-price-status {
