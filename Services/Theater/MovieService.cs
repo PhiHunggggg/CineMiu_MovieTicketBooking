@@ -12,6 +12,11 @@ namespace Services.Theater
 {
     public class MovieService(IMovieRepository movieRepository) : IMovieService
     {
+        public async Task<List<MovieDTO.GenreResponse>> GetGenresAsync()
+        {
+            return await movieRepository.GetGenresAsync();
+        }
+
         public async Task<PaginationResponse<MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, string? status, int? cinemaId, int page = 1, int pageSize = 12)
         {
             page = Math.Max(page, 1);

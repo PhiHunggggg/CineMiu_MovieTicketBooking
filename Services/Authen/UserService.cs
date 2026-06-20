@@ -6,11 +6,128 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Libs.Auth;
+using DTO.Authen;
+using static DTO.Common.Paging;
 
 namespace Services.Authen
 {
     public class UserService(IUserRepository userRepository) : IUserService
     {
+        public async Task<PaginationResponse<UserDto.UserResponse>> GetUsersAsync(
+            string? keyword, byte? roleId, bool? isActive, int page, int pageSize)
+        {
+            page = Math.Max(page, 1);
+            pageSize = Math.Clamp(pageSize, 1, 100);
+
+            var users = await userRepository.SearchAsync(keyword, roleId, isActive);
+            var totalCount = users.Count;
+
+            var items = new List<UserDto.UserResponse>();
+            var startIndex = (page - 1) * pageSize;
+            var endIndex = Math.Min(startIndex + pageSize, users.Count);
+            for (var index = startIndex; index < endIndex; index++)
+            {
+                items.Add(await ToResponse(users[index]));
+            }
+
+            return new PaginationResponse<UserDto.UserResponse>
+            {
+                Page = page,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+                Items = items
+            };
+        }
+        public async Task<UserDto.UserResponse> GetUserByIdAsync(int id)
+        {
+            var user = await userRepository.GetByIdAsync(id);
+            if (user == null)
+            {
+                throw new ArgumentException("User not found");
+            }
+
+            return await ToResponse(user);
+        }
+
+        public async Task CreateUserAsync(UserDto.UserRequest request)
+        {
+            var validationError = await ValidateUserRequest(request, requirePassword: true);
+            if (validationError != null)
+            {
+                throw new ArgumentException(validationError);
+            }
+
+            var now = DateTime.UtcNow;
+            var user = new Users
+            {
+                RoleId = request.RoleId == 0 ? (byte)1 : request.RoleId,
+                CinemaId = request.CinemaId,
+                FullName = request.FullName.Trim(),
+                Email = request.Email.Trim(),
+                Phone = OptionalText(request.Phone),
+                PasswordHash = TokenHelper.HashPasswordForStorage(request.Password!),
+                AvatarUrl = OptionalText(request.AvatarUrl),
+                DateOfBirth = request.DateOfBirth,
+                Gender = OptionalText(request.Gender),
+                IsActive = request.IsActive,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            await userRepository.CreateAsync(user);
+        }
+
+        public async Task UpdateUserAsync(int id, UserDto.UserRequest request)
+        {
+            var user = await userRepository.GetByIdAsync(id);
+            if (user == null)
+            {
+                throw new ArgumentException("User not found");
+            }
+
+            var validationError = await ValidateUserRequest(request, requirePassword: false, currentUserId: id);
+            if (validationError != null)
+            {
+                throw new ArgumentException(validationError);
+            }
+
+            user.RoleId = request.RoleId == 0 ? (byte)1 : request.RoleId;
+            user.CinemaId = request.CinemaId;
+            user.FullName = request.FullName.Trim();
+            user.Email = request.Email.Trim();
+            user.Phone = OptionalText(request.Phone);
+            user.AvatarUrl = OptionalText(request.AvatarUrl);
+            user.DateOfBirth = request.DateOfBirth;
+            user.Gender = OptionalText(request.Gender);
+            user.IsActive = request.IsActive;
+            user.UpdatedAt = DateTime.UtcNow;
+
+            if (!string.IsNullOrWhiteSpace(request.Password))
+            {
+                user.PasswordHash = TokenHelper.HashPasswordForStorage(request.Password);
+            }
+
+            await userRepository.UpdateAsync(user);
+        }
+
+        public async Task<List<object>> GetRolesAsync()
+        {
+            var roles = await userRepository.GetRolesAsync();
+            var result = new List<object>();
+            foreach (var role in roles)
+            {
+                result.Add(new
+                {
+                    roleId = role.RoleId,
+                    roleName = role.RoleName,
+                    description = role.Description
+                });
+            }
+
+            return result;
+        }
+
         public async Task<Users?> Authenticate(string username, string password)
         {
             if (string.IsNullOrEmpty(username) || string.IsNullOrWhiteSpace(password))
@@ -67,6 +184,77 @@ namespace Services.Authen
         public async Task<string?> ResolveRoleName(byte roleId)
         {
             return await userRepository.ResolveRoleName(roleId)?? "User";
+        }
+
+        private async Task<UserDto.UserResponse> ToResponse(Users user)
+        {
+            return new UserDto.UserResponse
+            {
+                UserId = user.UserId,
+                RoleId = user.RoleId,
+                RoleName = await ResolveRoleName(user.RoleId) ?? "User",
+                CinemaId = user.CinemaId,
+                FullName = user.FullName,
+                Email = user.Email,
+                Phone = user.Phone,
+                AvatarUrl = user.AvatarUrl,
+                DateOfBirth = user.DateOfBirth,
+                Gender = user.Gender,
+                IsActive = user.IsActive
+            };
+        }
+
+        private async Task<string?> ValidateUserRequest(UserDto.UserRequest request, bool requirePassword, int? currentUserId = null)
+        {
+            if (string.IsNullOrWhiteSpace(request.FullName))
+            {
+                return "Full name is required";
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Email) || !request.Email.Contains('@') || !request.Email.Contains('.'))
+            {
+                return "Valid email is required";
+            }
+
+            if (requirePassword && string.IsNullOrWhiteSpace(request.Password))
+            {
+                return "Password is required";
+            }
+
+            if (!string.IsNullOrWhiteSpace(request.Password) && request.Password.Length < 6)
+            {
+                return "Password must have at least 6 characters";
+            }
+
+            var roles = await userRepository.GetRolesAsync();
+            var roleId = request.RoleId == 0 ? (byte)1 : request.RoleId;
+            var roleExists = false;
+            foreach (var role in roles)
+            {
+                if (role.RoleId == roleId)
+                {
+                    roleExists = true;
+                    break;
+                }
+            }
+
+            if (!roleExists)
+            {
+                return "Selected role does not exist";
+            }
+
+            if (await userRepository.EmailExistsAsync(request.Email.Trim(), currentUserId))
+            {
+                return "Email already exists";
+            }
+
+            return null;
+        }
+
+        private static string? OptionalText(string? value)
+        {
+            var trimmed = (value ?? "").Trim();
+            return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
         }
     }
 }

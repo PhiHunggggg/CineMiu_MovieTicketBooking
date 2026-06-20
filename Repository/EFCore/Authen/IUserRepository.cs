@@ -7,6 +7,9 @@ namespace Repository.EFCore.Authen
 {
     public interface IUserRepository
     {
+        Task<List<Users>> SearchAsync(string? keyword, byte? roleId, bool? isActive);
+        Task<bool> EmailExistsAsync(string email, int? excudeUserId = null);
+        Task<List<Role>> GetRolesAsync();
         Task<Users?> GetByIndentifierAsync(string identifier);
         Task<Users?> GetByIdAsync(int id);
         Task<List<Users>> GetAllAsync();

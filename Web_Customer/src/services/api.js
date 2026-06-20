@@ -127,6 +127,6 @@ export const loyaltyApi = {
   getByUser: (userId) => request(`/loyalty/users/${userId}`),
   getByEmail: (email) => request(`/loyalty/by-email?email=${encodeURIComponent(email)}`),
   getTransactions: (userId) => request(`/loyalty/users/${userId}/transactions`),
-  getTransactionsByEmail: (email) => request(`/loyalty/by-email/transactions?email=${encodeURIComponent(email)}`),
+  getTransactionsByEmail: (email) => request(`/loyalty/transactions-by-email?email=${encodeURIComponent(email)}`),
 };
 

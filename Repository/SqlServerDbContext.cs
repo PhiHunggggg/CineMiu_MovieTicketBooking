@@ -9,6 +9,34 @@ namespace Repository
 {
     public class SqlServerDbContext(DbContextOptions<SqlServerDbContext> options) : DbContext(options)
     {
+        // Backwards-compatible DbSet aliases used by API_Service controllers (legacy 'Cinema*' names)
+        public DbSet<Bookings.Booking> CinemaBookings { get; set; }
+        public DbSet<Users> CinemaUsers { get; set; }
+        public DbSet<ShowTime> CinemaShowtimes { get; set; }
+        public DbSet<Movie> CinemaMovies { get; set; }
+        public DbSet<Hall> CinemaHalls { get; set; }
+        public DbSet<Tickets.Ticket> CinemaTickets { get; set; }
+        public DbSet<Bookings.Payment> CinemaPayments { get; set; }
+        public DbSet<Genre> CinemaGenres { get; set; }
+        public DbSet<Chain> CinemaChains { get; set; }
+        public DbSet<HallType> CinemaHallTypes { get; set; }
+        public DbSet<SeatType> CinemaSeatTypes { get; set; }
+        public DbSet<DayType> CinemaDayTypes { get; set; }
+        public DbSet<ConcessionCategory> CinemaConcessionCategories { get; set; }
+        public DbSet<ConcessionItem> CinemaConcessionItems { get; set; }
+        public DbSet<Promotion> CinemaPromotions { get; set; }
+        public DbSet<PromoUsage> CinemaPromoUsages { get; set; }
+        public DbSet<Role> CinemaRoles { get; set; }
+        public DbSet<Country> CinemaCountries { get; set; }
+        public DbSet<PaymentMethod> CinemaPaymentMethods { get; set; }
+        public DbSet<Seat> CinemaSeats { get; set; }
+        public DbSet<Tickets.TicketPrice> CinemaTicketPrices { get; set; }
+        public DbSet<Bookings.BookingConcession> CinemaBookingConcessions { get; set; }
+        public DbSet<Bookings.SeatLock> CinemaSeatLocks { get; set; }
+        public DbSet<PointTransaction> CinemaPointTransactions { get; set; }
+        public DbSet<Notification> CinemaNotifications { get; set; }
+        public DbSet<MovieGenre> CinemaMovieGenres { get; set; }
+        public DbSet<Movie> CinemaMovie { get; set; }
         public DbSet<Role> Roles { get; set; }
         public DbSet<Users> Users { get; set; }
         public DbSet<Chain> Chains { get; set; }

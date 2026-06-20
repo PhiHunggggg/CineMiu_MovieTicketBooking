@@ -34,9 +34,52 @@ namespace DTO.Booking
             public DateTime EndTime { get; set; }
             public int TicketCount { get; set; }
             public int UsedTicketCount { get; set; }
-            public List<BookingTicketResponse> Tickets { get; set; } = new();
+            public decimal RefundAmount { get; set; }
+            public DateTime? RefundedAt { get; set; }
+        }
+        public class BookingDetailResponse
+        {
+            public BookingResponse Booking { get; set; } = new();
+            public List<TicketResponse> Tickets { get; set; } = new();
             public List<BookingConcessionResponse> Concessions { get; set; } = new();
-            public List<BookingPaymentResponse> Payments { get; set; } = new();
+            public List<PaymentResponse> Payments { get; set; } = new();
+        }
+        public class TicketResponse
+        {
+            public int TicketId { get; set; }
+            public int BookingId { get; set; }
+            public int SeatId { get; set; }
+            public string SeatCode { get; set; } = string.Empty;
+            public byte SeatTypeId { get; set; }
+            public string SeatTypeName { get; set; } = string.Empty;
+            public decimal Price { get; set; }
+            public string QrCode { get; set; } = string.Empty;
+            public bool IsUsed { get; set; }
+            public DateTime? UsedAt { get; set; }
+            public int? CheckedBy { get; set; }
+        }
+        public class BookingConcessionResponse
+        {
+            public int Id { get; set; }
+            public int BookingId { get; set; }
+            public int ItemId { get; set; }
+            public string ItemName { get; set; } = string.Empty;
+            public byte Quantity { get; set; }
+            public decimal UnitPrice { get; set; }
+            public decimal Subtotal { get; set; }
+        }
+        public class PaymentResponse
+        {
+            public int PaymentId { get; set; }
+            public int BookingId { get; set; }
+            public byte MethodId { get; set; }
+            public string? TransactionRef { get; set; }
+            public decimal Amount { get; set; }
+            public string Currency { get; set; } = "VND";
+            public string Status { get; set; } = "pending";
+            public DateTime? PaidAt { get; set; }
+            public decimal? RefundAmount { get; set; }
+            public DateTime? RefundedAt { get; set; }
         }
         public class BookingCreateRequest
         {
@@ -67,47 +110,15 @@ namespace DTO.Booking
         {
             public string? Reason { get; set; }
         }
-        public class BookingPaymentCreateRequest
-        {
-            public byte MethodId { get; set; }
-            public decimal Amount { get; set; }
-            public string Status { get; set; } = "success";
-            public string? TransactionRef { get; set; }
-            public DateTime? PaidAt { get; set; }
-            public string? PromoCode { get; set; }
-        }
-        public class BookingTicketResponse
-        {
-            public int TicketId { get; set; }
-            public int SeatId { get; set; }
-            public string SeatCode { get; set; } = string.Empty;
-            public decimal Price { get; set; }
-            public string QrCode { get; set; } = string.Empty;
-            public bool IsUsed { get; set; }
-            public DateTime? UsedAt { get; set; }
-        }
-        public class BookingConcessionResponse
-        {
-            public int ItemId { get; set; }
-            public string ItemName { get; set; } = string.Empty;
-            public byte Quantity { get; set; }
-            public decimal UnitPrice { get; set; }
-            public decimal Subtotal { get; set; }
-        }
-        public class BookingPaymentResponse
-        {
-            public int PaymentId { get; set; }
-            public byte MethodId { get; set; }
-            public decimal Amount { get; set; }
-            public string Status { get; set; } = string.Empty;
-            public string? TransactionRef { get; set; }
-            public DateTime? PaidAt { get; set; }
-        }
         public class TicketCheckInDto
         {
             public int? TicketId { get; set; }
             public string? QrCode { get; set; }
             public int? CheckedBy { get; set; }
+        }
+        public class RefundBookingDto
+        {
+            public string? Reason { get; set; }
         }
     }
 }
