@@ -530,11 +530,10 @@ namespace Repository.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "user_memberships",
+                name: "user_membershipb_s",
                 columns: table => new
                 {
-                    user_id = table.Column<int>(type: "int", nullable: false)
-                        .Annotation("SqlServer:Identity", "1, 1"),
+                    user_id = table.Column<int>(type: "int", nullable: false),
                     total_points = table.Column<int>(type: "int", nullable: false),
                     tier_id = table.Column<int>(type: "int", nullable: false),
                     updated_at = table.Column<DateTime>(type: "datetime2", nullable: false)

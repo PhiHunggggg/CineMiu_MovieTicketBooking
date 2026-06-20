@@ -134,7 +134,16 @@ namespace Repository
             modelBuilder.Entity<Promotion>().Property(e => e.MaxDiscount).HasPrecision(10, 2);
 
             modelBuilder.Entity<MemberTier>().HasIndex(e => e.MinPoints);
+
+            modelBuilder.Entity<UserMembership>()
+                .HasKey(e => e.UserId);
+
+            modelBuilder.Entity<UserMembership>()
+                .Property(e => e.UserId)
+                .ValueGeneratedNever();
+
             modelBuilder.Entity<UserMembership>().HasIndex(e => e.TierId);
+
             modelBuilder.Entity<PointTransaction>().HasIndex(e => e.UserId);
             modelBuilder.Entity<PointTransaction>().HasIndex(e => e.BookingId);
 

@@ -1,0 +1,54 @@
+.point-history {
+  margin-top: 24px;
+}
+
+.point-history__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.point-history__header h3 {
+  margin: 0;
+}
+
+.point-history__header span {
+  color: var(--text-muted, #777);
+  font-size: 0.9rem;
+}
+
+.point-history__list {
+  display: grid;
+  gap: 12px;
+}
+
+.point-history__item {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.point-history__item p {
+  margin: 4px 0 0;
+  color: var(--text-muted, #777);
+  font-size: 0.875rem;
+}
+
+.point-history__plus {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.point-history__minus {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.point-history__empty {
+  color: var(--text-muted, #777);
+}

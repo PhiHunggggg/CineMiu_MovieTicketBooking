@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Data.SqlClient;
 using Microsoft.OpenApi.Models;
 using Entities;
 using Repository;
@@ -62,9 +63,10 @@ builder.Services.AddCors(options =>
 
 
 
-var connectionString = builder.Configuration.GetConnectionString("ConnectedDb")
-    ?? "Server=(localdb)\\MSSQLLocalDB;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
 var useInMemoryDatabase = builder.Configuration.GetValue("UseInMemoryDatabase", true);
+var connectionString = useInMemoryDatabase
+    ? null
+    : BuildSqlServerConnectionString(builder.Configuration, "ConnectedDb");
 builder.Services.AddDbContext<SqlServerDbContext>(options =>
 {
     if (useInMemoryDatabase)
@@ -73,7 +75,7 @@ builder.Services.AddDbContext<SqlServerDbContext>(options =>
     }
     else
     {
-        options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure());
+        options.UseSqlServer(connectionString!, sql => sql.EnableRetryOnFailure());
     }
 });
 
@@ -227,4 +229,41 @@ static async Task EnsureShowtimesAsync(IServiceProvider services)
     {
         Console.WriteLine($"Skipping showtime auto-generation because database is not ready: {ex.Message}");
     }
+}
+
+static string BuildSqlServerConnectionString(IConfiguration configuration, string connectionStringName)
+{
+    if (!configuration.GetValue("SqlServerAuth:Enabled", false))
+    {
+        return configuration.GetConnectionString(connectionStringName)
+            ?? "Server=DESKTOP-FNMVI5L;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
+    }
+
+    var userId = Environment.GetEnvironmentVariable("CINEMIU_DB_USER")
+        ?? configuration["SqlServerAuth:UserId"];
+    var password = Environment.GetEnvironmentVariable("CINEMIU_DB_PASSWORD")
+        ?? configuration["SqlServerAuth:Password"];
+
+    if (string.IsNullOrWhiteSpace(userId))
+    {
+        throw new InvalidOperationException("SqlServerAuth:UserId or CINEMIU_DB_USER must be set when SQL Server authentication is enabled.");
+    }
+
+    if (string.IsNullOrWhiteSpace(password))
+    {
+        throw new InvalidOperationException("SqlServerAuth:Password or CINEMIU_DB_PASSWORD must be set when SQL Server authentication is enabled.");
+    }
+
+    var sqlConnection = new SqlConnectionStringBuilder
+    {
+        DataSource = configuration["SqlServerAuth:Server"] ?? "DESKTOP-FNMVI5L",
+        InitialCatalog = configuration["SqlServerAuth:Database"] ?? "BaseCoreBookingMovie",
+        UserID = userId,
+        Password = password,
+        IntegratedSecurity = false,
+        TrustServerCertificate = true
+    };
+    sqlConnection["Encrypt"] = false;
+
+    return sqlConnection.ConnectionString;
 }

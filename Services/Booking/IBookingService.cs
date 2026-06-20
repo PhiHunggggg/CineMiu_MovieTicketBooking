@@ -14,9 +14,10 @@ namespace Services.Booking
         Task<BookingDto.BookingResponse?> GetByIdAsync(int id);
         Task<BookingDto.BookingDetailResponse?> GetDetailAsync(int id);
         Task<BookingDto.BookingResponse?> GetByBookingCodeAsync(string bookingCode);
-        Task<BookingDto.BookingResponse?> GetByUserEmailAsync(string email);
-        Task<BookingDto.BookingResponse?> GetByUserAsync(int userId);
+        Task<List<BookingDto.BookingResponse>> GetByUserEmailAsync(string email);
+        Task<List<BookingDto.BookingResponse>> GetByUserAsync(int userId);
         Task<int> Create(BookingDto.BookingCreateRequest request);
+        Task<BookingDto.BookingResponse?> AddPaymentAsync(int bookingId, BookingDto.BookingPaymentCreateRequest request, int currentUserId);
         Task Cancel(int bookingId, BookingDto.CancelBookingDto cancel, int currentUserId, string currentUserRole, int? currentUserCinemaId);
         Task RefundAsync(int bookingId, BookingDto.RefundBookingDto refund);
         Task<int?> GetBookingIdByTicketQrAsync(string qrCode);

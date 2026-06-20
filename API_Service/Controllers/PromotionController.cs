@@ -1,9 +1,9 @@
-using Entities;
+﻿using Entities;
 using Repository;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-  namespace API_Service.Controllers
+namespace API_Service.Controllers
 {
     [Route("api/promotions")]
     [ApiController]
@@ -49,6 +49,56 @@ using Microsoft.EntityFrameworkCore;
         public Task<IActionResult> GetVoucher(string code)
         {
             return GetByCode(code);
+        }
+
+        [HttpPost("validate")]
+        public async Task<IActionResult> ValidateVoucher([FromBody] ValidatePromotionRequest request)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.PromoCode))
+            {
+                return BadRequest(new { message = "Promotion code is required" });
+            }
+
+            var now = DateTime.UtcNow;
+            var code = request.PromoCode.Trim().ToUpperInvariant();
+            var promo = await _context.CinemaPromotions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.PromoCode == code && x.IsActive && x.ValidFrom <= now && x.ValidTo >= now);
+
+            if (promo == null)
+            {
+                return BadRequest(new { message = "Voucher does not exist or has expired." });
+            }
+
+            if (request.OrderAmount < promo.MinOrderAmt)
+            {
+                return BadRequest(new { message = $"Minimum order amount is {promo.MinOrderAmt:n0} VND." });
+            }
+
+            var discount = promo.DiscountType == "percent"
+                ? request.OrderAmount * promo.DiscountValue / 100m
+                : promo.DiscountValue;
+
+            if (promo.MaxDiscount.HasValue)
+            {
+                discount = Math.Min(discount, promo.MaxDiscount.Value);
+            }
+
+            discount = Math.Min(Math.Max(0, discount), request.OrderAmount);
+
+            return Ok(new
+            {
+                promotion = new
+                {
+                    promo.PromoId,
+                    id = promo.PromoId,
+                    promo.PromoCode,
+                    promo.Description,
+                    promo.DiscountType,
+                    promo.DiscountValue
+                },
+                discountAmount = discount
+            });
         }
 
         [HttpPost]
@@ -170,5 +220,12 @@ using Microsoft.EntityFrameworkCore;
         public DateTime ValidFrom { get; set; }
         public DateTime ValidTo { get; set; }
         public bool? IsActive { get; set; }
+    }
+
+    public class ValidatePromotionRequest
+    {
+        public string PromoCode { get; set; } = "";
+        public int UserId { get; set; }
+        public decimal OrderAmount { get; set; }
     }
 }

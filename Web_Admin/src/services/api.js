@@ -80,6 +80,7 @@ export const cinemaApi = {
 
 export const showtimeApi = {
     getAll: (params) => api.get('/showtimes', { params }),
+    generate: (days = 5) => api.post('/showtimes/generate', null, { params: { days }, timeout: 30000 }),
     getById: (id) => api.get(`/showtimes/${id}`),
     create: (data) => api.post('/showtimes', data),
     update: (id, data) => api.put(`/showtimes/${id}`, data),
@@ -97,6 +98,7 @@ export const revenueApi = {
     getRevenue: (params) => api.get('/reports/revenue', { params }),
     getSystemRevenue: (params) => api.get('/reports/revenue', { params }),
     getCinemaRevenue: (cinemaId, params) => api.get('/reports/revenue', { params: { ...params, cinemaId } }),
+    getOccupancy: (params) => api.get('/reports/occupancy', { params }),
 };
 
 export const bookingAdminApi = {

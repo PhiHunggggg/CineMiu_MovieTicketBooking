@@ -1,45 +1,67 @@
-import { useEffect, useState } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { promotionApi } from '../../services/api';
-
-const formatPrice = (value) => `${Number(value || 0).toLocaleString('vi-VN')}đ`;
+import './PromotionsPage.css';
 
 export default function PromotionsPage() {
-    const [promotions, setPromotions] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+  const [promotions, setPromotions] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        promotionApi.getAll()
-            .then(setPromotions)
-            .catch((err) => setError(err.message))
-            .finally(() => setLoading(false));
-    }, []);
+  useEffect(() => {
+    promotionApi.getAll()
+      .then(data => setPromotions(Array.isArray(data) ? data : []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
-    return (
-        <div className="listing-page container">
-            <div className="listing-page__header">
-                <p>Ưu đãi hiện hành</p>
-                <h1>Khuyến mãi</h1>
-            </div>
-            {loading && <p>Đang tải khuyến mãi...</p>}
-            {error && <p className="form-error">{error}</p>}
-            <div className="promotion-grid">
-                {promotions.map((promotion) => (
-                    <article className="promotion-card" key={promotion.promoId}>
-                        <span>{promotion.promoCode}</span>
-                        <h2>
-                            {promotion.discountType === 'percent'
-                                ? `Giảm ${promotion.discountValue}%`
-                                : `Giảm ${formatPrice(promotion.discountValue)}`}
-                        </h2>
-                        <p>{promotion.description || 'Áp dụng theo điều kiện chương trình.'}</p>
-                        <small>
-                            Hạn dùng: {new Date(promotion.validTo).toLocaleDateString('vi-VN')}
-                        </small>
-                    </article>
-                ))}
-            </div>
-            {!loading && promotions.length === 0 && <p>Hiện chưa có khuyến mãi.</p>}
-        </div>
-    );
+  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ';
+  const formatDate = (d) => new Date(d).toLocaleDateString('vi-VN');
+
+  return (
+    <div className="promos-page" id="promotions-page">
+      <div className="promos-page__container container">
+        <h1 className="promos-page__title">Khuyến mãi</h1>
+        <p className="promos-page__subtitle">Ưu đãi đặc biệt dành riêng cho bạn</p>
+
+        {loading ? (
+          <div className="promos-page__grid">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="skeleton" style={{ height: 280, borderRadius: 16 }} />
+            ))}
+          </div>
+        ) : promotions.length === 0 ? (
+          <div className="promos-page__empty">
+            <span>🎁</span>
+            <p>Hiện chưa có khuyến mãi nào</p>
+          </div>
+        ) : (
+          <div className="promos-page__grid">
+            {promotions.map(promo => (
+              <div key={promo.promoId} className="promo-card" id={`promo-card-${promo.promoId}`}>
+                <div className="promo-card__banner">
+                  <div className="promo-card__banner-placeholder"><span>🎉</span></div>
+                  <div className="promo-card__discount-badge">
+                    {promo.discountType === 'percent' ? `${promo.discountValue}%` : formatPrice(promo.discountValue)}
+                  </div>
+                </div>
+                <div className="promo-card__body">
+                  <h3 className="promo-card__name">{promo.promoCode}</h3>
+                  {promo.description && <p className="promo-card__desc">{promo.description}</p>}
+                  <div className="promo-card__details">
+                    <div className="promo-card__detail">
+                      <span className="promo-card__detail-label">Đơn tối thiểu:</span>
+                      <span>{formatPrice(promo.minOrderAmt)}</span>
+                    </div>
+                    <div className="promo-card__detail">
+                      <span className="promo-card__detail-label">Thời gian:</span>
+                      <span>{formatDate(promo.validFrom)} - {formatDate(promo.validTo)}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

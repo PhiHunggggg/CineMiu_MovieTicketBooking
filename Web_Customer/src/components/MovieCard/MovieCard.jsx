@@ -1,33 +1,91 @@
+﻿import { useState } from 'react';
 import { Link } from 'react-router-dom';
+import './MovieCard.css';
 
 export default function MovieCard({ movie }) {
-    const movieId = movie.movieId || movie.id;
-    return (
-        <article className="mp-movie-card">
-            <Link to={`/movies/${movieId}`} className="mp-movie-card__poster">
-                {movie.posterUrl ? (
-                    <img src={movie.posterUrl} alt={movie.title} loading="lazy" />
-                ) : (
-                    <span className="mp-movie-card__placeholder">Phim</span>
-                )}
-                {movie.ageRating && <span className="mp-movie-card__rated">{movie.ageRating}</span>}
-                {movie.imdbRating && (
-                    <span className="mp-movie-card__rating">★ {Number(movie.imdbRating).toFixed(1)}</span>
-                )}
-                <span className="mp-movie-card__overlay">
-                    <span className="mp-movie-card__detail-btn">Xem chi tiết</span>
-                </span>
+  const [showTrailer, setShowTrailer] = useState(false);
+  const genres = Array.isArray(movie.genres ?? movie.Genres) ? (movie.genres ?? movie.Genres) : [];
+  const duration = movie.durationMins ?? movie.DurationMins ?? movie.durationMin ?? movie.DurationMin;
+
+  // Hàm lấy ID từ link youtube để tạo link nhúng (embed)
+  const getYoutubeEmbedUrl = (url) => {
+    if (!url) return '';
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[2].length === 11)
+      ? `https://www.youtube.com/embed/${match[2]}?autoplay=1`
+      : url;
+  };
+
+  const formatDate = (d) => {
+    if (!d) return '';
+    return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
+  };
+
+  const movieId = movie.movieId ?? movie.MovieId ?? movie.id ?? movie.Id;
+  const title = movie.title ?? movie.Title ?? 'Phim';
+
+  return (
+    <>
+      <div className="movie-card-v2" id={`movie-card-${movieId}`}>
+        <div className="movie-card-v2__poster">
+          {movie.posterUrl ? (
+            <img src={movie.posterUrl} alt={title} loading="lazy" />
+          ) : (
+            <div className="movie-card-v2__placeholder">🎬</div>
+          )}
+
+          {movie.ageRating && <span className="movie-card-v2__rated">{movie.ageRating}</span>}
+          {movie.imdbRating && (
+            <span className="movie-card-v2__rating">⭐ {Number(movie.imdbRating).toFixed(1)}</span>
+          )}
+
+          {/* Overlay với 2 lựa chọn */}
+          <div className="movie-card-v2__overlay">
+            <Link to={`/movies/${movieId}`} className="movie-card-v2__btn movie-card-v2__btn--detail">
+              Chi tiết
             </Link>
-            <div className="mp-movie-card__body">
-                <Link to={`/movies/${movieId}`} className="mp-movie-card__title">{movie.title}</Link>
-                <div className="mp-movie-card__meta">
-                    <span>{movie.durationMins ? `${movie.durationMins} phút` : 'Chưa cập nhật'}</span>
-                    <span>{movie.genres?.slice(0, 1).join('') || movie.language || ''}</span>
-                </div>
-                <Link className="mp-movie-card__book" to={`/bookings?flow=movie_first&movieId=${movieId}`}>
-                    Đặt vé
-                </Link>
+            <Link to={`/bookings?flow=movie_first&movieId=${movieId}`} className="movie-card-v2__btn movie-card-v2__btn--book">
+              🎟️ Đặt vé
+            </Link>
+            {movie.trailerUrl && (
+              <button
+                onClick={(e) => { e.preventDefault(); setShowTrailer(true); }}
+                className="movie-card-v2__btn movie-card-v2__btn--trailer"
+              >
+                ▶ Trailer
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="movie-card-v2__info">
+          <Link to={`/movies/${movieId}`} className="movie-card-v2__title">{title}</Link>
+          <h3 className="movie-card-v2__genre">Thể loại : {genres.length > 0 ? genres.join(', ') : 'Chưa cập nhật'}.</h3>
+          <div className="movie-card-v2__meta">
+            <span>⏱ {duration || '-'}p</span>
+            {movie.releaseDate && <span>📅 {formatDate(movie.releaseDate)}</span>}
+          </div>
+        </div>
+      </div>
+
+      {/* Modal Trailer */}
+      {showTrailer && (
+        <div className="trailer-modal" onClick={() => setShowTrailer(false)}>
+          <div className="trailer-modal__content" onClick={e => e.stopPropagation()}>
+            <button className="trailer-modal__close" onClick={() => setShowTrailer(false)}>✕</button>
+            <div className="trailer-modal__video">
+              <iframe
+                src={getYoutubeEmbedUrl(movie.trailerUrl)}
+                title={title}
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              ></iframe>
             </div>
-        </article>
-    );
+          </div>
+        </div>
+      )}
+    </>
+  );
 }

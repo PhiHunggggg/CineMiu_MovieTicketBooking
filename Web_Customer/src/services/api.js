@@ -1,112 +1,127 @@
 const API_BASE = '/api';
 
 function buildQuery(params = {}) {
-    const query = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-        if (value !== undefined && value !== null && value !== '') {
-            query.set(key, String(value));
-        }
-    });
-    const value = query.toString();
-    return value ? `?${value}` : '';
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value));
+    }
+  });
+
+  const value = query.toString();
+  return value ? `?${value}` : '';
 }
 
-async function request(path, options = {}) {
-    const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE}${path}`, {
-        ...options,
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-            ...options.headers,
-        },
-    });
+function getToken() {
+  try {
+    const data = JSON.parse(localStorage.getItem('cineverse_auth') || '{}');
+    return data.token || data.Token || localStorage.getItem('token') || null;
+  } catch {
+    return localStorage.getItem('token') || null;
+  }
+}
 
-    const contentType = response.headers.get('content-type') || '';
-    const data = response.status === 204
-        ? null
-        : contentType.includes('application/json')
-            ? await response.json()
-            : await response.text();
+async function request(endpoint, options = {}) {
+  const url = `${API_BASE}${endpoint}`;
+  const token = getToken();
+  const { headers, ...restOptions } = options;
+  const config = {
+    ...restOptions,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+  };
 
-    if (!response.ok) {
-        const error = new Error(data?.message || data?.title || data || 'Yêu cầu API thất bại');
-        error.status = response.status;
-        error.data = data;
-        throw error;
-    }
+  let response;
+  try {
+    response = await fetch(url, config);
+  } catch (networkErr) {
+    throw new Error('Khong the ket noi den server. Vui long kiem tra backend dang chay.', { cause: networkErr });
+  }
 
-    return data;
+  const text = await response.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = text || null;
+  }
+
+  if (!response.ok) {
+    const error = new Error(data?.message || data?.title || data || `HTTP ${response.status}: ${response.statusText}`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
+  }
+
+  return data;
 }
 
 export const authApi = {
-    login: (email, password) => request('/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-    }),
-    register: (data) => request('/auth/register', {
-        method: 'POST',
-        body: JSON.stringify(data),
-    }),
+  register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
+  login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
+  getProfile: () => request('/auth/me'),
+  updateProfile: (data) => request('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
 export const cinemaApi = {
-    getAll: (params = {}) => request(`/cinemas${buildQuery(params)}`),
-    getById: (id) => request(`/cinemas/${id}`),
-    getSeats: (hallId) => request(`/cinemas/halls/${hallId}/seats`),
+  getAll: (params = {}) => {
+    if (typeof params === 'string') {
+      return request(`/cinemas${buildQuery({ city: params })}`);
+    }
+    return request(`/cinemas${buildQuery(params)}`);
+  },
+  getById: (id) => request(`/cinemas/${id}`),
+  getSeats: (hallId) => request(`/cinemas/halls/${hallId}/seats`),
 };
 
 export const movieApi = {
-    getAll: (params = {}) => request(`/movies${buildQuery(params)}`),
-    getById: (id) => request(`/movies/${id}`),
+  getAll: (params = {}) => request(`/movies${buildQuery(params)}`),
+  getById: (id) => request(`/movies/${id}`),
 };
 
 export const showtimeApi = {
-    getAll: async (params = {}) => {
-        const data = await request(`/showtimes${buildQuery(params)}`);
-        return Array.isArray(data) ? data : data?.items || [];
-    },
-    getById: (id) => request(`/showtimes/${id}`),
-    getSeats: (id, params = {}) => request(`/showtimes/${id}/seats${buildQuery(params)}`),
-    lockSeats: (id, data) => request(`/showtimes/${id}/locks`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-    }),
-    unlockSeats: (id, data) => request(`/showtimes/${id}/unlocks`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-    }),
-};
-
-export const lookupApi = {
-    getAll: () => request('/cinema-lookups'),
-};
-
-export const promotionApi = {
-    getAll: (params = {}) => request(`/promotions${buildQuery(params)}`),
-    getByCode: (code) => request(`/promotions/code/${encodeURIComponent(code)}`),
-};
-
-export const concessionApi = {
-    getAll: (params = {}) => request(`/concessions${buildQuery(params)}`),
+  getAll: (params = {}) => request(`/showtimes${buildQuery(params)}`),
+  getById: (id) => request(`/showtimes/${id}`),
+  getSeats: (id, params = {}) => request(`/showtimes/${id}/seats${buildQuery(params)}`),
+  lockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/locks`, { method: 'POST', body: JSON.stringify(data) }),
+  unlockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/unlocks`, { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const bookingApi = {
-    create: (data) => request('/bookings', {
-        method: 'POST',
-        body: JSON.stringify(data),
-    }),
-    addPayment: (bookingId, data) => request(`/bookings/${bookingId}/payments`, {
-        method: 'POST',
-        body: JSON.stringify(data),
-    }),
-    getByUser: (userId) => request(`/bookings/user/${userId}`),
-    getByEmail: (email) => request(`/bookings/user-by-email${buildQuery({ email })}`),
+  create: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
+  getById: (id) => request(`/bookings/${id}`),
+  getByUser: (userId) => request(`/bookings/user/${userId}`),
+  getByEmail: (email) => request(`/bookings/user-by-email${buildQuery({ email })}`),
+  addPayment: (id, data) => request(`/bookings/${id}/payments`, { method: 'POST', body: JSON.stringify(data) }),
+  cancel: (id, reason) => request(`/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
+};
+
+export const productApi = {
+  getAll: (categoryId) => request(`/products${buildQuery({ categoryId })}`),
+};
+
+export const lookupApi = {
+  getAll: () => request('/lookups'),
+};
+
+export const promotionApi = {
+  getAll: (params = {}) => request(`/promotions${buildQuery(params)}`),
+  getByCode: (code) => request(`/promotions/code/${encodeURIComponent(code)}`),
+  getVoucher: (code) => request(`/promotions/vouchers/${encodeURIComponent(code)}`),
+  validate: (data) => request('/promotions/validate', { method: 'POST', body: JSON.stringify(data) }),
+};
+
+export const userApi = {
+  getById: (id) => request(`/cinema-users/${id}`),
+  create: (data) => request('/cinema-users', { method: 'POST', body: JSON.stringify(data) }),
 };
 
 export const loyaltyApi = {
-    getByUser: (userId) => request(`/loyalty/users/${userId}`),
-    getByEmail: (email) => request(`/loyalty/by-email${buildQuery({ email })}`),
-    getTransactions: (userId) => request(`/loyalty/users/${userId}/transactions`),
-    getTransactionsByEmail: (email) => request(`/loyalty/transactions-by-email${buildQuery({ email })}`),
+  getByUser: (userId) => request(`/loyalty/users/${userId}`),
+  getByEmail: (email) => request(`/loyalty/by-email${buildQuery({ email })}`),
+  getTransactions: (userId) => request(`/loyalty/users/${userId}/transactions`),
+  getTransactionsByEmail: (email) => request(`/loyalty/by-email/transactions${buildQuery({ email })}`),
 };

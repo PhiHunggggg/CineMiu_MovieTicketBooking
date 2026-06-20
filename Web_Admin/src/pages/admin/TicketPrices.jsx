@@ -31,12 +31,6 @@ const emptyFilters = {
     keyword: '',
     cinemaId: '',
     hallTypeId: '',
-    seatTypeId: '',
-    dayTypeId: '',
-    timeSlot: '',
-    status: '',
-    minPrice: '',
-    maxPrice: '',
 };
 
 const getItems = (data) => data?.items || data?.data || data || [];
@@ -198,12 +192,6 @@ export default function TicketPrices() {
                 keyword: appliedFilters.keyword || undefined,
                 cinemaId: appliedFilters.cinemaId || undefined,
                 hallTypeId: appliedFilters.hallTypeId || undefined,
-                seatTypeId: appliedFilters.seatTypeId || undefined,
-                dayTypeId: appliedFilters.dayTypeId || undefined,
-                timeSlot: appliedFilters.timeSlot || undefined,
-                status: appliedFilters.status || undefined,
-                minPrice: appliedFilters.minPrice || undefined,
-                maxPrice: appliedFilters.maxPrice || undefined,
                 page,
                 pageSize,
             });
@@ -312,13 +300,6 @@ export default function TicketPrices() {
 
     const submitFilters = (event) => {
         event.preventDefault();
-        const minPrice = filters.minPrice === '' ? null : Number(filters.minPrice);
-        const maxPrice = filters.maxPrice === '' ? null : Number(filters.maxPrice);
-        if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
-            setError('Giá tối thiểu phải nhỏ hơn hoặc bằng giá tối đa.');
-            return;
-        }
-
         setError('');
         setPage(1);
         setAppliedFilters({
@@ -485,7 +466,7 @@ export default function TicketPrices() {
                             <input
                                 value={filters.keyword}
                                 onChange={(event) => setFilters({ ...filters, keyword: event.target.value })}
-                                placeholder="Tìm chi nhánh, loại phòng, ghế, loại ngày hoặc giá vé..."
+                                placeholder="Tìm chi nhánh hoặc loại phòng..."
                             />
                         </label>
                         <button className="btn btn-primary" type="submit" disabled={loading}>
@@ -510,56 +491,6 @@ export default function TicketPrices() {
                                 <option value="">Tất cả loại phòng</option>
                                 {lookups.hallTypes.map((item) => <option key={item.hallTypeId} value={item.hallTypeId}>{item.typeName}</option>)}
                             </select>
-                        </label>
-                        <label className="form-field">
-                            <span>Loại ghế</span>
-                            <select value={filters.seatTypeId} onChange={(event) => setFilters({ ...filters, seatTypeId: event.target.value })}>
-                                <option value="">Tất cả loại ghế</option>
-                                {lookups.seatTypes.map((item) => <option key={item.seatTypeId} value={item.seatTypeId}>{item.typeName}</option>)}
-                            </select>
-                        </label>
-                        <label className="form-field">
-                            <span>Loại ngày</span>
-                            <select value={filters.dayTypeId} onChange={(event) => setFilters({ ...filters, dayTypeId: event.target.value })}>
-                                <option value="">Tất cả loại ngày</option>
-                                {lookups.dayTypes.map((item) => <option key={item.dayTypeId} value={item.dayTypeId}>{item.typeName}</option>)}
-                            </select>
-                        </label>
-                        <label className="form-field">
-                            <span>Khung giờ</span>
-                            <select value={filters.timeSlot} onChange={(event) => setFilters({ ...filters, timeSlot: event.target.value })}>
-                                <option value="">Tất cả khung giờ</option>
-                                {timeSlots.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}
-                            </select>
-                        </label>
-                        <label className="form-field">
-                            <span>Hiệu lực</span>
-                            <select value={filters.status} onChange={(event) => setFilters({ ...filters, status: event.target.value })}>
-                                <option value="">Tất cả hiệu lực</option>
-                                {priceStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                            </select>
-                        </label>
-                        <label className="form-field">
-                            <span>Giá từ</span>
-                            <input
-                                type="number"
-                                min="0"
-                                step="1000"
-                                value={filters.minPrice}
-                                onChange={(event) => setFilters({ ...filters, minPrice: event.target.value })}
-                                placeholder="0"
-                            />
-                        </label>
-                        <label className="form-field">
-                            <span>Giá đến</span>
-                            <input
-                                type="number"
-                                min="0"
-                                step="1000"
-                                value={filters.maxPrice}
-                                onChange={(event) => setFilters({ ...filters, maxPrice: event.target.value })}
-                                placeholder="Không giới hạn"
-                            />
                         </label>
                     </div>
                 </form>

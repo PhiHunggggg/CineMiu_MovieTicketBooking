@@ -229,10 +229,33 @@ namespace API_Service.Controllers
             var effectiveFrom = (dto.EffectiveFrom ?? DateTime.UtcNow).Date;
             var effectiveTo = dto.EffectiveTo?.Date;
             var timeSlot = TicketPriceCalculator.NormalizeTimeSlot(dto.TimeSlot);
-            var validation = await Validate(dto, timeSlot, effectiveFrom, effectiveTo);
+            var validation = await Validate(dto, timeSlot, effectiveFrom, effectiveTo, validateOverlap: false);
             if (validation != null)
             {
                 return validation;
+            }
+
+            var existingExactPrice = (await _context.CinemaTicketPrices
+                    .Where(x =>
+                        x.CinemaId == dto.CinemaId &&
+                        x.HallTypeId == dto.HallTypeId &&
+                        x.SeatTypeId == dto.SeatTypeId &&
+                        x.DayTypeId == dto.DayTypeId)
+                    .ToListAsync())
+                .FirstOrDefault(x =>
+                    string.Equals(
+                        TicketPriceCalculator.NormalizeTimeSlot(x.TimeSlot),
+                        timeSlot,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    x.EffectiveFrom.Date == effectiveFrom &&
+                    NullableDateEquals(x.EffectiveTo, effectiveTo));
+
+            if (existingExactPrice != null)
+            {
+                existingExactPrice.TimeSlot = timeSlot;
+                existingExactPrice.BasePrice = dto.BasePrice;
+                await _context.SaveChangesAsync();
+                return Ok(existingExactPrice);
             }
 
             var price = new CinemaTicketPrice
@@ -264,7 +287,7 @@ namespace API_Service.Controllers
             var effectiveFrom = (dto.EffectiveFrom ?? price.EffectiveFrom).Date;
             var effectiveTo = dto.EffectiveTo?.Date;
             var timeSlot = TicketPriceCalculator.NormalizeTimeSlot(dto.TimeSlot ?? price.TimeSlot);
-            var validation = await Validate(dto, timeSlot, effectiveFrom, effectiveTo, id);
+            var validation = await Validate(dto, timeSlot, effectiveFrom, effectiveTo, id, validateOverlap: false);
             if (validation != null)
             {
                 return validation;
@@ -302,7 +325,8 @@ namespace API_Service.Controllers
             string timeSlot,
             DateTime effectiveFrom,
             DateTime? effectiveTo,
-            int? currentPriceId = null)
+            int? currentPriceId = null,
+            bool validateOverlap = true)
         {
             if (!await _context.Cinemas.AnyAsync(x => x.CinemaId == dto.CinemaId))
             {
@@ -346,6 +370,11 @@ namespace API_Service.Controllers
                 return BadRequest(new { message = "Effective end date must be on or after the start date" });
             }
 
+            if (!validateOverlap)
+            {
+                return null;
+            }
+
             var candidates = await _context.CinemaTicketPrices
                 .AsNoTracking()
                 .Where(x =>
@@ -372,6 +401,16 @@ namespace API_Service.Controllers
             }
 
             return null;
+        }
+
+        private static bool NullableDateEquals(DateTime? left, DateTime? right)
+        {
+            if (!left.HasValue || !right.HasValue)
+            {
+                return left.HasValue == right.HasValue;
+            }
+
+            return left.Value.Date == right.Value.Date;
         }
 
         private static decimal? ParsePriceKeyword(string keyword)

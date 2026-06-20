@@ -7,8 +7,10 @@ import MoviesPage from './pages/MoviesPage/MoviesPage';
 import MovieDetailPage from './pages/MovieDetailPage/MovieDetailPage';
 import BookingPage from './pages/BookingPage/BookingPage';
 import PromotionsPage from './pages/PromotionsPage/PromotionsPage';
-import LoginPage from './pages/Auth/LoginPage';
-import RegisterPage from './pages/Auth/RegisterPage';
+import CinemasPage from './pages/CinemasPage/CinemasPage';
+import LoginPage from './pages/AuthPages/LoginPage';
+import RegisterPage from './pages/AuthPages/RegisterPage';
+import LoginSuccess from './pages/AuthPages/LoginSuccess';
 import ProfilePage from './pages/ProfilePage/ProfilePage';
 import MyTicketsPage from './pages/MyTicketsPage/MyTicketsPage';
 import './App.css';
@@ -23,8 +25,10 @@ export default function App() {
                     <Route path="/movies" element={<MoviesPage />} />
                     <Route path="/movies/:movieId" element={<MovieDetailPage />} />
                     <Route path="/bookings" element={<BookingPage />} />
+                    <Route path="/cinemas" element={<CinemasPage />} />
                     <Route path="/promotions" element={<PromotionsPage />} />
                     <Route path="/login" element={<LoginPage />} />
+                    <Route path="/login-success" element={<LoginSuccess />} />
                     <Route path="/register" element={<RegisterPage />} />
                     <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
                     <Route path="/my-tickets" element={<ProtectedRoute><MyTicketsPage /></ProtectedRoute>} />

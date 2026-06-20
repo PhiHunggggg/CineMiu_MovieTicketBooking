@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore.Design;
 
 namespace Repository
@@ -10,12 +11,30 @@ namespace Repository
             var optionsBuilder = new DbContextOptionsBuilder<SqlServerDbContext>();
 
             // Used by "dotnet ef" when no startup project host is available.
-            var connectionString =
-                "Server=DESKTOP-FNMVI5L;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
+            var password = Environment.GetEnvironmentVariable("CINEMIU_DB_PASSWORD");
+            var connectionString = string.IsNullOrWhiteSpace(password)
+                ? "Server=DESKTOP-FNMVI5L;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False"
+                : BuildSqlAuthConnectionString(password);
 
             optionsBuilder.UseSqlServer(connectionString);
 
             return new SqlServerDbContext(optionsBuilder.Options);
+        }
+
+        private static string BuildSqlAuthConnectionString(string password)
+        {
+            var sqlConnection = new SqlConnectionStringBuilder
+            {
+                DataSource = Environment.GetEnvironmentVariable("CINEMIU_DB_SERVER") ?? "DESKTOP-FNMVI5L",
+                InitialCatalog = Environment.GetEnvironmentVariable("CINEMIU_DB_NAME") ?? "BaseCoreBookingMovie",
+                UserID = Environment.GetEnvironmentVariable("CINEMIU_DB_USER") ?? "sa",
+                Password = password,
+                IntegratedSecurity = false,
+                TrustServerCertificate = true
+            };
+            sqlConnection["Encrypt"] = false;
+
+            return sqlConnection.ConnectionString;
         }
     }
 }

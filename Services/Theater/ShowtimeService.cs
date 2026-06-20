@@ -93,7 +93,6 @@ namespace Services.Theater
                 .ToListAsync();
             var candidates = new List<ShowTime>();
             var slots = new[] { 9, 12, 15, 18, 21 };
-            var now = DateTime.Now;
 
             for (var dayIndex = 0; dayIndex < days; dayIndex++)
             {
@@ -104,11 +103,6 @@ namespace Services.Theater
                     for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
                     {
                         var startTime = date.AddHours(slots[slotIndex]);
-                        if (startTime <= now.AddMinutes(30))
-                        {
-                            continue;
-                        }
-
                         var movie = movies[(dayIndex * halls.Count * slots.Length +
                                             hallIndex * slots.Length +
                                             slotIndex) % movies.Count];

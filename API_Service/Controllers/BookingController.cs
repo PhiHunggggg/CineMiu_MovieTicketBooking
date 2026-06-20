@@ -174,7 +174,6 @@ namespace API_Service.Controllers
             {
                 return BadRequest(new { message = "Email is required" });
             }
-
             var userId = await _context.CinemaUsers.AsNoTracking()
                 .Where(x => x.Email == email && x.IsActive)
                 .Select(x => (int?)x.UserId)

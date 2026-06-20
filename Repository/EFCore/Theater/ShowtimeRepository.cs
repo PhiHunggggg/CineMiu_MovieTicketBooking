@@ -159,15 +159,8 @@ namespace Repository.EFCore.Theater
 
         public async Task<int> CreateAsync(ShowtimeDTO.ShowtimeRequest showtimeRequest)
         {
-            IDbContextTransaction? transaction = null;
-
-            try
+            return await ExecuteInSerializableTransactionAsync(async () =>
             {
-                if (context.Database.IsRelational())
-                {
-                    transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
-                }
-
                 await AcquireHallScheduleLockAsync(showtimeRequest.HallId);
 
                 var prepared = await PrepareShowtimeAsync(showtimeRequest, null);
@@ -193,42 +186,14 @@ namespace Repository.EFCore.Theater
                 context.ShowTimes.Add(showtime);
                 await context.SaveChangesAsync();
 
-                if (transaction != null)
-                {
-                    await transaction.CommitAsync();
-                }
-
                 return showtime.ShowtimeId;
-            }
-            catch
-            {
-                if (transaction != null)
-                {
-                    await transaction.RollbackAsync();
-                }
-
-                throw;
-            }
-            finally
-            {
-                if (transaction != null)
-                {
-                    await transaction.DisposeAsync();
-                }
-            }
+            });
         }
 
         public async Task UpdateAsync(int showtimeId, ShowtimeDTO.ShowtimeRequest showtimeRequest)
         {
-            IDbContextTransaction? transaction = null;
-
-            try
+            await ExecuteInSerializableTransactionAsync(async () =>
             {
-                if (context.Database.IsRelational())
-                {
-                    transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
-                }
-
                 await AcquireHallScheduleLockAsync(showtimeRequest.HallId);
 
                 var showtime = await context.ShowTimes.FirstOrDefaultAsync(x => x.ShowtimeId == showtimeId);
@@ -266,27 +231,26 @@ namespace Repository.EFCore.Theater
 
                 await context.SaveChangesAsync();
 
-                if (transaction != null)
-                {
-                    await transaction.CommitAsync();
-                }
-            }
-            catch
+                return true;
+            });
+        }
+
+        private async Task<TResult> ExecuteInSerializableTransactionAsync<TResult>(Func<Task<TResult>> operation)
+        {
+            var strategy = context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
             {
-                if (transaction != null)
+                if (!context.Database.IsRelational())
                 {
-                    await transaction.RollbackAsync();
+                    return await operation();
                 }
 
-                throw;
-            }
-            finally
-            {
-                if (transaction != null)
-                {
-                    await transaction.DisposeAsync();
-                }
-            }
+                await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+                var result = await operation();
+                await transaction.CommitAsync();
+                return result;
+            });
         }
 
         public async Task DeleteAsync(int showtimeId)
@@ -432,14 +396,34 @@ namespace Repository.EFCore.Theater
 
             var cinemaIds = items.Select(x => x.Cinema.CinemaId).Distinct().ToList();
             var hallTypeIds = items.Select(x => x.Hall.HallTypeId).Distinct().ToList();
+            var hallIds = items.Select(x => x.Hall.HallId).Distinct().ToList();
             var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
             var standardSeatTypeId = await ResolveStandardSeatTypeIdAsync();
+            var activeHallSeats = await context.Seats
+                .AsNoTracking()
+                .Where(x => hallIds.Contains(x.HallId) && x.IsActive)
+                .Select(x => new { x.HallId, x.SeatTypeId })
+                .ToListAsync();
+            var seatTypeIds = activeHallSeats
+                .Select(x => x.SeatTypeId)
+                .Append(standardSeatTypeId)
+                .Distinct()
+                .ToList();
+            var seatTypes = await context.SeatTypes
+                .AsNoTracking()
+                .Where(x => seatTypeIds.Contains(x.SeatTypeId))
+                .ToDictionaryAsync(x => x.SeatTypeId);
+            var seatTypeIdsByHall = activeHallSeats
+                .GroupBy(x => x.HallId)
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.Select(seat => seat.SeatTypeId).Distinct().ToList());
             var priceRules = await context.TicketPrices
                 .AsNoTracking()
                 .Where(x =>
                     cinemaIds.Contains(x.CinemaId) &&
                     hallTypeIds.Contains(x.HallTypeId) &&
-                    x.SeatTypeId == standardSeatTypeId)
+                    seatTypeIds.Contains(x.SeatTypeId))
                 .ToListAsync();
 
             var now = DateTime.Now;
@@ -450,15 +434,26 @@ namespace Repository.EFCore.Theater
                 var totalSeats = item.Hall.TotalSeats;
                 var availableSeats = Math.Max(totalSeats - bookedSeats, 0);
                 var effectiveStatus = ResolveEffectiveStatus(item.Showtime, now);
-                var basePrice = TicketPriceCalculator.ResolvePrice(
-                    item.Showtime,
-                    item.Cinema.CinemaId,
-                    item.Hall.HallTypeId,
-                    standardSeatTypeId,
-                    0,
-                    standardSeatTypeId,
-                    dayTypes,
-                    priceRules);
+                var hallSeatTypeIds = seatTypeIdsByHall.TryGetValue(item.Hall.HallId, out var configuredSeatTypeIds) &&
+                    configuredSeatTypeIds.Count > 0
+                        ? configuredSeatTypeIds
+                        : [standardSeatTypeId];
+                var basePrice = hallSeatTypeIds
+                    .Select(seatTypeId =>
+                    {
+                        seatTypes.TryGetValue(seatTypeId, out var seatType);
+                        return TicketPriceCalculator.ResolvePrice(
+                            item.Showtime,
+                            item.Cinema.CinemaId,
+                            item.Hall.HallTypeId,
+                            seatTypeId,
+                            seatType?.PriceModifier ?? 0,
+                            standardSeatTypeId,
+                            dayTypes,
+                            priceRules);
+                    })
+                    .DefaultIfEmpty(TicketPriceCalculator.DefaultBasePrice)
+                    .Min();
                 var summary = new ShowtimeDTO.ShowtimeSummary
                 {
                     ShowtimeId = item.Showtime.ShowtimeId,

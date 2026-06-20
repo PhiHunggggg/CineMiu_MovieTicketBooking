@@ -1,4 +1,4 @@
-using Entities;
+﻿using Entities;
 using Repository;
 using Services;
 using Services.Booking;
@@ -145,6 +145,22 @@ namespace API_Service.Controllers
                     userId.HasValue &&
                     seatLock.UserId == userId.Value &&
                     seatLock.SessionId == sessionId;
+                var price = TicketPriceCalculator.ResolvePrice(
+                    showtime,
+                    details.Hall.CinemaId,
+                    details.Hall.HallTypeId,
+                    seat.SeatTypeId,
+                    seatType?.PriceModifier ?? 0,
+                    standardSeatTypeId,
+                    dayTypes,
+                    priceRules);
+                var isBooked = bookedSeatIds.Contains(seat.SeatId);
+                var isLocked = seatLock != null && !isCurrentSession;
+                var status = isBooked
+                    ? "booked"
+                    : isLocked
+                        ? "locked"
+                        : "available";
 
                 return new
                 {
@@ -155,17 +171,11 @@ namespace API_Service.Controllers
                     seat.RowLabel,
                     seat.ColNumber,
                     seat.SeatCode,
-                    price = TicketPriceCalculator.ResolvePrice(
-                        showtime,
-                        details.Hall.CinemaId,
-                        details.Hall.HallTypeId,
-                        seat.SeatTypeId,
-                        seatType?.PriceModifier ?? 0,
-                        standardSeatTypeId,
-                        dayTypes,
-                        priceRules),
-                    isBooked = bookedSeatIds.Contains(seat.SeatId),
-                    isLocked = seatLock != null && !isCurrentSession,
+                    price,
+                    finalPrice = price,
+                    status,
+                    isBooked,
+                    isLocked,
                     isLockedByCurrentSession = isCurrentSession,
                     lockExpiresAt = seatLock?.ExpiresAt
                 };

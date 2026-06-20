@@ -4,7 +4,6 @@ import Icon from '../../components/Icon'
 import { cinemaApi, movieApi, showtimeApi, ticketPriceApi } from '../../services/api'
 
 const PAGE_SIZE = 8
-const VIETNAM_TIME_ZONE = 'Asia/Ho_Chi_Minh'
 
 const statusOptions = [
   { value: '', label: 'Tất cả trạng thái' },
@@ -88,18 +87,6 @@ function padDatePart(value) {
   return String(value).padStart(2, '0')
 }
 
-function getVietnamDateInputValue(value = new Date()) {
-  const parts = new Intl.DateTimeFormat('en-GB', {
-    timeZone: VIETNAM_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(value)
-  const dateParts = Object.fromEntries(parts.map((part) => [part.type, part.value]))
-
-  return `${dateParts.year}-${dateParts.month}-${dateParts.day}`
-}
-
 function toDateTimeLocal(value) {
   if (!value) return ''
 
@@ -162,6 +149,88 @@ function formatCurrency(value) {
     currency: 'VND',
     maximumFractionDigits: 0,
   }).format(numericValue)
+}
+
+function getPriceEntity(item) {
+  return item?.price || item?.Price || item || {}
+}
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function normalizeSlot(value) {
+  return normalizeText(value || 'all_day').replace(/\s+/g, '_')
+}
+
+function toDateOnly(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function resolveTimeSlot(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'all_day'
+
+  const hour = date.getHours()
+  if (hour < 12) return 'morning'
+  if (hour < 18) return 'afternoon'
+  return hour < 23 ? 'evening' : 'late_night'
+}
+
+function resolveDayType(value, isSpecial) {
+  if (isSpecial) return 'holiday'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'weekday'
+
+  return date.getDay() === 0 || date.getDay() === 6 ? 'weekend' : 'weekday'
+}
+
+function priceEffectiveOn(price, showDate) {
+  if (!showDate) return true
+
+  const effectiveFrom = toDateOnly(price?.effectiveFrom ?? price?.EffectiveFrom)
+  const effectiveToValue = price?.effectiveTo ?? price?.EffectiveTo
+  const effectiveTo = effectiveToValue ? toDateOnly(effectiveToValue) : null
+
+  return (!effectiveFrom || effectiveFrom <= showDate) && (!effectiveTo || effectiveTo >= showDate)
+}
+
+function priceMatchesDayType(item, dayType) {
+  const price = getPriceEntity(item)
+  const dayTypeId = Number(price?.dayTypeId ?? price?.DayTypeId)
+  const dayTypeText = normalizeText([
+    item?.dayType?.typeName,
+    item?.dayType?.TypeName,
+    item?.dayType?.description,
+    item?.dayType?.Description,
+  ].filter(Boolean).join(' '))
+
+  if (dayType === 'weekday') {
+    return dayTypeId === 1 || dayTypeText.includes('weekday') || dayTypeText.includes('ngay thuong')
+  }
+
+  if (dayType === 'weekend') {
+    return dayTypeId === 2 || dayTypeText.includes('weekend') || dayTypeText.includes('cuoi tuan')
+  }
+
+  return dayTypeId === 3 ||
+    dayTypeText.includes('holiday') ||
+    dayTypeText.includes('special') ||
+    dayTypeText.includes('ngay le') ||
+    dayTypeText.includes('ngay dac biet')
+}
+
+function priceMatchesTimeSlot(price, timeSlot) {
+  const priceSlot = normalizeSlot(price?.timeSlot ?? price?.TimeSlot)
+  return priceSlot === 'all_day' || priceSlot === timeSlot
 }
 
 function getStatusLabel(value) {
@@ -271,8 +340,10 @@ function validateForm(form, halls) {
 
 function Showtimes() {
   const [searchParams] = useSearchParams()
-  const initialDate = searchParams.get('date') || getVietnamDateInputValue()
+  const initialDate = searchParams.get('date') || ''
+  const initialStatus = searchParams.get('status') || (searchParams.get('upcoming') === '1' ? 'upcoming' : '')
   const queryAppliedRef = useRef(false)
+  const autoScheduleGeneratedRef = useRef(false)
   const [showtimes, setShowtimes] = useState([])
   const [movies, setMovies] = useState([])
   const [cinemas, setCinemas] = useState([])
@@ -291,8 +362,8 @@ function Showtimes() {
   const [cinemaFilter, setCinemaFilter] = useState(searchParams.get('cinemaId') || '')
   const [hallFilter, setHallFilter] = useState(searchParams.get('hallId') || '')
   const [dateFilter, setDateFilter] = useState(initialDate)
-  const [statusInput, setStatusInput] = useState(searchParams.get('upcoming') === '1' ? 'upcoming' : '')
-  const [status, setStatus] = useState(searchParams.get('upcoming') === '1' ? 'upcoming' : '')
+  const [statusInput, setStatusInput] = useState(initialStatus)
+  const [status, setStatus] = useState(initialStatus)
   const [isLoading, setIsLoading] = useState(false)
   const [isLookupsLoading, setIsLookupsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -349,11 +420,28 @@ function Showtimes() {
     }
   }, [])
 
+  const ensureAutoSchedule = useCallback(async () => {
+    if (autoScheduleGeneratedRef.current) return
+
+    autoScheduleGeneratedRef.current = true
+
+    try {
+      const response = await showtimeApi.generate(5)
+      const createdCount = getItems(response.data).length
+      if (createdCount > 0) {
+        setNotice(`Đã tự động tạo ${createdCount} suất chiếu cho 5 ngày tới.`)
+      }
+    } catch (scheduleError) {
+      setError(getErrorMessage(scheduleError, 'Không tự động tạo được lịch chiếu 5 ngày tới.'))
+    }
+  }, [])
+
   const fetchShowtimes = useCallback(async () => {
     setIsLoading(true)
     setError('')
 
     try {
+      await ensureAutoSchedule()
       const response = await showtimeApi.getAll({
         cinemaId: cinemaFilter || undefined,
         hallId: hallFilter || undefined,
@@ -377,7 +465,7 @@ function Showtimes() {
     } finally {
       setIsLoading(false)
     }
-  }, [cinemaFilter, dateFilter, hallFilter, page, status])
+  }, [cinemaFilter, dateFilter, ensureAutoSchedule, hallFilter, page, status])
 
   useEffect(() => {
     fetchLookups()
@@ -428,27 +516,27 @@ function Showtimes() {
   const matchingPriceRules = useMemo(() => {
     if (!selectedHall || !form.cinemaId) return []
 
-    const showDate = form.startTime ? new Date(form.startTime) : new Date()
-    showDate.setHours(0, 0, 0, 0)
+    const showDate = toDateOnly(form.startTime || new Date())
+    const dayType = resolveDayType(form.startTime || new Date(), form.isSpecial)
+    const timeSlot = resolveTimeSlot(form.startTime || new Date())
 
     return ticketPrices.filter((item) => {
-      const price = item?.price || item
-      const effectiveFrom = new Date(price?.effectiveFrom)
-      const effectiveTo = price?.effectiveTo ? new Date(price.effectiveTo) : null
-      effectiveFrom.setHours(0, 0, 0, 0)
-      effectiveTo?.setHours(0, 0, 0, 0)
+      const price = getPriceEntity(item)
 
       return Number(price?.cinemaId) === Number(form.cinemaId)
         && Number(price?.hallTypeId) === Number(selectedHall.hallTypeId)
-        && (Number.isNaN(showDate.getTime())
-          || ((!Number.isNaN(effectiveFrom.getTime()) && effectiveFrom <= showDate)
-            && (!effectiveTo || Number.isNaN(effectiveTo.getTime()) || effectiveTo >= showDate)))
+        && priceEffectiveOn(price, showDate)
+        && priceMatchesDayType(item, dayType)
+        && priceMatchesTimeSlot(price, timeSlot)
     })
-  }, [form.cinemaId, form.startTime, selectedHall, ticketPrices])
+  }, [form.cinemaId, form.isSpecial, form.startTime, selectedHall, ticketPrices])
 
   const matchingPriceRange = useMemo(() => {
     const prices = matchingPriceRules
-      .map((item) => Number((item?.price || item)?.basePrice))
+      .map((item) => {
+        const price = getPriceEntity(item)
+        return Number(price?.basePrice ?? price?.BasePrice)
+      })
       .filter(Number.isFinite)
 
     if (prices.length === 0) return null
@@ -565,14 +653,12 @@ function Showtimes() {
   }
 
   const resetFilters = () => {
-    const today = getVietnamDateInputValue()
-
     setCinemaInput('')
     setHallInput('')
-    setDateInput(today)
+    setDateInput('')
     setCinemaFilter('')
     setHallFilter('')
-    setDateFilter(today)
+    setDateFilter('')
     setStatusInput('')
     setStatus('')
     setPage(1)

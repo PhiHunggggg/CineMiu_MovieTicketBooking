@@ -1,4 +1,10 @@
 <Solution>
+  <Folder Name="/FrontEnd/">
+    <Project Path="Web_Customer/web_customer.esproj">
+      <Build />
+      <Deploy />
+    </Project>
+  </Folder>
   <Project Path="API_Gateway/API_Gateway.csproj" />
   <Project Path="API_Service/API_Service.csproj" />
   <Project Path="AuthServices/AuthServices.csproj" Id="729a9ae0-6a86-4567-a6e3-689df086bb4b" />
