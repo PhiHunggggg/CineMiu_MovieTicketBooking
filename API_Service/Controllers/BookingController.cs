@@ -307,134 +307,134 @@ namespace API_Service.Controllers
                     return BadRequest(new { message = "User not found" });
                 }
 
-            var showtime = await _context.CinemaShowtimes.FindAsync(dto.ShowtimeId);
-            if (showtime == null)
-            {
-                return NotFound(new { message = "Showtime not found" });
-            }
-
-            if (dto.Seats.Count == 0)
-            {
-                return BadRequest(new { message = "At least one seat is required" });
-            }
-
-            if (dto.SeatIds.Count != dto.SeatIds.Distinct().Count())
-            {
-                return BadRequest(new { message = "Duplicate seats are not allowed" });
-            }
-
-            var seats = await _context.CinemaSeats.Where(x => dto.SeatIds.Contains(x.SeatId) && x.HallId == showtime.HallId).ToListAsync();
-            if (seats.Count != dto.SeatIds.Distinct().Count())
-            {
-                return BadRequest(new { message = "Some seats were not found" });
-            }
-
-            var unavailableSeatIds = await _context.CinemaTickets
-                .Join(_context.CinemaBookings.Where(x => x.ShowtimeId == dto.ShowtimeId && x.Status != "cancelled"), t => t.BookingId, b => b.BookingId, (t, b) => t.SeatId)
-                .Where(seatId => dto.SeatIds.Contains(seatId))
-                .ToListAsync();
-            if (unavailableSeatIds.Count > 0)
-            {
-                return BadRequest(new { message = "Some seats are already booked", seatIds = unavailableSeatIds });
-            }
-
-            var ticketTotal = dto.Seats.Sum(x => x.Price);
-            var itemIds = dto.Concessions.Select(x => x.ItemId).Distinct().ToList();
-            var items = await _context.CinemaConcessionItems.Where(x => itemIds.Contains(x.ItemId)).ToDictionaryAsync(x => x.ItemId);
-            if (dto.Concessions.Any(x => x.Quantity <= 0))
-            {
-                return BadRequest(new { message = "Concession quantity must be greater than 0" });
-            }
-
-            if (items.Count != itemIds.Count)
-            {
-                return BadRequest(new { message = "Some concessions were not found" });
-            }
-
-            var concessionTotal = dto.Concessions.Sum(x => items.TryGetValue(x.ItemId, out var item) ? item.Price * x.Quantity : 0);
-            var totalAmount = ticketTotal + concessionTotal;
-            var promoValidation = await ValidatePromotionForBooking(dto.PromoCode, dto.UserId, totalAmount);
-            if (!promoValidation.IsValid)
-            {
-                return BadRequest(new { message = promoValidation.Message });
-            }
-
-            var discountAmount = promoValidation.DiscountAmount;
-
-                var booking = new Bookings.Booking
-            {
-                UserId = dto.UserId,
-                ShowtimeId = dto.ShowtimeId,
-                BookingCode = string.IsNullOrWhiteSpace(dto.BookingCode) ? $"BT{DateTime.UtcNow:yyyyMMddHHmmssfff}" : dto.BookingCode,
-                TotalAmount = totalAmount,
-                DiscountAmount = discountAmount,
-                FinalAmount = Math.Max(0, totalAmount - discountAmount),
-                Status = "pending",
-                BookingChannel = dto.BookingChannel ?? "web",
-                CreatedAt = DateTime.UtcNow,
-                ExpiresAt = DateTime.UtcNow.AddMinutes(10),
-                Notes = string.IsNullOrWhiteSpace(dto.PromoCode)
-                    ? dto.Notes
-                    : string.Join(" | ", new[] { dto.Notes, $"Promo:{dto.PromoCode.Trim().ToUpperInvariant()}" }.Where(x => !string.IsNullOrWhiteSpace(x)))
-            };
-
-            _context.CinemaBookings.Add(booking);
-            await _context.SaveChangesAsync();
-
-            var seatLookup = seats.ToDictionary(x => x.SeatId);
-            foreach (var requestedSeat in dto.Seats)
-            {
-                var seat = seatLookup[requestedSeat.SeatId];
-                _context.CinemaTickets.Add(new CinemaTicket
+                var showtime = await _context.CinemaShowtimes.FindAsync(dto.ShowtimeId);
+                if (showtime == null)
                 {
-                    BookingId = booking.BookingId,
-                    SeatId = seat.SeatId,
-                    SeatTypeId = seat.SeatTypeId,
-                    Price = requestedSeat.Price,
-                    QrCode = string.IsNullOrWhiteSpace(requestedSeat.QrCode)
-                        ? Guid.NewGuid().ToString("N")
-                        : requestedSeat.QrCode
-                });
-            }
-
-            foreach (var requestedItem in dto.Concessions)
-            {
-                if (!items.TryGetValue(requestedItem.ItemId, out var item))
-                {
-                    continue;
+                    return NotFound(new { message = "Showtime not found" });
                 }
 
-                _context.CinemaBookingConcessions.Add(new CinemaBookingConcession
+                if (dto.Seats.Count == 0)
                 {
-                    BookingId = booking.BookingId,
-                    ItemId = item.ItemId,
-                    Quantity = requestedItem.Quantity,
-                    UnitPrice = item.Price,
-                    Subtotal = item.Price * requestedItem.Quantity
-                });
-            }
+                    return BadRequest(new { message = "At least one seat is required" });
+                }
 
-            var selectedSeatIds = dto.SeatIds.Distinct().ToList();
-            _context.CinemaSeatLocks.RemoveRange(_context.CinemaSeatLocks.Where(x =>
-                x.ShowtimeId == dto.ShowtimeId && selectedSeatIds.Contains(x.SeatId)));
-
-            if (promoValidation.Promotion != null && discountAmount > 0)
-            {
-                promoValidation.Promotion.TotalUses += 1;
-                _context.CinemaPromoUsages.Add(new CinemaPromoUsage
+                if (dto.SeatIds.Count != dto.SeatIds.Distinct().Count())
                 {
-                    PromoId = promoValidation.Promotion.PromoId,
+                    return BadRequest(new { message = "Duplicate seats are not allowed" });
+                }
+
+                var seats = await _context.CinemaSeats.Where(x => dto.SeatIds.Contains(x.SeatId) && x.HallId == showtime.HallId).ToListAsync();
+                if (seats.Count != dto.SeatIds.Distinct().Count())
+                {
+                    return BadRequest(new { message = "Some seats were not found" });
+                }
+
+                var unavailableSeatIds = await _context.CinemaTickets
+                    .Join(_context.CinemaBookings.Where(x => x.ShowtimeId == dto.ShowtimeId && x.Status != "cancelled"), t => t.BookingId, b => b.BookingId, (t, b) => t.SeatId)
+                    .Where(seatId => dto.SeatIds.Contains(seatId))
+                    .ToListAsync();
+                if (unavailableSeatIds.Count > 0)
+                {
+                    return BadRequest(new { message = "Some seats are already booked", seatIds = unavailableSeatIds });
+                }
+
+                var ticketTotal = dto.Seats.Sum(x => x.Price);
+                var itemIds = dto.Concessions.Select(x => x.ItemId).Distinct().ToList();
+                var items = await _context.CinemaConcessionItems.Where(x => itemIds.Contains(x.ItemId)).ToDictionaryAsync(x => x.ItemId);
+                if (dto.Concessions.Any(x => x.Quantity <= 0))
+                {
+                    return BadRequest(new { message = "Concession quantity must be greater than 0" });
+                }
+
+                if (items.Count != itemIds.Count)
+                {
+                    return BadRequest(new { message = "Some concessions were not found" });
+                }
+
+                var concessionTotal = dto.Concessions.Sum(x => items.TryGetValue(x.ItemId, out var item) ? item.Price * x.Quantity : 0);
+                var totalAmount = ticketTotal + concessionTotal;
+                var promoValidation = await ValidatePromotionForBooking(dto.PromoCode, dto.UserId, totalAmount);
+                if (!promoValidation.IsValid)
+                {
+                    return BadRequest(new { message = promoValidation.Message });
+                }
+
+                var discountAmount = promoValidation.DiscountAmount;
+
+                var booking = new Bookings.Booking
+                {
                     UserId = dto.UserId,
-                    BookingId = booking.BookingId,
-                    UsedAt = DateTime.UtcNow
-                });
-            }
+                    ShowtimeId = dto.ShowtimeId,
+                    BookingCode = string.IsNullOrWhiteSpace(dto.BookingCode) ? $"BT{DateTime.UtcNow:yyyyMMddHHmmssfff}" : dto.BookingCode,
+                    TotalAmount = totalAmount,
+                    DiscountAmount = discountAmount,
+                    FinalAmount = Math.Max(0, totalAmount - discountAmount),
+                    Status = "pending",
+                    BookingChannel = dto.BookingChannel ?? "web",
+                    CreatedAt = DateTime.UtcNow,
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+                    Notes = string.IsNullOrWhiteSpace(dto.PromoCode)
+                    ? dto.Notes
+                    : string.Join(" | ", new[] { dto.Notes, $"Promo:{dto.PromoCode.Trim().ToUpperInvariant()}" }.Where(x => !string.IsNullOrWhiteSpace(x)))
+                };
+
+                _context.CinemaBookings.Add(booking);
+                await _context.SaveChangesAsync();
+
+                var seatLookup = seats.ToDictionary(x => x.SeatId);
+                foreach (var requestedSeat in dto.Seats)
+                {
+                    var seat = seatLookup[requestedSeat.SeatId];
+                    _context.CinemaTickets.Add(new CinemaTicket
+                    {
+                        BookingId = booking.BookingId,
+                        SeatId = seat.SeatId,
+                        SeatTypeId = seat.SeatTypeId,
+                        Price = requestedSeat.Price,
+                        QrCode = string.IsNullOrWhiteSpace(requestedSeat.QrCode)
+                            ? Guid.NewGuid().ToString("N")
+                            : requestedSeat.QrCode
+                    });
+                }
+
+                foreach (var requestedItem in dto.Concessions)
+                {
+                    if (!items.TryGetValue(requestedItem.ItemId, out var item))
+                    {
+                        continue;
+                    }
+
+                    _context.CinemaBookingConcessions.Add(new CinemaBookingConcession
+                    {
+                        BookingId = booking.BookingId,
+                        ItemId = item.ItemId,
+                        Quantity = requestedItem.Quantity,
+                        UnitPrice = item.Price,
+                        Subtotal = item.Price * requestedItem.Quantity
+                    });
+                }
+
+                var selectedSeatIds = dto.SeatIds.Distinct().ToList();
+                _context.CinemaSeatLocks.RemoveRange(_context.CinemaSeatLocks.Where(x =>
+                    x.ShowtimeId == dto.ShowtimeId && selectedSeatIds.Contains(x.SeatId)));
+
+                if (promoValidation.Promotion != null && discountAmount > 0)
+                {
+                    promoValidation.Promotion.TotalUses += 1;
+                    _context.CinemaPromoUsages.Add(new CinemaPromoUsage
+                    {
+                        PromoId = promoValidation.Promotion.PromoId,
+                        UserId = dto.UserId,
+                        BookingId = booking.BookingId,
+                        UsedAt = DateTime.UtcNow
+                    });
+                }
 
                 await _context.SaveChangesAsync();
                 return CreatedAtAction(nameof(GetById), new { id = booking.BookingId }, booking);
             }
 
-           
+
             catch (DbUpdateException dbEx)
             {
                 var innerMsg = dbEx.InnerException?.Message ?? dbEx.Message;
