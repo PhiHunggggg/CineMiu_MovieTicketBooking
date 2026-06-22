@@ -70,12 +70,9 @@ export function AuthProvider({ children }) {
   }, [normalizeAuthResult]);
 
   const register = useCallback(async (data) => {
-    const result = await authApi.register(data);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
-    setToken(result.token);
-    setUser(result.user);
-    return result;
-  }, []);
+    await authApi.register(data);
+    return login(data.email, data.password);
+  }, [login]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);

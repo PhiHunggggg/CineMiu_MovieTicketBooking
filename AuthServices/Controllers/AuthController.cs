@@ -32,8 +32,13 @@ namespace AuthServices.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto.LoginRequest request)
         {
+            if (request == null)
+            {
+                return BadRequest(new { message = "Email and password are required" });
+            }
+
             var identifier = request.Username ?? request.Email;
-            if (request == null || string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(request.Password))
+            if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(request.Password))
             {
                 return BadRequest(new { message = "Email and password are required" });
             }
@@ -86,10 +91,11 @@ namespace AuthServices.Controllers
 
             try
             {
+                const byte customerRoleId = 1;
                 var user = new Users
                 {
-                    RoleId = request.RoleId,
-                    CinemaId = request.CinemaId,
+                    RoleId = customerRoleId,
+                    CinemaId = null,
                     FullName = request.FullName,
                     Email = request.Email,
                     Phone = request.Phone,
@@ -98,7 +104,7 @@ namespace AuthServices.Controllers
                     AvatarUrl = request.AvatarUrl
                 };
 
-                var createdUser = await _userService.CreateAsync(user, request.Password,request.RoleId);
+                var createdUser = await _userService.CreateAsync(user, request.Password, customerRoleId);
                 return Ok(new { message = "Registration successful", userId = createdUser.UserId });
             }
             catch (Exception ex)

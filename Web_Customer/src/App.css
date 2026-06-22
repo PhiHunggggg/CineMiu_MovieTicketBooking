@@ -83,70 +83,7 @@
     color: var(--primary);
 }
 
-.auth-page {
-    min-height: calc(100vh - 100px);
-    display: grid;
-    place-items: center;
-    padding: 110px 16px 48px;
-    background:
-        radial-gradient(circle at top, rgba(245, 197, 24, .12), transparent 35%),
-        var(--bg-primary);
-}
 
-.auth-card {
-    width: min(440px, 100%);
-    padding: 32px;
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-xl);
-    background: var(--bg-card);
-    box-shadow: var(--shadow-lg);
-}
-
-.auth-card h1 {
-    margin-bottom: 24px;
-}
-
-.auth-card__eyebrow {
-    color: var(--primary);
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: .12em;
-}
-
-.auth-card label {
-    display: grid;
-    gap: 8px;
-    margin-bottom: 16px;
-    color: var(--text-secondary);
-}
-
-.auth-card input {
-    padding: 12px 14px;
-    border: 1px solid var(--border-color);
-    border-radius: 10px;
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-}
-
-.auth-card button {
-    width: 100%;
-    padding: 13px 16px;
-    border: 0;
-    border-radius: var(--radius-full);
-    background: var(--primary);
-    color: #151515;
-    font-weight: 800;
-}
-
-.auth-card > p:last-child {
-    margin-top: 20px;
-    color: var(--text-muted);
-}
-
-.auth-card a,
-.form-error {
-    color: var(--primary);
-}
 
 .listing-page {
     min-height: 70vh;
