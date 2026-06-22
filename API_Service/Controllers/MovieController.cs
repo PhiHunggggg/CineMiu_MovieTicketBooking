@@ -3,7 +3,7 @@ using Repository;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-  namespace API_Service.Controllers
+namespace API_Service.Controllers
   {
     [Route("api/movies")]
     [ApiController]
@@ -167,7 +167,6 @@ using Microsoft.EntityFrameworkCore;
                 genreIds = movieGenres.Select(x => x.GenreId).ToList()
             });
         }
-
         [HttpPost]
         public async Task<IActionResult> Create([FromBody] MovieDto dto)
         {
