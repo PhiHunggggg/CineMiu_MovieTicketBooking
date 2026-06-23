@@ -1,0 +1,16 @@
+flowchart TD
+ A(["POST /api/bookings<br/>BookingCreateRequest"]) --> C["Controller gọi Service.Create"] --> S["Service gọi Repository.Create"]
+ S --> R1["Kiểm tra User, Showtime,<br/>Seats và seat trùng"]
+ R1 --> R2["Kiểm tra ghế đã bán,<br/>đúng Hall và đang active"]
+ R2 --> R3["Kiểm tra ConcessionItems<br/>và Quantity"]
+ R3 --> R4["Tính tiền vé + đồ ăn<br/>Validate Promotion/PromoUsages"]
+ R4 --> DB1[("SQL Server<br/>Users, ShowTimes, Seats, Tickets, Bookings,<br/>ConcessionItems, Promotions, PromoUsages")]
+ DB1 --> D{"Tất cả hợp lệ?"}
+ D -- Không --> E(["400 Bad Request<br/>message từ exception"])
+ D -- Có --> R5["Tạo Booking pending<br/>SaveChanges để lấy BookingId"]
+ R5 --> R6["Tạo Tickets và BookingConcessions<br/>xóa SeatLocks"]
+ R6 --> R7["Nếu dùng voucher: tăng TotalUses<br/>và tạo PromoUsage"]
+ R7 --> DB2[("SQL Server<br/>Bookings, Tickets, BookingConcessions,<br/>SeatLocks, Promotions, PromoUsages")]
+ DB2 --> C2["Controller gọi Service.GetDetailAsync"]
+ C2 --> DB3[("SQL Server<br/>Chi tiết booking liên quan")]
+ DB3 --> O(["201 CreatedAtAction<br/>BookingDetailResponse"])

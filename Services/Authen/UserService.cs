@@ -8,10 +8,11 @@ using System.Text;
 using Libs.Auth;
 using DTO.Authen;
 using static DTO.Common.Paging;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Services.Authen
 {
-    public class UserService(IUserRepository userRepository) : IUserService
+    public class UserService(IUserRepository userRepository, IRoleRepository roleRepository) : IUserService
     {
         public async Task<PaginationResponse<UserDto.UserResponse>> GetUsersAsync(
             string? keyword, byte? roleId, bool? isActive, int page, int pageSize)
@@ -86,11 +87,6 @@ namespace Services.Authen
                 throw new ArgumentException("User not found");
             }
 
-            var validationError = await ValidateUserRequest(request, requirePassword: false, currentUserId: id);
-            if (validationError != null)
-            {
-                throw new ArgumentException(validationError);
-            }
 
             user.RoleId = request.RoleId == 0 ? (byte)1 : request.RoleId;
             user.CinemaId = request.CinemaId;
@@ -185,7 +181,28 @@ namespace Services.Authen
         {
             return await userRepository.ResolveRoleName(roleId)?? "User";
         }
-
+        public async Task<object> GetProfile(int userId)
+        {
+            var user = await userRepository.GetByIdAsync(userId);
+            if(user == null)
+            {
+                throw new KeyNotFoundException("Không tìm thấy người dùng");
+            }
+            var role = await roleRepository.GetByUserId(userId);
+            return new
+            {
+                user.UserId,
+                user.RoleId,
+                user.CinemaId,
+                user.FullName,
+                user.Email,
+                user.Phone,
+                user.AvatarUrl,
+                user.DateOfBirth,
+                user.Gender,
+                Role = role?.RoleName ?? "customer"
+            };
+        }   
         private async Task<UserDto.UserResponse> ToResponse(Users user)
         {
             return new UserDto.UserResponse

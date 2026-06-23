@@ -28,6 +28,8 @@ using Microsoft.EntityFrameworkCore;
             [FromQuery] int? cinemaId, 
             [FromQuery] int? hallId,
             [FromQuery] DateTime? date,
+            [FromQuery] DateTime? dateFrom,
+            [FromQuery] DateTime? dateTo,
             [FromQuery] string? status,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 12,
@@ -41,6 +43,8 @@ using Microsoft.EntityFrameworkCore;
                 cinemaId,
                 hallId,
                 date,
+                dateFrom,
+                dateTo,
                 status,
                 page,
                 pageSize);

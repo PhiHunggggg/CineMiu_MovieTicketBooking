@@ -81,6 +81,16 @@ namespace DTO.Booking
             public decimal? RefundAmount { get; set; }
             public DateTime? RefundedAt { get; set; }
         }
+        public class PaymentProcessResult
+        {
+            public bool Success { get; set; }
+            public string Message { get; set; } = "";
+            public PaymentResponse? Payment { get; set; }
+            public bool NewlyConfirmed { get; set; }
+            public int UserId { get; set; }
+            public decimal FinalAmount { get; set; }
+            public string BookingCode { get; set; } = "";
+        }
         public class BookingCreateRequest
         {
             public string? BookingCode { get; set; }

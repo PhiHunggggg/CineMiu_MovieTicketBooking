@@ -33,6 +33,7 @@ namespace DTO.Theater
             public string? TrailerUrl { get; set; }
             public decimal? ImdbRating { get; set; }
             public List<byte>? GenreIds { get; set; }
+            public List<string> Genres { get; set; } = new();
         }
         public class MovieRequest
         {

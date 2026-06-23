@@ -3,6 +3,11 @@ import { cinemaApi, showtimeApi } from '../../../services/api';
 import { useBooking } from '../../../context/BookingContext';
 import './CinemaForMovieSelect.css';
 
+function toLocalDateString(value) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export default function CinemaForMovieSelect() {
   const { selectCinemaForMovie, cinema: selectedCinema, movie } = useBooking();
   const [cinemas, setCinemas] = useState([]);
@@ -18,16 +23,22 @@ export default function CinemaForMovieSelect() {
     }
 
     setLoading(true);
+    const now = new Date();
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(now.getDate() + 7);
+
     // Fetch all showtimes for the selected movie, then find which cinemas have them
     Promise.all([
       cinemaApi.getAll(),
-      showtimeApi.getAll({ movieId: movie.movieId })
+      showtimeApi.getAll({
+        movieId: movie.movieId,
+        dateFrom: toLocalDateString(now),
+        dateTo: toLocalDateString(sevenDaysLater),
+        pageSize: 100
+      })
     ])
       .then(([allCinemas, showtimeData]) => {
         const showtimes = Array.isArray(showtimeData) ? showtimeData : [];
-        const now = new Date();
-        const sevenDaysLater = new Date(now);
-        sevenDaysLater.setDate(now.getDate() + 7);
 
         // Filter showtimes within next 7 days
         const upcomingShowtimes = showtimes.filter(item => {

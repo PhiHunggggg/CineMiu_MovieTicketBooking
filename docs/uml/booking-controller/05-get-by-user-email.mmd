@@ -1,0 +1,9 @@
+flowchart TD
+ A(["GET /api/bookings/user-by-email?email="]) --> D1{"Email rỗng?"}
+ D1 -- Có --> B(["400 Email is required"])
+ D1 -- Không --> C["Trim email và gọi Service.GetByUserEmailAsync"]
+ C --> S["Service gọi Repository.GetByUserEmail"] --> R["Join dữ liệu<br/>lọc User.Email và User.IsActive"]
+ R --> DB[("SQL Server<br/>Users, Bookings, ShowTimes, Movies,<br/>Halls, Cinemas, Tickets, Payments")]
+ DB --> D2{"Danh sách rỗng?"}
+ D2 -- Có --> N(["404 User or booking not found"])
+ D2 -- Không --> O(["200 OK<br/>List&lt;BookingResponse&gt;"])

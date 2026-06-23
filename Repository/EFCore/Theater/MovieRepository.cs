@@ -27,15 +27,16 @@ namespace Repository.EFCore.Theater
         {
             var query = context.Movies.AsNoTracking();
 
-            if(!string.IsNullOrEmpty(keyword))
+            if (!string.IsNullOrWhiteSpace(keyword))
             {
+                keyword = keyword.Trim();
                 query = query.Where(m => m.Title.Contains(keyword) || (m.TitleEn != null && m.TitleEn.Contains(keyword)));
             }
 
-            // now_showing, coming_soon, ended
-            if(!string.IsNullOrEmpty(status))
+            if (!string.IsNullOrWhiteSpace(status))
             {
-                query = query.Where(x => x.Status == status);
+                var statusAliases = GetStatusAliases(status);
+                query = query.Where(x => x.Status != null && statusAliases.Contains(x.Status));
             }
 
             // Tìm theo id phim
@@ -49,14 +50,15 @@ namespace Repository.EFCore.Theater
 
                 query = query.Where(m => movieIds.Contains(m.MovieId));
             }
-            var movies = await query.ToListAsync();
+            var movies = await query.OrderByDescending(x => x.ReleaseDate).ToListAsync();
             var movieIdsList = movies.Select(m => m.MovieId).ToList();
             var movieGenres = await context.MovieGenres
                 .AsNoTracking()
                 .Where(mg => movieIdsList.Contains(mg.MovieId))
-                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.MovieId, g.GenreId })
+                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.MovieId, g.GenreId, g.GenreName })
                 .ToListAsync();
             var genreIdsLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreId);
+            var genreNamesLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreName);
             var items = movies.Select(x => new MovieDTO.MovieResponse
             {
                 MovieId = x.MovieId,
@@ -76,9 +78,10 @@ namespace Repository.EFCore.Theater
                 BannerUrl = x.BannerUrl,
                 TrailerUrl = x.TrailerUrl,
                 ImdbRating = x.ImdbRating,
-                Status = x.Status,
+                Status = NormalizeStatusForClient(x.Status),
 
-                GenreIds = genreIdsLookup[x.MovieId].ToList()
+                GenreIds = genreIdsLookup[x.MovieId].ToList(),
+                Genres = genreNamesLookup[x.MovieId].ToList()
             }).ToList();
 
             return items;
@@ -94,6 +97,11 @@ namespace Repository.EFCore.Theater
                 .AsNoTracking()
                 .Where(mg => mg.MovieId == movieId)
                 .Select(mg => mg.GenreId)
+                .ToListAsync();
+            var genres = await context.MovieGenres
+                .AsNoTracking()
+                .Where(mg => mg.MovieId == movieId)
+                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (_, g) => g.GenreName)
                 .ToListAsync();
             return new MovieDTO.MovieResponse
             {
@@ -114,8 +122,9 @@ namespace Repository.EFCore.Theater
                 BannerUrl = movie.BannerUrl,
                 TrailerUrl = movie.TrailerUrl,
                 ImdbRating = movie.ImdbRating,
-                Status = movie.Status,
-                GenreIds = genreIds
+                Status = NormalizeStatusForClient(movie.Status),
+                GenreIds = genreIds,
+                Genres = genres
             };
         }
         public async Task CreateAsync(MovieDTO.MovieRequest movieRequest)
@@ -218,8 +227,40 @@ namespace Repository.EFCore.Theater
             {
                 throw new ArgumentException("Movie not found");
             }
+
+            if (await context.ShowTimes.AnyAsync(x => x.MovieId == movieId))
+            {
+                throw new InvalidOperationException("Cannot delete movie because it has showtimes");
+            }
+
+            var movieGenres = await context.MovieGenres.Where(x => x.MovieId == movieId).ToListAsync();
+            context.MovieGenres.RemoveRange(movieGenres);
             context.Movies.Remove(movie);
             await context.SaveChangesAsync();
+        }
+
+        private static string[] GetStatusAliases(string status)
+        {
+            return status.Trim().ToLowerInvariant() switch
+            {
+                "now_showing" or "nowshowing" => ["NowShowing", "now_showing", "nowshowing"],
+                "coming_soon" or "comingsoon" => ["ComingSoon", "coming_soon", "comingsoon"],
+                "ended" => ["Ended", "ended"],
+                _ => [status.Trim()]
+            };
+        }
+
+        private static string? NormalizeStatusForClient(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status)) return status;
+
+            return status.Trim().ToLowerInvariant() switch
+            {
+                "now_showing" or "nowshowing" => "now_showing",
+                "coming_soon" or "comingsoon" => "coming_soon",
+                "ended" => "ended",
+                _ => status
+            };
         }
         // Thêm, sửa, xóa phim sẽ cần thêm các phương thức tương ứng ở đây, ví dụ:
         private async Task<string?> ValidateMovieDto(MovieDTO.MovieRequest dto)

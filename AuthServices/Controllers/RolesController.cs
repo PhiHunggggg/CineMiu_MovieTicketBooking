@@ -2,6 +2,7 @@ using Repository;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Services.Authen;
 
 namespace BaseCore.AuthService.Controllers
 {
@@ -10,80 +11,57 @@ namespace BaseCore.AuthService.Controllers
     [Authorize(Roles = "admin")]
     public class RolesController : ControllerBase
     {
-        private readonly SqlServerDbContext _context;
+        private readonly RoleService roleService;
 
-        public RolesController(SqlServerDbContext context)
+        public RolesController(RoleService _roleService)
         {
-            _context = context;
+            roleService = _roleService;
         }
 
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var roles = await _context.CinemaRoles.AsNoTracking()
-                .OrderBy(x => x.RoleId)
-                .Select(x => new RoleDto
-                {
-                    Id = x.RoleId,
-                    Name = x.RoleName,
-                    Description = x.Description
-                })
-                .ToListAsync();
-
+            var roles = await roleService.GetAll();
             return Ok(roles);
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetById(int id)
         {
-            var role = await _context.CinemaRoles.AsNoTracking()
-                .Where(x => x.RoleId == id)
-                .Select(x => new RoleDto
-                {
-                    Id = x.RoleId,
-                    Name = x.RoleName,
-                    Description = x.Description
-                })
-                .FirstOrDefaultAsync();
-
-            return role == null ? NotFound(new { message = "Role not found" }) : Ok(role);
+            try{
+                var role = await roleService.GetById(id);
+                return Ok(role);
+            }
+            catch
+            {
+                return NotFound(new { message = "Role not found" });
+            }
         }
 
         [HttpGet("by-name/{roleName}")]
         public async Task<IActionResult> GetByName(string roleName)
         {
-            var role = await _context.CinemaRoles.AsNoTracking()
-                .Where(x => x.RoleName == roleName)
-                .Select(x => new RoleDto
-                {
-                    Id = x.RoleId,
-                    Name = x.RoleName,
-                    Description = x.Description
-                })
-                .FirstOrDefaultAsync();
-
-            return role == null ? NotFound(new { message = "Role not found" }) : Ok(role);
+            try
+            {
+              var role = await roleService.GetByName(roleName);
+                return Ok(role);  
+            }
+            catch
+            {
+                return NotFound(new { message = "Role not found" });
+            }
         }
 
         [HttpGet("{id}/permissions")]
         public async Task<IActionResult> GetPermissions(int id)
         {
-            var role = await _context.CinemaRoles.AsNoTracking()
-                .Where(x => x.RoleId == id)
-                .Select(x => new RoleDto
-                {
-                    Id = x.RoleId,
-                    Name = x.RoleName,
-                    Description = x.Description
-                })
-                .FirstOrDefaultAsync();
-
+            var role = await roleService.GetById(id);
             if (role == null)
             {
                 return NotFound(new { message = "Role not found" });
             }
 
-            var permissions = role.Name switch
+            var permissions = role.RoleName switch
             {
                 "admin" => new[] { "users.read", "users.write", "users.delete", "roles.read", "roles.write", "movies.write", "showtimes.write", "bookings.read", "promotions.write" },
                 "cinema_manager" => new[] { "movies.read", "movies.write", "showtimes.read", "showtimes.write", "bookings.read", "cinemas.read" },
@@ -93,7 +71,7 @@ namespace BaseCore.AuthService.Controllers
 
             return Ok(new
             {
-                role = role.Name,
+                role = role.RoleName,
                 permissions
             });
         }

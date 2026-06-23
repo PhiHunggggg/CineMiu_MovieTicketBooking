@@ -21,7 +21,6 @@ namespace Services.Theater
         {
             page = Math.Max(page, 1);
             pageSize = Math.Clamp(pageSize, 1, 100);
-
             var movies = await movieRepository.GetAllMoviesAsync(keyword, status, cinemaId);
             var totalCount = movies.Count;
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);

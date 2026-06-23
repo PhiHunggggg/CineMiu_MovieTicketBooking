@@ -14,6 +14,8 @@ function getSeatId(seat) {
 }
 
 function getSeatStatus(seat) {
+  if (seat?.isBooked ?? seat?.IsBooked) return 'booked';
+  if (seat?.isLocked ?? seat?.IsLocked) return 'locked';
   return (seat?.status ?? seat?.Status ?? 'available').toString().toLowerCase();
 }
 
@@ -41,12 +43,13 @@ export default function SeatSelect() {
         setError('');
 
         try {
-            const [stData, lookups] = await Promise.all([
-                showtimeApi.getById(showtimeId),
+            const userId = getUserId(user);
+            const [seats, lookups] = await Promise.all([
+                showtimeApi.getSeats(showtimeId, userId ? { userId } : {}),
                 lookupApi.getAll(),
             ]);
 
-            setShowtimeSeats(stData.seats || []);
+            setShowtimeSeats(Array.isArray(seats) ? seats : []);
             setSeatTypes(lookups.seatTypes || []);
         } catch (err) {
             console.error(err);
@@ -66,7 +69,7 @@ export default function SeatSelect() {
         setTimeout(() => {
             fetchSeats(showtimeId);
         }, 0);
-    }, [showtime, hall]);
+    }, [showtime, hall, user]);
 
     const showtimeId = getShowtimeId(showtime);
 
@@ -145,8 +148,8 @@ export default function SeatSelect() {
       // Refresh seats to show updated status
       const showtimeId = getShowtimeId(showtime);
       try {
-        const data = showtimeId ? await showtimeApi.getById(showtimeId) : null;
-        const updatedSeats = data?.seats || [];
+        const data = showtimeId ? await showtimeApi.getSeats(showtimeId) : null;
+        const updatedSeats = Array.isArray(data) ? data : [];
         if (updatedSeats.length > 0) {
           setShowtimeSeats(updatedSeats);
         }
@@ -177,7 +180,7 @@ export default function SeatSelect() {
       seatId,
       seatCode: seat.seatCode ?? seat.SeatCode,
       seatTypeId: seat.seatTypeId ?? seat.SeatTypeId,
-      finalPrice: seat.finalPrice ?? seat.FinalPrice,
+      finalPrice: seat.finalPrice ?? seat.FinalPrice ?? seat.price ?? seat.Price,
       rowLabel: seat.rowLabel ?? seat.RowLabel,
       colNumber: seat.colNumber ?? seat.ColNumber,
     });
@@ -200,7 +203,15 @@ export default function SeatSelect() {
 
     // Type classes
     const type = seatTypeMap[seat.seatTypeId ?? seat.SeatTypeId];
-    const typeName = (type?.typeName || type?.TypeName || type?.name || type?.Name || '').toLowerCase();
+    const typeName = (
+      seat.seatTypeName ||
+      seat.SeatTypeName ||
+      type?.typeName ||
+      type?.TypeName ||
+      type?.name ||
+      type?.Name ||
+      ''
+    ).toLowerCase();
 
     if (typeName.includes('vip') || typeName.includes('premium') || typeName.includes('sang') || typeName.includes('deluxe')) {
       modifiers.push('seat--vip');
@@ -259,7 +270,7 @@ if (displayError && showtimeSeats.length === 0) {
                     const seatId = getSeatId(seat);
                     const seatCode = seat.seatCode ?? seat.SeatCode;
                     const colNumber = seat.colNumber ?? seat.ColNumber;
-                    const finalPrice = seat.finalPrice ?? seat.FinalPrice;
+                    const finalPrice = seat.finalPrice ?? seat.FinalPrice ?? seat.price ?? seat.Price;
                     const status = getSeatStatus(seat);
                     return (
                       <button

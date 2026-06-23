@@ -46,6 +46,14 @@ async function request(endpoint, options = {}) {
   return data;
 }
 
+function getItems(response) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.Items)) return response.Items;
+  if (Array.isArray(response?.data)) return response.data;
+  return [];
+}
+
 // ===== Auth =====
 export const authApi = {
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
@@ -83,9 +91,18 @@ export const showtimeApi = {
     if (params.date) qs.set('date', params.date);
     if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params.dateTo) qs.set('dateTo', params.dateTo);
-    return request(`/showtimes?${qs.toString()}`);
+    if (params.page) qs.set('page', params.page);
+    qs.set('pageSize', params.pageSize || 100);
+    return request(`/showtimes?${qs.toString()}`).then(getItems);
   },
   getById: (id) => request(`/showtimes/${id}`),
+  getSeats: (id, params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.userId) qs.set('userId', params.userId);
+    if (params.sessionId) qs.set('sessionId', params.sessionId);
+    const query = qs.toString();
+    return request(`/showtimes/${id}/seats${query ? `?${query}` : ''}`);
+  },
   lockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/locks`, { method: 'POST', body: JSON.stringify(data) }),
   unlockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/unlocks`, { method: 'POST', body: JSON.stringify(data) }),
 };
