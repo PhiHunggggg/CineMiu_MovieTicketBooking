@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { cinemaApi, cinemaLookupApi, ticketPriceApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const emptyForm = {
     cinemaId: '',
@@ -111,14 +112,17 @@ function getTimeSlotLabel(value) {
 }
 
 export default function TicketPrices() {
+    const { user, isCinemaManager } = useAuth();
     const [searchParams] = useSearchParams();
+    const isManagerScoped = isCinemaManager();
+    const assignedCinemaId = isManagerScoped ? String(user?.cinemaId || '') : '';
     const queryAppliedRef = useRef(false);
     const [prices, setPrices] = useState([]);
     const [cinemas, setCinemas] = useState([]);
     const [halls, setHalls] = useState([]);
     const [lookups, setLookups] = useState({ hallTypes: [], seatTypes: [], dayTypes: [] });
-    const [filters, setFilters] = useState(emptyFilters);
-    const [appliedFilters, setAppliedFilters] = useState(emptyFilters);
+    const [filters, setFilters] = useState({ ...emptyFilters, cinemaId: assignedCinemaId });
+    const [appliedFilters, setAppliedFilters] = useState({ ...emptyFilters, cinemaId: assignedCinemaId });
     const [page, setPage] = useState(1);
     const pageSize = 10;
     const [pagination, setPagination] = useState({
@@ -150,7 +154,9 @@ export default function TicketPrices() {
                 cinemaApi.getAll({ activeOnly: false }),
                 cinemaLookupApi.getAll(),
             ]);
-            const cinemaItems = getItems(cinemaResponse.data);
+            const cinemaItems = getItems(cinemaResponse.data).filter((cinema) => (
+                !isManagerScoped || (assignedCinemaId && String(cinema.cinemaId || cinema.id) === assignedCinemaId)
+            ));
             const hallResponses = await Promise.all(
                 cinemaItems.map(async (cinema) => {
                     const cinemaId = cinema.cinemaId || cinema.id;
@@ -182,7 +188,7 @@ export default function TicketPrices() {
         } finally {
             setLookupsLoading(false);
         }
-    }, []);
+    }, [assignedCinemaId, isManagerScoped]);
 
     const loadPrices = useCallback(async () => {
         setLoading(true);
@@ -190,7 +196,7 @@ export default function TicketPrices() {
         try {
             const response = await ticketPriceApi.getAll({
                 keyword: appliedFilters.keyword || undefined,
-                cinemaId: appliedFilters.cinemaId || undefined,
+                cinemaId: isManagerScoped ? assignedCinemaId || -1 : appliedFilters.cinemaId || undefined,
                 hallTypeId: appliedFilters.hallTypeId || undefined,
                 page,
                 pageSize,
@@ -221,7 +227,7 @@ export default function TicketPrices() {
         } finally {
             setLoading(false);
         }
-    }, [appliedFilters, page, pageSize]);
+    }, [assignedCinemaId, appliedFilters, isManagerScoped, page, pageSize]);
 
     useEffect(() => {
         loadLookups();
@@ -250,7 +256,8 @@ export default function TicketPrices() {
     }, [form.cinemaId, halls, lookups.hallTypes]);
 
     const openCreate = useCallback((overrides = {}) => {
-        const cinemaId = overrides.cinemaId
+        const cinemaId = (isManagerScoped ? assignedCinemaId : '')
+            || overrides.cinemaId
             || filters.cinemaId
             || String(cinemas[0]?.cinemaId || cinemas[0]?.id || '');
         const typeIds = new Set(
@@ -273,13 +280,13 @@ export default function TicketPrices() {
         setError('');
         setNotice('');
         setShowModal(true);
-    }, [cinemas, filters.cinemaId, halls, lookups.dayTypes, lookups.hallTypes, lookups.seatTypes]);
+    }, [assignedCinemaId, cinemas, filters.cinemaId, halls, isManagerScoped, lookups.dayTypes, lookups.hallTypes, lookups.seatTypes]);
 
     useEffect(() => {
         if (lookupsLoading || queryAppliedRef.current || searchParams.get('create') !== '1') return;
 
         queryAppliedRef.current = true;
-        const cinemaId = searchParams.get('cinemaId') || '';
+        const cinemaId = isManagerScoped ? assignedCinemaId : searchParams.get('cinemaId') || '';
         const hallTypeId = searchParams.get('hallTypeId') || '';
         const validCinemaId = cinemas.some((cinema) => String(cinema.cinemaId || cinema.id) === cinemaId)
             ? cinemaId
@@ -296,7 +303,7 @@ export default function TicketPrices() {
             cinemaId: validCinemaId,
             hallTypeId: hasHallType ? hallTypeId : '',
         });
-    }, [cinemas, halls, lookupsLoading, openCreate, searchParams]);
+    }, [assignedCinemaId, cinemas, halls, isManagerScoped, lookupsLoading, openCreate, searchParams]);
 
     const submitFilters = (event) => {
         event.preventDefault();
@@ -304,13 +311,14 @@ export default function TicketPrices() {
         setPage(1);
         setAppliedFilters({
             ...filters,
+            cinemaId: isManagerScoped ? assignedCinemaId : filters.cinemaId,
             keyword: filters.keyword.trim(),
         });
     };
 
     const resetFilters = () => {
-        setFilters(emptyFilters);
-        setAppliedFilters(emptyFilters);
+        setFilters({ ...emptyFilters, cinemaId: isManagerScoped ? assignedCinemaId : '' });
+        setAppliedFilters({ ...emptyFilters, cinemaId: isManagerScoped ? assignedCinemaId : '' });
         setPage(1);
         setError('');
     };
@@ -480,8 +488,8 @@ export default function TicketPrices() {
                     <div className="price-advanced-grid">
                         <label className="form-field">
                             <span>Chi nhánh</span>
-                            <select value={filters.cinemaId} onChange={(event) => setFilters({ ...filters, cinemaId: event.target.value })}>
-                                <option value="">Tất cả chi nhánh</option>
+                            <select value={filters.cinemaId} onChange={(event) => setFilters({ ...filters, cinemaId: event.target.value })} disabled={isManagerScoped}>
+                                {!isManagerScoped && <option value="">Tất cả chi nhánh</option>}
                                 {cinemas.map((cinema) => <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>{cinema.cinemaName || cinema.name}</option>)}
                             </select>
                         </label>
@@ -588,6 +596,7 @@ export default function TicketPrices() {
                                                 <select
                                                     value={form.cinemaId}
                                                     onChange={(event) => {
+                                                        if (isManagerScoped) return;
                                                         const cinemaId = event.target.value;
                                                         const typeIds = new Set(
                                                             halls
@@ -601,6 +610,7 @@ export default function TicketPrices() {
                                                             hallTypeId: firstHallType ? String(firstHallType.hallTypeId) : '',
                                                         });
                                                     }}
+                                                disabled={isManagerScoped}
                                                 >
                                                     <option value="">Chọn chi nhánh</option>
                                                     {cinemas.map((cinema) => <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>{cinema.cinemaName || cinema.name}</option>)}

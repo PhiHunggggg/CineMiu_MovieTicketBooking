@@ -133,6 +133,37 @@ namespace AuthServices.Controllers
             return Ok(await BuildUserPayload(user));
         }
 
+        [Authorize]
+        [HttpPut("password")]
+        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+        {
+            if (request == null ||
+                string.IsNullOrWhiteSpace(request.CurrentPassword) ||
+                string.IsNullOrWhiteSpace(request.NewPassword))
+            {
+                return BadRequest(new { message = "Current password and new password are required" });
+            }
+
+            if (request.NewPassword.Length < 6)
+            {
+                return BadRequest(new { message = "New password must be at least 6 characters" });
+            }
+
+            var user = await GetAuthenticatedUser(trackChanges: true);
+            if (user == null)
+            {
+                return Unauthorized(new { message = "User ID not found in token" });
+            }
+
+            if (!TokenHelper.IsValidStoredPassword(request.CurrentPassword, user.PasswordHash))
+            {
+                return BadRequest(new { message = "Current password is incorrect" });
+            }
+
+            await _userService.UpdateAsync(user, request.NewPassword);
+            return Ok(new { message = "Password changed successfully" });
+        }
+
         private async Task<object> BuildAuthResponse(Users user, string? message = null)
         {
             var roleName = await _userService.ResolveRoleName(user.RoleId) ?? "customer";
@@ -200,6 +231,12 @@ namespace AuthServices.Controllers
             public string? AvatarUrl { get; set; }
             public DateTime? DateOfBirth { get; set; }
             public string? Gender { get; set; }
+        }
+
+        public class ChangePasswordRequest
+        {
+            public string CurrentPassword { get; set; } = "";
+            public string NewPassword { get; set; } = "";
         }
     }
 }

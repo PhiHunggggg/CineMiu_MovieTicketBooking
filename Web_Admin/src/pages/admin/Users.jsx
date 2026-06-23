@@ -150,6 +150,9 @@ const Users = () => {
         const role = roles.find((item) => Number(item.roleId) === Number(roleId));
         return role?.roleName || roleId;
     };
+    const customerUsers = users.filter((user) => Number(user.roleId) === 1);
+    const activeCustomerCount = customerUsers.filter((user) => user.isActive).length;
+    const lockedCustomerCount = customerUsers.length - activeCustomerCount;
 
     return (
         <div className="content-wrapper">
@@ -161,6 +164,13 @@ const Users = () => {
 
             <section className="content">
                 <div className="container-fluid">
+                    <div className="admin-management-brief">
+                        <div><i className="fas fa-users"></i><p><span>Tổng khách hàng</span><strong>{customerUsers.length.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-user-check"></i><p><span>Đang hoạt động</span><strong>{activeCustomerCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-user-lock"></i><p><span>Đã khóa</span><strong>{lockedCustomerCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-clock-rotate-left"></i><p><span>Lịch sử đặt vé</span><strong>Chi tiết</strong></p></div>
+                    </div>
+
                     <div className="card">
                         <div className="card-header">
                             <div className="row">
@@ -205,11 +215,11 @@ const Users = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {users.length === 0 ? (
+                                            {customerUsers.length === 0 ? (
                                                 <tr>
                                                     <td colSpan="6" className="text-center">Không tìm thấy người dùng</td>
                                                 </tr>
-                                            ) : users.filter((user) => Number(user.roleId) === 1).map((user) => (
+                                            ) : customerUsers.map((user) => (
                                                 <tr key={user.userId || user.id}>
                                                     <td>{user.fullName || user.name}</td>
                                                     <td>{user.email}</td>

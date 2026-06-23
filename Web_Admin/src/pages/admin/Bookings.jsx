@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { bookingAdminApi, cinemaApi } from '../../services/api';
+import { bookingAdminApi, cinemaApi, movieApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
 const bookingStatuses = [
@@ -7,7 +7,7 @@ const bookingStatuses = [
     { value: 'pending', label: 'Chờ thanh toán' },
     { value: 'confirmed', label: 'Đã xác nhận' },
     { value: 'paid', label: 'Đã thanh toán' },
-    { value: 'completed', label: 'Hoàn tất' },
+    { value: 'completed', label: 'Đã sử dụng' },
     { value: 'cancelled', label: 'Đã hủy' },
 ];
 
@@ -22,7 +22,7 @@ const getStatusLabel = (status) => {
         pending: 'Chờ thanh toán',
         confirmed: 'Đã xác nhận',
         paid: 'Đã thanh toán',
-        completed: 'Hoàn tất',
+        completed: 'Đã sử dụng',
         cancelled: 'Đã hủy',
     };
     return map[status] || status || '-';
@@ -52,12 +52,14 @@ const getPaymentStatusLabel = (status) => {
 };
 
 const AdminBookings = () => {
-    const { canCheckInTickets, isAdmin, isCinemaManager } = useAuth();
+    const { user, canCheckInTickets, isAdmin, isCinemaManager } = useAuth();
     const [bookings, setBookings] = useState([]);
     const [cinemas, setCinemas] = useState([]);
+    const [movies, setMovies] = useState([]);
     const [filters, setFilters] = useState({
         keyword: '',
         status: '',
+        movieId: '',
         cinemaId: '',
         date: '',
     });
@@ -68,18 +70,32 @@ const AdminBookings = () => {
     const [error, setError] = useState('');
     const [quickQrCode, setQuickQrCode] = useState('');
     const [checkingIn, setCheckingIn] = useState(false);
+    const managerCinemaId = isCinemaManager() ? user?.cinemaId : null;
 
     useEffect(() => {
         loadCinemas();
+        loadMovies();
         loadBookings();
     }, []);
 
     const loadCinemas = async () => {
         try {
             const response = await cinemaApi.getAll();
-            setCinemas(getItems(response.data));
+            const items = getItems(response.data);
+            setCinemas(isCinemaManager()
+                ? items.filter((cinema) => managerCinemaId && Number(cinema.cinemaId || cinema.id) === Number(managerCinemaId))
+                : items);
         } catch (err) {
             console.error('Failed to load cinemas:', err);
+        }
+    };
+
+    const loadMovies = async () => {
+        try {
+            const response = await movieApi.getAll({ page: 1, pageSize: 500 });
+            setMovies(getItems(response.data));
+        } catch (err) {
+            console.error('Failed to load movies:', err);
         }
     };
 
@@ -92,7 +108,8 @@ const AdminBookings = () => {
             const response = await bookingAdminApi.getAll({
                 keyword: filters.keyword || undefined,
                 status: filters.status || undefined,
-                cinemaId: filters.cinemaId || undefined,
+                movieId: filters.movieId || undefined,
+                cinemaId: isCinemaManager() ? managerCinemaId || -1 : filters.cinemaId || undefined,
                 date: filters.date || undefined,
                 page: 1,
                 pageSize: 200,
@@ -271,6 +288,9 @@ const AdminBookings = () => {
         refundAmount: detailRefundAmount,
         refundedAt: detailRefundedAt,
     });
+    const paidCount = bookings.filter((booking) => ['paid', 'confirmed'].includes(booking.status)).length;
+    const usedCount = bookings.filter((booking) => booking.status === 'completed').length;
+    const cancelledCount = bookings.filter((booking) => booking.status === 'cancelled').length;
 
     return (
         <div className="content-wrapper">
@@ -283,6 +303,13 @@ const AdminBookings = () => {
             <section className="content">
                 <div className="container-fluid">
                     {error && <div className="alert alert-warning">{error}</div>}
+
+                    <div className="admin-management-brief">
+                        <div><i className="fas fa-ticket"></i><p><span>Tổng đơn hiển thị</span><strong>{Number(total || bookings.length).toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-credit-card"></i><p><span>Đã thanh toán</span><strong>{paidCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-check-double"></i><p><span>Đã sử dụng</span><strong>{usedCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-ban"></i><p><span>Đã hủy</span><strong>{cancelledCount.toLocaleString('vi-VN')}</strong></p></div>
+                    </div>
 
                     <div className="card">
                         <div className="card-body">
@@ -303,10 +330,10 @@ const AdminBookings = () => {
                         </div>
                     </div>
 
-                    <div className="card">
+                    <div className="card admin-filter-card">
                         <div className="card-body">
-                            <form className="form-inline align-items-end" onSubmit={loadBookings}>
-                                <div className="mr-2 mb-2">
+                            <form className="admin-filter-grid" onSubmit={loadBookings}>
+                                <div>
                                     <label className="d-block mb-1">Từ khóa</label>
                                     <input
                                         className="form-control"
@@ -315,7 +342,7 @@ const AdminBookings = () => {
                                         placeholder="Mã vé, tên, email..."
                                     />
                                 </div>
-                                <div className="mr-2 mb-2">
+                                <div>
                                     <label className="d-block mb-1">Trạng thái</label>
                                     <select
                                         className="form-control"
@@ -327,20 +354,41 @@ const AdminBookings = () => {
                                         ))}
                                     </select>
                                 </div>
-                                <div className="mr-2 mb-2">
-                                    <label className="d-block mb-1">Rạp</label>
+                                <div>
+                                    <label className="d-block mb-1">Phim</label>
                                     <select
                                         className="form-control"
-                                        value={filters.cinemaId}
-                                        onChange={(e) => setFilters({ ...filters, cinemaId: e.target.value })}
+                                        value={filters.movieId}
+                                        onChange={(e) => setFilters({ ...filters, movieId: e.target.value })}
                                     >
-                                        <option value="">Tất cả rạp</option>
-                                        {cinemas.map((cinema) => (
-                                            <option key={cinema.cinemaId} value={cinema.cinemaId}>{cinema.cinemaName || cinema.name}</option>
+                                        <option value="">Tất cả phim</option>
+                                        {movies.map((movie) => (
+                                            <option key={movie.movieId || movie.id} value={movie.movieId || movie.id}>{movie.title}</option>
                                         ))}
                                     </select>
                                 </div>
-                                <div className="mr-2 mb-2">
+                                <div>
+                                    <label className="d-block mb-1">Rạp</label>
+                                    {isCinemaManager() ? (
+                                        <input
+                                            className="form-control"
+                                            value={cinemas[0]?.cinemaName || `Chi nhánh #${user?.cinemaId || ''}`}
+                                            disabled
+                                        />
+                                    ) : (
+                                        <select
+                                            className="form-control"
+                                            value={filters.cinemaId}
+                                            onChange={(e) => setFilters({ ...filters, cinemaId: e.target.value })}
+                                        >
+                                            <option value="">Tất cả rạp</option>
+                                            {cinemas.map((cinema) => (
+                                                <option key={cinema.cinemaId} value={cinema.cinemaId}>{cinema.cinemaName || cinema.name}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+                                <div>
                                     <label className="d-block mb-1">Ngày đặt</label>
                                     <input
                                         type="date"
@@ -349,7 +397,7 @@ const AdminBookings = () => {
                                         onChange={(e) => setFilters({ ...filters, date: e.target.value })}
                                     />
                                 </div>
-                                <button className="btn btn-primary mb-2" type="submit" disabled={loading}>
+                                <button className="btn btn-primary" type="submit" disabled={loading}>
                                     <i className="fas fa-search mr-1"></i> Lọc
                                 </button>
                             </form>

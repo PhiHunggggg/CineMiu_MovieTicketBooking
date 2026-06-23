@@ -135,6 +135,10 @@ const AdminPromotions = () => {
             setError(err.response?.data?.message || 'Ngừng khuyến mãi thất bại');
         }
     };
+    const now = new Date();
+    const activePromotionCount = promotions.filter((promotion) => promotion.isActive && (!promotion.validTo || new Date(promotion.validTo) >= now)).length;
+    const expiredPromotionCount = promotions.filter((promotion) => promotion.validTo && new Date(promotion.validTo) < now).length;
+    const disabledPromotionCount = promotions.filter((promotion) => !promotion.isActive).length;
 
     return (
         <div className="content-wrapper">
@@ -146,6 +150,13 @@ const AdminPromotions = () => {
 
             <section className="content">
                 <div className="container-fluid">
+                    <div className="admin-management-brief">
+                        <div><i className="fas fa-percent"></i><p><span>Tổng mã</span><strong>{promotions.length.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-bolt"></i><p><span>Đang áp dụng</span><strong>{activePromotionCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-hourglass-end"></i><p><span>Hết hạn</span><strong>{expiredPromotionCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-toggle-off"></i><p><span>Đã tắt</span><strong>{disabledPromotionCount.toLocaleString('vi-VN')}</strong></p></div>
+                    </div>
+
                     {error && !showModal && <div className="alert alert-warning">{error}</div>}
 
                     <div className="card">

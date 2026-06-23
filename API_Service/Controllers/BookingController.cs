@@ -43,6 +43,7 @@ namespace API_Service.Controllers
         public async Task<IActionResult> GetAll(
             [FromQuery] string? keyword,
             [FromQuery] string? status,
+            [FromQuery] int? movieId,
             [FromQuery] int? cinemaId,
             [FromQuery] DateTime? date,
             [FromQuery] int page = 1,
@@ -78,6 +79,11 @@ namespace API_Service.Controllers
             if (cinemaId.HasValue)
             {
                 query = query.Where(x => x.cinema.CinemaId == cinemaId.Value);
+            }
+
+            if (movieId.HasValue)
+            {
+                query = query.Where(x => x.movie.MovieId == movieId.Value);
             }
 
             if (date.HasValue)

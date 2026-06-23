@@ -70,7 +70,7 @@ const Dashboard = () => {
         setLoading(true);
         setWarning('');
         const results = await Promise.allSettled([
-            revenueApi.getSystemRevenue({ year, month: new Date().getMonth() + 1 }),
+            revenueApi.getSystemRevenue({ year }),
             movieApi.getAll({ page: 1, pageSize: 1 }),
             cinemaApi.getAll({ activeOnly: false }),
         ]);
@@ -124,7 +124,7 @@ const Dashboard = () => {
 
                         <div className="admin-panel admin-status-panel">
                             <div className="admin-panel-header"><div><p className="admin-eyebrow">Vận hành vé</p><h2>Trạng thái vé</h2><span>Theo kỳ báo cáo hiện tại</span></div></div>
-                            <div className="admin-ticket-ring" style={{ '--sold': `${stats.tickets ? Math.min(100, (Number(read(statuses.find((item) => read(item, 'status', 'Status') === 'sold'), 'totalTickets', 'TotalTickets') || 0) / stats.tickets) * 100) : 0}%` }}><div><strong>{formatNumber(stats.tickets)}</strong><span>Tổng vé</span></div></div>
+                            <div className="admin-ticket-ring" style={{ '--sold': `${stats.tickets ? Math.min(100, (Number(read(statuses.find((item) => read(item, 'status', 'Status') === 'sold'), 'totalTickets', 'TotalTickets') || 0) / stats.tickets) * 100) : 0}%` }}><div><strong>{formatNumber(stats.tickets)}</strong><span>Vé đã bán</span></div></div>
                             <div className="admin-status-list">
                                 {statuses.length ? statuses.map((item, index) => <div key={read(item, 'status', 'Status') || index}><span className={`status-color status-${index}`}></span><p>{read(item, 'label', 'Label')}<strong>{formatNumber(read(item, 'totalTickets', 'TotalTickets'))}</strong></p></div>) : <div className="admin-empty-inline">Chưa có dữ liệu vé trong kỳ.</div>}
                             </div>

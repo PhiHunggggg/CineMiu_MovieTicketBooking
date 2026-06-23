@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
-import { cinemaApi, cinemaLookupApi } from '../../services/api';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import { cinemaApi, cinemaLookupApi, showtimeApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const emptyForm = {
     cinemaId: '',
@@ -20,6 +21,22 @@ const statusOptions = [
 const getItems = (data) => data?.items || data?.data || data || [];
 const getHallId = (hall) => hall?.hallId || hall?.id;
 const getErrorMessage = (error, fallback) => error?.response?.data?.message || error?.message || fallback;
+const getShowtimeInfo = (item) => item?.showtime || item?.Showtime || item || {};
+
+const displayStatusOptions = [
+    statusOptions[0],
+    { value: 'showing', label: 'Đang chiếu', icon: 'fa-circle-play' },
+    statusOptions[1],
+    statusOptions[2],
+];
+
+function getTodayValue() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
 
 function getSeatTypeKey(typeName) {
     const normalizedName = String(typeName || '').toLowerCase();
@@ -40,13 +57,18 @@ function getStatusLabel(status) {
 }
 
 export default function Halls() {
+    const { user, isCinemaManager } = useAuth();
     const [searchParams] = useSearchParams();
+    const location = useLocation();
+    const isManagerScoped = isCinemaManager();
+    const isSeatManagement = location.pathname.includes('/admin/seats');
+    const assignedCinemaId = isManagerScoped ? String(user?.cinemaId || '') : '';
     const queryAppliedRef = useRef(false);
     const [cinemas, setCinemas] = useState([]);
     const [hallTypes, setHallTypes] = useState([]);
     const [seatTypes, setSeatTypes] = useState([]);
     const [halls, setHalls] = useState([]);
-    const [cinemaFilter, setCinemaFilter] = useState('');
+    const [cinemaFilter, setCinemaFilter] = useState(assignedCinemaId);
     const [statusFilter, setStatusFilter] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
@@ -58,6 +80,8 @@ export default function Halls() {
     const [seatEditorHall, setSeatEditorHall] = useState(null);
     const [seatLayout, setSeatLayout] = useState([]);
     const [selectedSeatTypeId, setSelectedSeatTypeId] = useState('');
+    const [seatEditMode, setSeatEditMode] = useState('type');
+    const [showingHallIds, setShowingHallIds] = useState(new Set());
     const [seatLoading, setSeatLoading] = useState(false);
     const [seatSaving, setSeatSaving] = useState(false);
     const [seatError, setSeatError] = useState('');
@@ -71,7 +95,9 @@ export default function Halls() {
                 cinemaApi.getAll({ activeOnly: false }),
                 cinemaLookupApi.getAll(),
             ]);
-            const cinemaItems = getItems(cinemaResponse.data);
+            const cinemaItems = getItems(cinemaResponse.data).filter((cinema) => (
+                !isManagerScoped || (assignedCinemaId && String(cinema.cinemaId || cinema.id) === assignedCinemaId)
+            ));
             const lookupData = lookupResponse.data || {};
             const hallResponses = await Promise.all(
                 cinemaItems.map(async (cinema) => {
@@ -87,17 +113,42 @@ export default function Halls() {
                     }
                 }),
             );
+            const hallItems = hallResponses.flat();
+            const showingResponses = await Promise.all(
+                cinemaItems.map(async (cinema) => {
+                    try {
+                        const response = await showtimeApi.getAll({
+                            cinemaId: cinema.cinemaId || cinema.id,
+                            date: getTodayValue(),
+                            status: 'showing',
+                            page: 1,
+                            pageSize: 200,
+                        });
+                        return getItems(response.data);
+                    } catch {
+                        return [];
+                    }
+                }),
+            );
+            const showingIds = new Set(
+                showingResponses
+                    .flat()
+                    .map((item) => Number(getShowtimeInfo(item).hallId || getShowtimeInfo(item).HallId))
+                    .filter(Boolean),
+            );
 
             setCinemas(cinemaItems);
             setHallTypes(lookupData.hallTypes || []);
             setSeatTypes(lookupData.seatTypes || []);
-            setHalls(hallResponses.flat());
+            setHalls(hallItems);
+            setShowingHallIds(showingIds);
         } catch (requestError) {
             setError(getErrorMessage(requestError, 'Không tải được dữ liệu phòng chiếu.'));
+            setShowingHallIds(new Set());
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [assignedCinemaId, isManagerScoped]);
 
     useEffect(() => {
         loadData();
@@ -130,41 +181,48 @@ export default function Halls() {
     const visibleHalls = useMemo(
         () => halls.filter((hall) => (
             (!cinemaFilter || String(hall.cinemaId) === cinemaFilter)
-            && (!statusFilter || hall.status === statusFilter)
+            && (!statusFilter || (hall.status === 'active' && showingHallIds.has(Number(getHallId(hall))) ? 'showing' : hall.status) === statusFilter)
         )),
-        [cinemaFilter, halls, statusFilter],
+        [cinemaFilter, halls, showingHallIds, statusFilter],
     );
 
     const summary = useMemo(() => ({
         total: halls.length,
         active: halls.filter((hall) => hall.status === 'active').length,
+        showing: halls.filter((hall) => hall.status === 'active' && showingHallIds.has(Number(getHallId(hall)))).length,
         maintenance: halls.filter((hall) => hall.status === 'maintenance').length,
         inactive: halls.filter((hall) => hall.status === 'inactive').length,
-    }), [halls]);
+    }), [halls, showingHallIds]);
+
+    const getHallDisplayStatus = (hall) => (
+        hall.status === 'active' && showingHallIds.has(Number(getHallId(hall)))
+            ? 'showing'
+            : hall.status || 'inactive'
+    );
 
     const openCreate = useCallback((cinemaId = '') => {
         setEditingHall(null);
         setForm({
             ...emptyForm,
-            cinemaId: cinemaId || cinemaFilter || String(cinemas[0]?.cinemaId || cinemas[0]?.id || ''),
+            cinemaId: assignedCinemaId || cinemaId || cinemaFilter || String(cinemas[0]?.cinemaId || cinemas[0]?.id || ''),
             hallTypeId: String(hallTypes[0]?.hallTypeId || ''),
         });
         setError('');
         setNotice('');
         setShowModal(true);
-    }, [cinemaFilter, cinemas, hallTypes]);
+    }, [assignedCinemaId, cinemaFilter, cinemas, hallTypes]);
 
     useEffect(() => {
         if (loading || queryAppliedRef.current || searchParams.get('create') !== '1') return;
 
         queryAppliedRef.current = true;
-        const cinemaId = searchParams.get('cinemaId') || '';
+        const cinemaId = isManagerScoped ? assignedCinemaId : searchParams.get('cinemaId') || '';
         const validCinemaId = cinemas.some((cinema) => String(cinema.cinemaId || cinema.id) === cinemaId)
             ? cinemaId
             : '';
         if (validCinemaId) setCinemaFilter(validCinemaId);
         openCreate(validCinemaId);
-    }, [cinemas, loading, openCreate, searchParams]);
+    }, [assignedCinemaId, cinemas, isManagerScoped, loading, openCreate, searchParams]);
 
     const openEdit = (hall) => {
         setEditingHall(hall);
@@ -244,6 +302,7 @@ export default function Halls() {
         setSeatError('');
         setSeatLoading(true);
         setSelectedSeatTypeId(String(seatTypes[0]?.seatTypeId || ''));
+        setSeatEditMode('type');
 
         try {
             const response = await cinemaApi.getHallSeats(getHallId(hall));
@@ -262,9 +321,19 @@ export default function Halls() {
         setSeatEditorHall(null);
         setSeatLayout([]);
         setSeatError('');
+        setSeatEditMode('type');
     };
 
     const changeSeatType = (seatId) => {
+        if (seatEditMode === 'lock') {
+            setSeatLayout((currentSeats) => currentSeats.map((seat) => (
+                Number(seat.seatId || seat.id) === Number(seatId)
+                    ? { ...seat, isActive: seat.isActive === false }
+                    : seat
+            )));
+            return;
+        }
+
         if (!selectedSeatTypeId) return;
         setSeatLayout((currentSeats) => currentSeats.map((seat) => (
             Number(seat.seatId || seat.id) === Number(seatId)
@@ -286,9 +355,10 @@ export default function Halls() {
                 seatCode: seat.seatCode,
                 isActive: seat.isActive !== false,
             })));
-            setNotice(`Đã cập nhật loại ghế cho ${seatEditorHall.hallName || seatEditorHall.name}.`);
+            setNotice(`Đã cập nhật sơ đồ ghế cho ${seatEditorHall.hallName || seatEditorHall.name}.`);
             setSeatEditorHall(null);
             setSeatLayout([]);
+            await loadData();
         } catch (requestError) {
             setSeatError(getErrorMessage(requestError, 'Không lưu được sơ đồ ghế.'));
         } finally {
@@ -300,17 +370,24 @@ export default function Halls() {
         <div className="theater-page">
             <header className="management-page-header">
                 <div>
-                    <p className="section-kicker">Quản lý rạp</p>
-                    <h1>Trạng thái phòng chiếu</h1>
-                    <p>Theo dõi sức chứa, loại phòng và tình trạng vận hành tại từng chi nhánh.</p>
+                    <p className="section-kicker">{isSeatManagement ? 'Ghế ngồi' : 'Quản lý rạp'}</p>
+                    <h1>{isSeatManagement ? 'Sơ đồ ghế từng phòng' : 'Trạng thái phòng chiếu'}</h1>
+                    <p>
+                        {isSeatManagement
+                            ? 'Thiết lập ghế thường, VIP, Couple và khóa ghế hỏng hoặc bảo trì.'
+                            : 'Theo dõi sức chứa, loại phòng và tình trạng vận hành tại từng chi nhánh.'}
+                    </p>
                 </div>
                 <div className="management-header-actions">
-                    <Link className="btn btn-outline-secondary" to="/admin/cinemas">
-                        <i className="fas fa-building" /> Chi nhánh
-                    </Link>
-                    <button className="btn btn-primary" type="button" onClick={() => openCreate()}>
-                        <i className="fas fa-plus" /> Thêm phòng
-                    </button>
+                    {isSeatManagement ? (
+                        <Link className="btn btn-outline-secondary" to="/admin/halls">
+                            <i className="fas fa-door-open" /> Phòng chiếu
+                        </Link>
+                    ) : (
+                        <button className="btn btn-primary" type="button" onClick={() => openCreate()}>
+                            <i className="fas fa-plus" /> Thêm phòng
+                        </button>
+                    )}
                 </div>
             </header>
 
@@ -323,13 +400,13 @@ export default function Halls() {
                     <span><i className="fas fa-circle-check" /></span>
                     <div><strong>{summary.active}</strong><small>Đang hoạt động</small></div>
                 </article>
+                <article className="theater-summary-card blue">
+                    <span><i className="fas fa-circle-play" /></span>
+                    <div><strong>{summary.showing}</strong><small>Đang chiếu</small></div>
+                </article>
                 <article className="theater-summary-card amber">
                     <span><i className="fas fa-screwdriver-wrench" /></span>
                     <div><strong>{summary.maintenance}</strong><small>Đang bảo trì</small></div>
-                </article>
-                <article className="theater-summary-card gray">
-                    <span><i className="fas fa-circle-pause" /></span>
-                    <div><strong>{summary.inactive}</strong><small>Ngừng hoạt động</small></div>
                 </article>
             </section>
 
@@ -340,8 +417,8 @@ export default function Halls() {
                         <small>{visibleHalls.length} phòng phù hợp</small>
                     </div>
                     <div className="theater-filter-controls">
-                        <select className="form-control" value={cinemaFilter} onChange={(event) => setCinemaFilter(event.target.value)}>
-                            <option value="">Tất cả chi nhánh</option>
+                        <select className="form-control" value={cinemaFilter} onChange={(event) => setCinemaFilter(event.target.value)} disabled={isManagerScoped}>
+                            {!isManagerScoped && <option value="">Tất cả chi nhánh</option>}
                             {cinemas.map((cinema) => (
                                 <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>
                                     {cinema.cinemaName || cinema.name}
@@ -350,7 +427,7 @@ export default function Halls() {
                         </select>
                         <select className="form-control" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                             <option value="">Tất cả trạng thái</option>
-                            {statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                            {displayStatusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                         </select>
                     </div>
                 </div>
@@ -404,18 +481,26 @@ export default function Halls() {
                                                     <div className="small text-muted">Chưa có lịch chiếu sắp tới</div>
                                                 )}
                                             </td>
-                                            <td><span className={`hall-status status-${hall.status || 'inactive'}`}>{getStatusLabel(hall.status)}</span></td>
+                                            <td>
+                                                <span className={`hall-status status-${getHallDisplayStatus(hall)}`}>
+                                                    {displayStatusOptions.find((item) => item.value === getHallDisplayStatus(hall))?.label || getStatusLabel(hall.status)}
+                                                </span>
+                                            </td>
                                             <td>
                                                 <div className="row-actions">
-                                                    <button className="icon-button" type="button" onClick={() => openEdit(hall)} title="Sửa phòng">
-                                                        <i className="fas fa-pen" />
-                                                    </button>
+                                                    {!isSeatManagement ? (
+                                                        <button className="icon-button" type="button" onClick={() => openEdit(hall)} title="Sửa phòng">
+                                                            <i className="fas fa-pen" />
+                                                        </button>
+                                                    ) : null}
                                                     <button className="icon-button seat-action" type="button" onClick={() => openSeatEditor(hall)} title="Chọn ghế thường, VIP hoặc Couple">
                                                         <i className="fas fa-chair" />
                                                     </button>
-                                                    <button className="icon-button danger" type="button" onClick={() => deleteHall(hall)} title="Xóa phòng">
-                                                        <i className="fas fa-trash" />
-                                                    </button>
+                                                    {!isSeatManagement ? (
+                                                        <button className="icon-button danger" type="button" onClick={() => deleteHall(hall)} title="Xóa phòng">
+                                                            <i className="fas fa-trash" />
+                                                        </button>
+                                                    ) : null}
                                                 </div>
                                             </td>
                                         </tr>
@@ -442,7 +527,7 @@ export default function Halls() {
                                         <div className="form-grid theater-form-grid">
                                             <label className="form-field">
                                                 <span>Chi nhánh rạp</span>
-                                                <select value={form.cinemaId} onChange={(event) => setForm({ ...form, cinemaId: event.target.value })} disabled={Boolean(editingHall)}>
+                                                <select value={form.cinemaId} onChange={(event) => setForm({ ...form, cinemaId: event.target.value })} disabled={Boolean(editingHall) || isManagerScoped}>
                                                     <option value="">Chọn chi nhánh</option>
                                                     {cinemas.map((cinema) => <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>{cinema.cinemaName || cinema.name}</option>)}
                                                 </select>
@@ -500,7 +585,7 @@ export default function Halls() {
                                 <div className="modal-header">
                                     <div>
                                         <h2>Sơ đồ ghế - {seatEditorHall.hallName || seatEditorHall.name}</h2>
-                                        <small>Chọn loại ghế, sau đó bấm vào từng ghế để thay đổi.</small>
+                                        <small>Chọn loại ghế hoặc chế độ khóa, sau đó bấm vào từng ghế để thay đổi.</small>
                                     </div>
                                     <button className="close" type="button" onClick={closeSeatEditor}>&times;</button>
                                 </div>
@@ -511,13 +596,19 @@ export default function Halls() {
                                         {seatTypes.map((type) => {
                                             const typeId = String(type.seatTypeId);
                                             const typeKey = getSeatTypeKey(type.typeName);
-                                            const count = seatLayout.filter((seat) => Number(seat.seatTypeId) === Number(type.seatTypeId)).length;
+                                            const count = seatLayout.filter((seat) => (
+                                                seat.isActive !== false
+                                                && Number(seat.seatTypeId) === Number(type.seatTypeId)
+                                            )).length;
                                             return (
                                                 <button
                                                     key={type.seatTypeId}
-                                                    className={`seat-type-option seat-${typeKey} ${selectedSeatTypeId === typeId ? 'selected' : ''}`}
+                                                    className={`seat-type-option seat-${typeKey} ${seatEditMode === 'type' && selectedSeatTypeId === typeId ? 'selected' : ''}`}
                                                     type="button"
-                                                    onClick={() => setSelectedSeatTypeId(typeId)}
+                                                    onClick={() => {
+                                                        setSeatEditMode('type');
+                                                        setSelectedSeatTypeId(typeId);
+                                                    }}
                                                 >
                                                     <i className="fas fa-chair" />
                                                     <span>{getSeatTypeLabel(type.typeName)}</span>
@@ -525,6 +616,15 @@ export default function Halls() {
                                                 </button>
                                             );
                                         })}
+                                        <button
+                                            className={`seat-type-option seat-locked ${seatEditMode === 'lock' ? 'selected' : ''}`}
+                                            type="button"
+                                            onClick={() => setSeatEditMode('lock')}
+                                        >
+                                            <i className="fas fa-ban" />
+                                            <span>Khóa ghế</span>
+                                            <strong>{seatLayout.filter((seat) => seat.isActive === false).length}</strong>
+                                        </button>
                                     </div>
 
                                     {seatLoading ? (
@@ -546,9 +646,9 @@ export default function Halls() {
                                                                 return (
                                                                     <button
                                                                         key={seat.seatId || seat.id || seat.seatCode}
-                                                                        className={`seat-layout-seat seat-${typeKey}`}
+                                                                        className={`seat-layout-seat seat-${typeKey} ${seat.isActive === false ? 'seat-inactive' : ''}`}
                                                                         type="button"
-                                                                        title={`${seat.seatCode} - ${getSeatTypeLabel(type?.typeName)}`}
+                                                                        title={`${seat.seatCode} - ${seat.isActive === false ? 'Đã khóa do hỏng/bảo trì' : getSeatTypeLabel(type?.typeName)}`}
                                                                         onClick={() => changeSeatType(seat.seatId || seat.id)}
                                                                     >
                                                                         {seat.seatCode}

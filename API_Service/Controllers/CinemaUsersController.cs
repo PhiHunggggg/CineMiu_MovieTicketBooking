@@ -57,6 +57,7 @@ using Microsoft.EntityFrameworkCore;
             var user = new CinemaUser
             {
                 RoleId = dto.RoleId ?? 1,
+                CinemaId = dto.CinemaId,
                 FullName = dto.FullName,
                 Email = dto.Email,
                 Phone = dto.Phone,
@@ -96,6 +97,7 @@ using Microsoft.EntityFrameworkCore;
             }
 
             user.RoleId = dto.RoleId ?? user.RoleId;
+            user.CinemaId = dto.CinemaId;
             user.FullName = dto.FullName;
             user.Email = dto.Email;
             user.Phone = dto.Phone;
@@ -138,6 +140,7 @@ using Microsoft.EntityFrameworkCore;
     public class CinemaUserDto
     {
         public byte? RoleId { get; set; }
+        public int? CinemaId { get; set; }
         public string FullName { get; set; } = "";
         public string Email { get; set; } = "";
         public string? Phone { get; set; }

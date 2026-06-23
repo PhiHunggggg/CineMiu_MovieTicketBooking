@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import Icon from '../../components/Icon'
 import { cinemaApi, movieApi, showtimeApi, ticketPriceApi } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
 
 const PAGE_SIZE = 8
 
@@ -339,7 +340,10 @@ function validateForm(form, halls) {
 }
 
 function Showtimes() {
+  const { user, isCinemaManager } = useAuth()
   const [searchParams] = useSearchParams()
+  const isManagerScoped = isCinemaManager()
+  const assignedCinemaId = isManagerScoped ? String(user?.cinemaId || '') : ''
   const initialDate = searchParams.get('date') || ''
   const initialStatus = searchParams.get('status') || (searchParams.get('upcoming') === '1' ? 'upcoming' : '')
   const queryAppliedRef = useRef(false)
@@ -356,10 +360,10 @@ function Showtimes() {
     totalPages: 1,
   })
   const [page, setPage] = useState(1)
-  const [cinemaInput, setCinemaInput] = useState(searchParams.get('cinemaId') || '')
+  const [cinemaInput, setCinemaInput] = useState(assignedCinemaId || searchParams.get('cinemaId') || '')
   const [hallInput, setHallInput] = useState(searchParams.get('hallId') || '')
   const [dateInput, setDateInput] = useState(initialDate)
-  const [cinemaFilter, setCinemaFilter] = useState(searchParams.get('cinemaId') || '')
+  const [cinemaFilter, setCinemaFilter] = useState(assignedCinemaId || searchParams.get('cinemaId') || '')
   const [hallFilter, setHallFilter] = useState(searchParams.get('hallId') || '')
   const [dateFilter, setDateFilter] = useState(initialDate)
   const [statusInput, setStatusInput] = useState(initialStatus)
@@ -373,6 +377,7 @@ function Showtimes() {
   const [form, setForm] = useState(initialForm)
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
   const [statusClock, setStatusClock] = useState(null)
 
@@ -387,7 +392,9 @@ function Showtimes() {
       ])
 
       const movieItems = getItems(movieResponse.data)
-      const cinemaItems = getItems(cinemaResponse.data)
+      const cinemaItems = getItems(cinemaResponse.data).filter((cinema) => (
+        !isManagerScoped || (assignedCinemaId && String(cinema.cinemaId || cinema.id) === assignedCinemaId)
+      ))
       const hallResponses = await Promise.all(
         cinemaItems.map(async (cinema) => {
           const cinemaId = cinema.cinemaId || cinema.id
@@ -408,7 +415,9 @@ function Showtimes() {
       setMovies(movieItems.filter((movie) => movie.status !== 'ended'))
       setCinemas(cinemaItems)
       setHalls(hallResponses.flat())
-      setTicketPrices(priceItems)
+      setTicketPrices(isManagerScoped
+        ? priceItems.filter((item) => assignedCinemaId && String(item.cinemaId || item.CinemaId) === assignedCinemaId)
+        : priceItems)
     } catch (lookupError) {
       setMovies([])
       setCinemas([])
@@ -418,7 +427,7 @@ function Showtimes() {
     } finally {
       setIsLookupsLoading(false)
     }
-  }, [])
+  }, [assignedCinemaId, isManagerScoped])
 
   const ensureAutoSchedule = useCallback(async () => {
     if (autoScheduleGeneratedRef.current) return
@@ -443,7 +452,7 @@ function Showtimes() {
     try {
       await ensureAutoSchedule()
       const response = await showtimeApi.getAll({
-        cinemaId: cinemaFilter || undefined,
+        cinemaId: isManagerScoped ? assignedCinemaId || -1 : cinemaFilter || undefined,
         hallId: hallFilter || undefined,
         date: dateFilter || undefined,
         status: status || undefined,
@@ -465,7 +474,7 @@ function Showtimes() {
     } finally {
       setIsLoading(false)
     }
-  }, [cinemaFilter, dateFilter, ensureAutoSchedule, hallFilter, page, status])
+  }, [assignedCinemaId, cinemaFilter, dateFilter, ensureAutoSchedule, hallFilter, isManagerScoped, page, status])
 
   useEffect(() => {
     fetchLookups()
@@ -556,7 +565,7 @@ function Showtimes() {
 
   const openCreateForm = (overrides = {}) => {
     setEditingShowtime(null)
-    setForm({ ...initialForm, ...overrides })
+    setForm({ ...initialForm, ...overrides, cinemaId: assignedCinemaId || overrides.cinemaId || '' })
     setFormErrors({})
     setError('')
     setNotice('')
@@ -568,7 +577,7 @@ function Showtimes() {
 
     queryAppliedRef.current = true
     const movieId = searchParams.get('movieId') || ''
-    const cinemaId = searchParams.get('cinemaId') || ''
+    const cinemaId = isManagerScoped ? assignedCinemaId : searchParams.get('cinemaId') || ''
     const hallId = searchParams.get('hallId') || ''
     const matchingHalls = halls.filter((hall) => hall.status === 'active' && String(hall.cinemaId) === cinemaId)
     const selectedQueryHall = matchingHalls.find((hall) => String(hall.hallId) === hallId)
@@ -582,7 +591,7 @@ function Showtimes() {
           ? String(matchingHalls[0].hallId)
           : '',
     })
-  }, [cinemas, halls, isLookupsLoading, movies, searchParams])
+  }, [assignedCinemaId, cinemas, halls, isLookupsLoading, isManagerScoped, movies, searchParams])
 
   const openEditForm = (showtime) => {
     setEditingShowtime(showtime)
@@ -598,7 +607,7 @@ function Showtimes() {
 
     setIsFormOpen(false)
     setEditingShowtime(null)
-    setForm(initialForm)
+    setForm({ ...initialForm, cinemaId: assignedCinemaId })
     setFormErrors({})
   }
 
@@ -645,7 +654,7 @@ function Showtimes() {
 
   const handleSearch = (event) => {
     event.preventDefault()
-    setCinemaFilter(cinemaInput)
+    setCinemaFilter(assignedCinemaId || cinemaInput)
     setHallFilter(hallInput)
     setDateFilter(dateInput)
     setStatus(statusInput)
@@ -653,15 +662,43 @@ function Showtimes() {
   }
 
   const resetFilters = () => {
-    setCinemaInput('')
+    setCinemaInput(assignedCinemaId)
     setHallInput('')
     setDateInput('')
-    setCinemaFilter('')
+    setCinemaFilter(assignedCinemaId)
     setHallFilter('')
     setDateFilter('')
     setStatusInput('')
     setStatus('')
     setPage(1)
+  }
+
+  const handleGenerateSchedule = async () => {
+    const rawDays = window.prompt('Tạo lịch chiếu tự động cho bao nhiêu ngày tới?', '5')
+    if (rawDays === null) return
+
+    const days = Number(rawDays)
+    if (!Number.isInteger(days) || days < 1 || days > 30) {
+      setError('Số ngày tạo lịch phải từ 1 đến 30.')
+      return
+    }
+
+    setIsGenerating(true)
+    setError('')
+    setNotice('')
+
+    try {
+      const response = await showtimeApi.generate(days)
+      const createdCount = getItems(response.data).length
+      setNotice(createdCount > 0
+        ? `Đã tự động tạo ${createdCount} suất chiếu cho ${days} ngày tới.`
+        : 'Không có suất chiếu mới cần tạo trong khoảng thời gian này.')
+      await fetchShowtimes()
+    } catch (generateError) {
+      setError(getErrorMessage(generateError, 'Không tạo được lịch chiếu tự động.'))
+    } finally {
+      setIsGenerating(false)
+    }
   }
 
   const handleSubmit = async (event) => {
@@ -735,28 +772,37 @@ function Showtimes() {
             </p>
           </div>
 
-          <button
-            className="primary-button"
-            type="button"
-            onClick={openCreateForm}
-            disabled={isLookupsLoading}
-          >
-            <Icon name="plus" />
-            Thêm suất chiếu
-          </button>
+          <div className="toolbar-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={handleGenerateSchedule}
+              disabled={isGenerating || isLookupsLoading}
+            >
+              <i className="fas fa-wand-magic-sparkles" />
+              {isGenerating ? 'Đang tạo...' : 'Tạo tự động'}
+            </button>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={openCreateForm}
+              disabled={isLookupsLoading}
+            >
+              <Icon name="plus" />
+              Thêm suất chiếu
+            </button>
+          </div>
         </div>
 
         <div className="showtime-dependency-grid" aria-label="Dữ liệu liên kết lịch chiếu">
-          <Link className={`dependency-card ${dependencyCounts.movies ? 'ready' : 'missing'}`} to="/admin/movies">
+          <div className={`dependency-card ${dependencyCounts.movies ? 'ready' : 'missing'}`}>
             <span><i className="fas fa-film" /></span>
             <div><strong>{dependencyCounts.movies} phim</strong><small>Thêm và cập nhật phim</small></div>
-            <i className="fas fa-arrow-right" />
-          </Link>
-          <Link className={`dependency-card ${dependencyCounts.cinemas ? 'ready' : 'missing'}`} to="/admin/cinemas">
+          </div>
+          <div className={`dependency-card ${dependencyCounts.cinemas ? 'ready' : 'missing'}`}>
             <span><i className="fas fa-building" /></span>
             <div><strong>{dependencyCounts.cinemas} chi nhánh</strong><small>Quản lý địa điểm chiếu</small></div>
-            <i className="fas fa-arrow-right" />
-          </Link>
+          </div>
           <Link className={`dependency-card ${dependencyCounts.halls ? 'ready' : 'missing'}`} to="/admin/halls">
             <span><i className="fas fa-door-open" /></span>
             <div><strong>{dependencyCounts.halls} phòng hoạt động</strong><small>Tạo phòng trước khi xếp lịch</small></div>
@@ -773,12 +819,14 @@ function Showtimes() {
           <select
             value={cinemaInput}
             onChange={(event) => {
+              if (isManagerScoped) return
               setCinemaInput(event.target.value)
               setHallInput('')
             }}
             aria-label="Lọc chi nhánh"
+            disabled={isManagerScoped}
           >
-            <option value="">Tất cả chi nhánh</option>
+            {!isManagerScoped && <option value="">Tất cả chi nhánh</option>}
             {cinemas.map((cinema) => (
               <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>
                 {cinema.cinemaName || cinema.name}
@@ -1009,16 +1057,14 @@ function Showtimes() {
                   </select>
                   {selectedMovie ? <small className="form-hint">{selectedMovie.durationMins} phút</small> : null}
                   {movies.length === 0 ? (
-                    <Link className="form-create-link" to="/admin/movies">
-                      <i className="fas fa-plus" /> Tạo phim trước
-                    </Link>
+                    <small className="form-hint">Chưa có phim khả dụng. Vui lòng liên hệ Admin toàn hệ thống để cập nhật danh mục phim.</small>
                   ) : null}
                   {formErrors.movieId ? <em>{formErrors.movieId}</em> : null}
                 </label>
 
                 <label className="form-field required">
                   <span>Rạp</span>
-                  <select name="cinemaId" value={form.cinemaId} onChange={handleFieldChange}>
+                  <select name="cinemaId" value={form.cinemaId} onChange={handleFieldChange} disabled={isManagerScoped}>
                     <option value="">Chọn rạp</option>
                     {cinemas.map((cinema) => (
                       <option key={cinema.cinemaId} value={cinema.cinemaId}>
@@ -1027,9 +1073,7 @@ function Showtimes() {
                     ))}
                   </select>
                   {cinemas.length === 0 ? (
-                    <Link className="form-create-link" to="/admin/cinemas">
-                      <i className="fas fa-plus" /> Tạo chi nhánh trước
-                    </Link>
+                    <small className="form-hint">Tài khoản chưa được gán chi nhánh. Vui lòng liên hệ Admin toàn hệ thống.</small>
                   ) : null}
                   {formErrors.cinemaId ? <em>{formErrors.cinemaId}</em> : null}
                 </label>

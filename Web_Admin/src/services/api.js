@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 // Create axios instance
 const api = axios.create({
@@ -40,6 +40,7 @@ api.interceptors.response.use(
 export const authApi = {
     login: (email, password) => api.post('/auth/login', { email, password }),
     register: (data) => api.post('/auth/register', data),
+    changePassword: (data) => api.put('/auth/password', data),
 };
 
 // User API
@@ -105,6 +106,7 @@ export const bookingAdminApi = {
     getAll: (params) => api.get('/bookings', { params }),
     getById: (id) => api.get(`/bookings/${id}`),
     getByCode: (code) => api.get(`/bookings/code/${encodeURIComponent(code)}`),
+    getByUser: (userId) => api.get(`/bookings/user/${userId}`),
     cancel: (id, data) => api.post(`/bookings/${id}/cancel`, data),
     refund: (id, data) => api.post(`/bookings/${id}/refund`, data),
     checkIn: (id, data) => api.post(`/bookings/${id}/check-in`, data),

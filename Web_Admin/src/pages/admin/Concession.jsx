@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { concessionApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const emptyItem = {
     catId: '',
@@ -18,6 +19,8 @@ const getItems = (data) => data?.items || data?.data || data || [];
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 
 const AdminConcessions = () => {
+    const { isCinemaManager } = useAuth();
+    const managerScoped = isCinemaManager();
     const [items, setItems] = useState([]);
     const [categories, setCategories] = useState([]);
     const [categoryFilter, setCategoryFilter] = useState('');
@@ -29,6 +32,7 @@ const AdminConcessions = () => {
     const [itemForm, setItemForm] = useState(emptyItem);
     const [categoryForm, setCategoryForm] = useState(emptyCategory);
     const [error, setError] = useState('');
+    const [togglingItemId, setTogglingItemId] = useState(null);
 
     const categoryNameById = useMemo(() => {
         const map = new Map();
@@ -129,15 +133,25 @@ const AdminConcessions = () => {
         }
     };
 
-    const deleteItem = async (item) => {
-        if (!window.confirm(`Ngừng bán "${item.itemName}"?`)) return;
+    const toggleItemAvailability = async (item) => {
+        const nextAvailable = item.isAvailable === false;
 
+        setTogglingItemId(item.itemId);
         setError('');
         try {
-            await concessionApi.delete(item.itemId);
+            await concessionApi.update(item.itemId, {
+                catId: Number(item.catId),
+                itemName: item.itemName,
+                description: item.description,
+                price: Number(item.price || 0),
+                imageUrl: item.imageUrl,
+                isAvailable: nextAvailable,
+            });
             await loadAll();
         } catch (err) {
-            setError(err.response?.data?.message || 'Ngừng bán món thất bại');
+            setError(err.response?.data?.message || 'Cập nhật trạng thái combo thất bại');
+        } finally {
+            setTogglingItemId(null);
         }
     };
 
@@ -156,20 +170,30 @@ const AdminConcessions = () => {
     const visibleItems = categoryFilter
         ? items.filter((item) => String(item.catId) === String(categoryFilter))
         : items;
+    const availableItemCount = items.filter((item) => item.isAvailable).length;
+    const stoppedItemCount = items.length - availableItemCount;
 
     return (
         <div className="content-wrapper">
             <div className="content-header">
                 <div className="container-fluid">
-                    <h1 className="m-0">Quản lý bắp nước</h1>
+                    <h1 className="m-0">{managerScoped ? 'Combo đang bán' : 'Quản lý bắp nước'}</h1>
                 </div>
             </div>
 
             <section className="content">
                 <div className="container-fluid">
+                    <div className="admin-management-brief">
+                        <div><i className="fas fa-burger"></i><p><span>Tổng combo</span><strong>{items.length.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-tags"></i><p><span>Danh mục</span><strong>{categories.length.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-store"></i><p><span>Đang bán</span><strong>{availableItemCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-ban"></i><p><span>Ngừng bán</span><strong>{stoppedItemCount.toLocaleString('vi-VN')}</strong></p></div>
+                    </div>
+
                     {error && !showItemModal && !showCategoryModal && <div className="alert alert-warning">{error}</div>}
 
                     <div className="row">
+                        {!managerScoped && (
                         <div className="col-lg-4 mb-3">
                             <div className="card h-100">
                                 <div className="card-header d-flex justify-content-between align-items-center">
@@ -204,8 +228,9 @@ const AdminConcessions = () => {
                                 </div>
                             </div>
                         </div>
+                        )}
 
-                        <div className="col-lg-8 mb-3">
+                        <div className={`${managerScoped ? 'col-lg-12' : 'col-lg-8'} mb-3`}>
                             <div className="card">
                                 <div className="card-header">
                                     <div className="d-flex flex-wrap justify-content-between align-items-center">
@@ -218,9 +243,11 @@ const AdminConcessions = () => {
                                                 ))}
                                             </select>
                                         </div>
-                                        <button className="btn btn-success" type="button" onClick={() => openItemModal()}>
-                                            <i className="fas fa-plus mr-1"></i> Thêm món
-                                        </button>
+                                        {!managerScoped && (
+                                            <button className="btn btn-success" type="button" onClick={() => openItemModal()}>
+                                                <i className="fas fa-plus mr-1"></i> Thêm món
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="card-body">
@@ -235,7 +262,7 @@ const AdminConcessions = () => {
                                                         <th>Danh mục</th>
                                                         <th>Giá</th>
                                                         <th>Trạng thái</th>
-                                                        <th style={{ width: '105px' }}>Thao tác</th>
+                                                        <th style={{ width: '150px' }}>Thao tác</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
@@ -255,11 +282,19 @@ const AdminConcessions = () => {
                                                                 </span>
                                                             </td>
                                                             <td className="text-center">
-                                                                <button className="btn btn-sm btn-info mr-1" type="button" onClick={() => openItemModal(item)}>
-                                                                    <i className="fas fa-edit"></i>
-                                                                </button>
-                                                                <button className="btn btn-sm btn-danger" type="button" onClick={() => deleteItem(item)} disabled={!item.isAvailable}>
-                                                                    <i className="fas fa-ban"></i>
+                                                                {!managerScoped && (
+                                                                    <button className="btn btn-sm btn-info mr-1" type="button" onClick={() => openItemModal(item)} title="Sửa combo">
+                                                                        <i className="fas fa-edit"></i>
+                                                                    </button>
+                                                                )}
+                                                                <button
+                                                                    className={`btn btn-sm ${item.isAvailable ? 'btn-warning' : 'btn-success'}`}
+                                                                    type="button"
+                                                                    onClick={() => toggleItemAvailability(item)}
+                                                                    disabled={togglingItemId === item.itemId}
+                                                                    title={item.isAvailable ? 'Tắt bán combo' : 'Bật bán combo'}
+                                                                >
+                                                                    <i className={`fas ${item.isAvailable ? 'fa-toggle-off' : 'fa-toggle-on'}`}></i>
                                                                 </button>
                                                             </td>
                                                         </tr>

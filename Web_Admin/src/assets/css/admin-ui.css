@@ -1973,6 +1973,14 @@ textarea.form-control,
     font-size: 23px;
 }
 
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
 .section-subtitle {
     margin: 0;
     color: var(--admin-muted);
@@ -2720,6 +2728,11 @@ textarea.form-control,
     background: #fff0c9;
 }
 
+.hall-status.status-showing {
+    color: #1d4ed8;
+    background: #dbeafe;
+}
+
 .hall-status.status-inactive {
     color: #5f6b7c;
     background: #e9eef4;
@@ -2842,6 +2855,249 @@ textarea.form-control,
     grid-column: 1;
 }
 
+.branch-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.branch-metric-strip {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.branch-metric-strip > div {
+    min-height: 74px;
+    padding: 14px;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 6px 16px rgba(20, 38, 62, 0.05);
+}
+
+.branch-metric-strip span,
+.branch-metric-strip strong {
+    display: block;
+}
+
+.branch-metric-strip span {
+    color: var(--admin-muted);
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.branch-metric-strip strong {
+    margin-top: 6px;
+    color: #13233a;
+    font-size: 22px;
+    line-height: 1;
+}
+
+.branch-action-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.branch-action-grid a {
+    min-width: 0;
+    min-height: 74px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 7px;
+    padding: 12px;
+    border: 1px solid var(--admin-border);
+    border-radius: 8px;
+    color: #243247;
+    background: #fff;
+    box-shadow: 0 6px 16px rgba(20, 38, 62, 0.05);
+    text-align: center;
+    text-decoration: none;
+}
+
+.branch-action-grid a:hover {
+    color: #0f766e;
+    border-color: #b8d8d3;
+    background: #f4fbfa;
+}
+
+.branch-action-grid i {
+    color: #0f766e;
+    font-size: 18px;
+}
+
+.branch-action-grid span {
+    overflow: hidden;
+    width: 100%;
+    font-size: 12px;
+    font-weight: 800;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.branch-overview-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+}
+
+.branch-card .card-title {
+    color: #17263c;
+    font-size: 15px;
+    font-weight: 800;
+}
+
+/* Hall seat type editor */
+.seat-layout-dialog {
+    max-width: min(1120px, calc(100vw - 32px));
+}
+
+.seat-layout-body {
+    max-height: 72vh;
+    overflow: auto;
+}
+
+.seat-type-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.seat-type-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 150px;
+    padding: 11px 14px;
+    border: 2px solid transparent;
+    border-radius: 8px;
+    color: #263247;
+    background: #eef2f7;
+    cursor: pointer;
+}
+
+.seat-type-option strong {
+    min-width: 26px;
+    margin-left: auto;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: #fff;
+    background: #526174;
+    text-align: center;
+}
+
+.seat-type-option.selected {
+    border-color: #0f766e;
+    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.15);
+}
+
+.seat-type-option.seat-locked {
+    color: #9f1239;
+    background: #fff1f4;
+}
+
+.seat-layout-editor {
+    min-width: max-content;
+    padding: 6px 16px 24px;
+}
+
+.cinema-screen {
+    width: min(620px, 75vw);
+    margin: 0 auto 34px;
+    padding: 8px;
+    border-top: 5px solid #73c6e8;
+    border-radius: 50% 50% 0 0;
+    color: #718096;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    text-align: center;
+}
+
+.seat-layout-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.seat-layout-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.seat-row-label {
+    width: 24px;
+    color: #64748b;
+    text-align: center;
+}
+
+.seat-layout-seats {
+    display: flex;
+    gap: 8px;
+}
+
+.seat-layout-seat {
+    min-width: 44px;
+    height: 38px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: 8px 8px 5px 5px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.seat-layout-seat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(15, 23, 42, 0.2);
+}
+
+.seat-standard {
+    background: #64748b;
+}
+
+.seat-vip {
+    background: #c77700;
+}
+
+.seat-couple {
+    background: #b42370;
+}
+
+.seat-inactive {
+    position: relative;
+    color: #6b7280;
+    background: repeating-linear-gradient(135deg, #e5e7eb 0 7px, #cbd5e1 7px 14px);
+}
+
+.seat-inactive::after {
+    content: "";
+    position: absolute;
+    inset: 7px;
+    border-top: 2px solid rgba(120, 35, 55, 0.8);
+    transform: rotate(-22deg);
+}
+
+.seat-layout-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 260px;
+}
+
+.seat-action {
+    color: #fff;
+    border-color: #b42370;
+    background: #b42370;
+}
+
 /* Utilities used by existing pages */
 .d-none { display: none !important; }
 .d-block { display: block !important; }
@@ -2961,6 +3217,15 @@ code {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
+    .branch-action-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .branch-metric-strip,
+    .branch-overview-columns {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
     .price-advanced-grid {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -2996,6 +3261,10 @@ code {
 
     .price-advanced-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .branch-action-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
     }
 }
 
@@ -3165,6 +3434,20 @@ code {
     .price-search-row,
     .price-advanced-grid {
         grid-template-columns: 1fr;
+    }
+
+    .branch-action-grid,
+    .branch-metric-strip,
+    .branch-overview-columns {
+        grid-template-columns: 1fr;
+    }
+
+    .seat-type-option {
+        flex: 1 1 140px;
+    }
+
+    .seat-layout-body {
+        padding-inline: 10px;
     }
 
     .price-search-input {

@@ -1,14 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { cinemaApi, revenueApi } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 const currentDate = new Date();
 const currentYear = currentDate.getFullYear();
 const currentMonth = currentDate.getMonth() + 1;
 
-const monthOptions = Array.from({ length: 12 }, (_, index) => ({
-    value: index + 1,
-    label: `Tháng ${index + 1}`,
-}));
+const monthOptions = [
+    { value: '', label: 'Cả năm' },
+    ...Array.from({ length: 12 }, (_, index) => ({
+        value: index + 1,
+        label: `Tháng ${index + 1}`,
+    }))
+];
 
 const yearOptions = Array.from({ length: 6 }, (_, index) => currentYear - index);
 
@@ -383,9 +387,12 @@ const DonutChart = ({ data, valueFormatter = formatCompactNumber, centerFormatte
 };
 
 const RevenueReports = () => {
+    const { user, isCinemaManager } = useAuth();
+    const managerScoped = isCinemaManager();
+    const assignedCinemaId = managerScoped ? String(user?.cinemaId || '') : '';
     const [selectedYear, setSelectedYear] = useState(currentYear);
     const [selectedMonth, setSelectedMonth] = useState(currentMonth);
-    const [cinemaId, setCinemaId] = useState('');
+    const [cinemaId, setCinemaId] = useState(assignedCinemaId);
     const [cinemas, setCinemas] = useState([]);
     const [report, setReport] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -394,7 +401,10 @@ const RevenueReports = () => {
     const loadCinemas = async () => {
         try {
             const response = await cinemaApi.getAll();
-            setCinemas(getItems(response.data));
+            const items = getItems(response.data);
+            setCinemas(managerScoped
+                ? items.filter((cinema) => assignedCinemaId && String(cinema.cinemaId || cinema.id) === assignedCinemaId)
+                : items);
         } catch (err) {
             console.error('Không tải được danh sách rạp:', err);
         }
@@ -407,10 +417,11 @@ const RevenueReports = () => {
         setError('');
 
         try {
+            const scopedCinemaId = managerScoped ? assignedCinemaId || -1 : cinemaId || undefined;
             const response = await revenueApi.getSystemRevenue({
                 year: selectedYear,
-                month: selectedMonth,
-                cinemaId: cinemaId || undefined,
+                month: selectedMonth || undefined,
+                cinemaId: scopedCinemaId,
             });
 
             setReport(response.data);
@@ -423,11 +434,15 @@ const RevenueReports = () => {
     };
 
     useEffect(() => {
+        if (managerScoped && assignedCinemaId) {
+            setCinemaId(assignedCinemaId);
+        }
         loadCinemas();
         loadReport();
-    }, []);
+    }, [assignedCinemaId]);
 
-    const selectedCinema = cinemas.find((cinema) => String(cinema.cinemaId) === String(cinemaId));
+    const effectiveCinemaId = managerScoped ? assignedCinemaId : cinemaId;
+    const selectedCinema = cinemas.find((cinema) => String(cinema.cinemaId || cinema.id) === String(effectiveCinemaId));
 
     const rawMonthlyRevenue = useMemo(() => getItems(readField(report, 'monthlyRevenue', 'MonthlyRevenue')), [report]);
     const rawRevenueBySeatType = useMemo(() => getItems(readField(report, 'revenueBySeatType', 'RevenueBySeatType')), [report]);
@@ -603,7 +618,7 @@ const RevenueReports = () => {
     });
 
     const buildExportPayload = () => {
-        const cinemaName = selectedCinema?.cinemaName || 'Tất cả rạp';
+        const cinemaName = selectedCinema?.cinemaName || (effectiveCinemaId ? `Rạp #${effectiveCinemaId}` : 'Tất cả rạp');
         const title = `Báo cáo doanh thu tháng ${selectedMonth}/${selectedYear}`;
         const subtitle = `Rạp: ${cinemaName} | Ngày xuất: ${new Date().toLocaleString('vi-VN')}`;
 
@@ -687,7 +702,7 @@ const RevenueReports = () => {
     };
 
     const getExportFileBaseName = () => normalizeFileName(
-        `bao-cao-doanh-thu-thang-${selectedMonth}-${selectedYear}-${selectedCinema?.cinemaName || 'tat-ca-rap'}`
+        `bao-cao-doanh-thu-thang-${selectedMonth}-${selectedYear}-${selectedCinema?.cinemaName || (effectiveCinemaId ? `rap-${effectiveCinemaId}` : 'tat-ca-rap')}`
     );
 
     const exportExcel = () => {
@@ -726,7 +741,7 @@ const RevenueReports = () => {
             <div className="content-header">
                 <div className="container-fluid">
                     <h1 className="m-0">
-                        {cinemaId
+                        {effectiveCinemaId
                             ? `Thống kê doanh thu - ${selectedCinema?.cinemaName || 'Rạp đã chọn'}`
                             : 'Thống kê doanh thu'}
                     </h1>
@@ -756,7 +771,7 @@ const RevenueReports = () => {
                                     <select
                                         className="form-control"
                                         value={selectedMonth}
-                                        onChange={(e) => setSelectedMonth(Number(e.target.value))}
+                                        onChange={(e) => setSelectedMonth(e.target.value ? Number(e.target.value) : '')}
                                     >
                                         {monthOptions.map((month) => (
                                             <option key={month.value} value={month.value}>{month.label}</option>
@@ -770,8 +785,9 @@ const RevenueReports = () => {
                                         className="form-control"
                                         value={cinemaId}
                                         onChange={(e) => setCinemaId(e.target.value)}
+                                        disabled={managerScoped}
                                     >
-                                        <option value="">Tất cả rạp</option>
+                                        {!managerScoped && <option value="">Tất cả rạp</option>}
                                         {cinemas.map((cinema) => (
                                             <option key={cinema.cinemaId} value={cinema.cinemaId}>
                                                 {cinema.cinemaName}
@@ -805,7 +821,7 @@ const RevenueReports = () => {
                         <StatCard
                             title={`Doanh thu năm ${selectedYear}`}
                             value={formatCurrency(totalRevenue)}
-                            note={cinemaId ? 'Theo rạp đã chọn' : 'Tất cả rạp'}
+                            note={effectiveCinemaId ? 'Theo rạp đã chọn' : 'Tất cả rạp'}
                             icon="fa-money-bill-wave"
                             color="#16a34a"
                         />

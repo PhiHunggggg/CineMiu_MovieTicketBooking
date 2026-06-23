@@ -1,25 +1,30 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const pageTitles = {
-    '/admin/dashboard': 'Tổng quan',
-    '/admin/showtimes': 'Quản lý lịch chiếu',
-    '/admin/halls': 'Trạng thái phòng',
-    '/admin/ticket-prices': 'Quản lý giá vé',
+    '/admin/dashboard': 'Tổng quan toàn hệ thống',
+    '/admin/branch': 'Tổng quan chi nhánh',
     '/admin/movies': 'Quản lý phim',
-    '/admin/cinemas': 'Chi nhánh rạp',
-    '/admin/users': 'Người dùng',
-    '/admin/bookings': 'Quản lý đặt vé',
-    '/admin/concessions': 'Bắp nước',
+    '/admin/cinemas': 'Quản lý chi nhánh rạp',
+    '/admin/managers': 'Tài khoản Cinema Manager',
+    '/admin/users': 'Khách hàng',
+    '/admin/bookings': 'Đặt vé',
+    '/admin/concessions': 'Combo bắp nước',
     '/admin/vouchers': 'Khuyến mãi',
+    '/admin/promotions': 'Khuyến mãi',
+    '/admin/revenue': 'Báo cáo - Thống kê',
+    '/admin/reports': 'Báo cáo - Thống kê',
+    '/admin/showtimes': 'Lịch chiếu chi nhánh',
+    '/admin/halls': 'Phòng chiếu chi nhánh',
+    '/admin/seats': 'Ghế ngồi chi nhánh',
+    '/admin/ticket-prices': 'Giá vé chi nhánh',
     '/admin/reviews': 'Đánh giá',
     '/admin/notifications': 'Thông báo',
-    '/admin/revenue': 'Thống kê',
     '/admin/system': 'Hệ thống',
 };
 
-function MenuLink({ to, icon, children, end = false, trailingIcon = '' }) {
+function MenuLink({ to, icon, children, end = false, badge }) {
     return (
         <NavLink
             to={to}
@@ -28,8 +33,17 @@ function MenuLink({ to, icon, children, end = false, trailingIcon = '' }) {
         >
             <i className={`nav-icon fas ${icon}`} />
             <span>{children}</span>
-            {trailingIcon ? <i className={`nav-trailing fas ${trailingIcon}`} /> : null}
+            {badge ? <small className="nav-badge">{badge}</small> : null}
         </NavLink>
+    );
+}
+
+function NavGroup({ title, children }) {
+    return (
+        <>
+            <p className="nav-divider">{title}</p>
+            {children}
+        </>
     );
 }
 
@@ -43,23 +57,32 @@ export default function MainLayout() {
         logout,
         isAdmin,
         isCinemaManager,
+        isTicketStaff,
         canCheckInTickets,
     } = useAuth();
 
     const displayName = user?.fullName || user?.email || 'Quản trị viên';
-    const initials = displayName
+    const initials = useMemo(() => displayName
         .split(' ')
         .filter(Boolean)
         .slice(0, 2)
         .map((part) => part[0])
         .join('')
-        .toUpperCase();
+        .toUpperCase(), [displayName]);
+
     const roleLabel = isAdmin()
-        ? 'Quản trị hệ thống'
+        ? 'Super Admin toàn chuỗi'
         : isCinemaManager()
-            ? 'Quản lý rạp'
-            : 'Nhân viên';
+            ? 'Cinema Manager chi nhánh'
+            : isTicketStaff()
+                ? 'Nhân viên soát vé'
+                : 'Nhân viên';
     const currentTitle = pageTitles[location.pathname] || 'Quản trị';
+    const brandSubtitle = isAdmin()
+        ? 'Quản trị toàn bộ hệ thống rạp'
+        : isCinemaManager()
+            ? 'Vận hành rạp được phân công'
+            : 'Vận hành bán vé';
 
     const closeMobileSidebar = () => setMobileSidebarOpen(false);
 
@@ -72,17 +95,18 @@ export default function MainLayout() {
         <div
             className={[
                 'admin-layout',
+                'admin-redesign-shell',
                 sidebarCollapsed ? 'sidebar-collapsed' : '',
                 mobileSidebarOpen ? 'mobile-sidebar-open' : '',
             ].filter(Boolean).join(' ')}
         >
             <aside className="admin-sidebar">
                 <div className="sidebar-header">
-                    <Link to="/admin/dashboard" className="brand-link" onClick={closeMobileSidebar}>
+                    <Link to="/" className="brand-link" onClick={closeMobileSidebar}>
                         <span className="brand-icon"><i className="fas fa-ticket" /></span>
                         <span className="brand-copy">
-                            <strong>Đặt Vé Rạp Phim</strong>
-                            <small>Admin console</small>
+                            <strong>CineMiu Admin</strong>
+                            <small>{brandSubtitle}</small>
                         </span>
                     </Link>
                 </div>
@@ -96,38 +120,55 @@ export default function MainLayout() {
                 </div>
 
                 <nav className="sidebar-nav" onClick={closeMobileSidebar}>
-                    <MenuLink to="/admin/dashboard" icon="fa-gauge-high" end>Tổng quan</MenuLink>
-
-                    {(isCinemaManager() || isAdmin()) && (
-                        <>
-                            <p className="nav-divider">Quản lý rạp</p>
-                            <MenuLink to="/admin/showtimes" icon="fa-calendar-days">Lịch chiếu</MenuLink>
-                            <MenuLink to="/admin/halls" icon="fa-door-open">Trạng thái phòng</MenuLink>
-                            <MenuLink to="/admin/ticket-prices" icon="fa-tags">Giá vé giờ/ngày lễ</MenuLink>
-                        </>
-                    )}
-
-                    {canCheckInTickets() && !isAdmin() && (
-                        <>
-                            <p className="nav-divider">Vận hành</p>
-                            <MenuLink to="/admin/bookings" icon="fa-qrcode">Check-in vé</MenuLink>
-                        </>
-                    )}
-
                     {isAdmin() && (
                         <>
-                            <p className="nav-divider">Quản trị</p>
-                            <MenuLink to="/admin/movies" icon="fa-film">Phim</MenuLink>
-                            <MenuLink to="/admin/cinemas" icon="fa-building">Chi nhánh rạp</MenuLink>
-                            <MenuLink to="/admin/users" icon="fa-users">Người dùng</MenuLink>
-                            <MenuLink to="/admin/bookings" icon="fa-ticket">Đặt vé</MenuLink>
-                            <MenuLink to="/admin/concessions" icon="fa-utensils">Bắp nước</MenuLink>
-                            <MenuLink to="/admin/vouchers" icon="fa-percent">Khuyến mãi</MenuLink>
-                            <MenuLink to="/admin/reviews" icon="fa-star">Đánh giá</MenuLink>
-                            <MenuLink to="/admin/notifications" icon="fa-bell">Thông báo</MenuLink>
-                            <MenuLink to="/admin/revenue" icon="fa-chart-pie">Thống kê</MenuLink>
-                            <MenuLink to="/admin/system" icon="fa-gears">Hệ thống</MenuLink>
+                            <MenuLink to="/admin/dashboard" icon="fa-gauge-high" end>Tổng quan</MenuLink>
+
+                            <NavGroup title="Quản trị toàn chuỗi">
+                                <MenuLink to="/admin/movies" icon="fa-film">Phim</MenuLink>
+                                <MenuLink to="/admin/cinemas" icon="fa-building">Chi nhánh rạp</MenuLink>
+                                <MenuLink to="/admin/managers" icon="fa-user-tie">Tài khoản Cinema Manager</MenuLink>
+                            </NavGroup>
+
+                            <NavGroup title="Kinh doanh & khách hàng">
+                                <MenuLink to="/admin/bookings" icon="fa-ticket">Toàn bộ vé</MenuLink>
+                                <MenuLink to="/admin/concessions" icon="fa-burger">Combo bắp nước</MenuLink>
+                                <MenuLink to="/admin/vouchers" icon="fa-percent">Khuyến mãi</MenuLink>
+                                <MenuLink to="/admin/users" icon="fa-users">Khách hàng</MenuLink>
+                            </NavGroup>
+
+                            <NavGroup title="Báo cáo & hệ thống">
+                                <MenuLink to="/admin/revenue" icon="fa-chart-line">Báo cáo - Thống kê</MenuLink>
+                                <MenuLink to="/admin/reviews" icon="fa-star">Đánh giá</MenuLink>
+                                <MenuLink to="/admin/notifications" icon="fa-bell">Thông báo</MenuLink>
+                                <MenuLink to="/admin/system" icon="fa-shield-halved">Hệ thống</MenuLink>
+                            </NavGroup>
                         </>
+                    )}
+
+                    {isCinemaManager() && (
+                        <>
+                            <MenuLink to="/admin/branch" icon="fa-gauge-high" end>Tổng quan chi nhánh</MenuLink>
+
+                            <NavGroup title="Quản lý tại rạp">
+                                <MenuLink to="/admin/halls" icon="fa-door-open">Phòng chiếu</MenuLink>
+                                <MenuLink to="/admin/seats" icon="fa-chair">Ghế ngồi</MenuLink>
+                                <MenuLink to="/admin/showtimes" icon="fa-calendar-days">Lịch chiếu</MenuLink>
+                                <MenuLink to="/admin/ticket-prices" icon="fa-tags">Giá vé</MenuLink>
+                            </NavGroup>
+
+                            <NavGroup title="Vận hành & kinh doanh">
+                                <MenuLink to="/admin/bookings" icon="fa-qrcode" badge="QR">Đặt vé</MenuLink>
+                                <MenuLink to="/admin/concessions" icon="fa-burger">Combo</MenuLink>
+                                <MenuLink to="/admin/revenue" icon="fa-chart-line">Thống kê</MenuLink>
+                            </NavGroup>
+                        </>
+                    )}
+
+                    {!isAdmin() && !isCinemaManager() && canCheckInTickets() && (
+                        <NavGroup title="Soát vé">
+                            <MenuLink to="/admin/bookings" icon="fa-qrcode" badge="QR">Check-in vé</MenuLink>
+                        </NavGroup>
                     )}
                 </nav>
 
@@ -166,16 +207,23 @@ export default function MainLayout() {
                             <i className="fas fa-bars" />
                         </button>
                         <div className="breadcrumb">
-                            <span>Trang chủ</span>
+                            <span>{isAdmin() ? 'Toàn hệ thống' : 'Chi nhánh'}</span>
                             <i className="fas fa-chevron-right" />
                             <strong>{currentTitle}</strong>
                         </div>
                     </div>
 
                     <div className="header-right">
-                        <Link className="header-icon" to="/admin/notifications" aria-label="Thông báo">
-                            <i className="fas fa-bell" />
-                        </Link>
+                        {isCinemaManager() && user?.cinemaId ? (
+                            <span className="admin-branch-pill">
+                                <i className="fas fa-building" /> Chi nhánh #{user.cinemaId}
+                            </span>
+                        ) : null}
+                        {isAdmin() ? (
+                            <Link className="header-icon" to="/admin/notifications" aria-label="Thông báo">
+                                <i className="fas fa-bell" />
+                            </Link>
+                        ) : null}
                         <div className="user-dropdown">
                             <span className="user-avatar small">{initials || 'AD'}</span>
                             <span className="header-user-name">{displayName}</span>
@@ -185,6 +233,12 @@ export default function MainLayout() {
                                     <strong>{displayName}</strong>
                                     <small>{user?.email}</small>
                                 </div>
+                                {isAdmin() ? (
+                                    <Link to="/admin/system" className="dropdown-action">
+                                        <i className="fas fa-key" />
+                                        Đổi mật khẩu
+                                    </Link>
+                                ) : null}
                                 <button type="button" onClick={handleLogout}>
                                     <i className="fas fa-arrow-right-from-bracket" />
                                     Đăng xuất

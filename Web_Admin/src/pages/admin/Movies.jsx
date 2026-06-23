@@ -26,7 +26,7 @@ const movieStatusOptions = [
     { value: 'now_showing', label: 'Đang chiếu', badge: 'badge-success' },
     { value: 'coming_soon', label: 'Sắp chiếu', badge: 'badge-primary' },
     { value: 'early_screening', label: 'Suất chiếu sớm', badge: 'badge-warning' },
-    { value: 'ended', label: 'Đã kết thúc', badge: 'badge-secondary' },
+    { value: 'ended', label: 'Ngừng chiếu', badge: 'badge-secondary' },
 ];
 
 const ageRatingOptions = ['P', 'T13', 'T16', 'T18', 'C'];
@@ -317,6 +317,10 @@ const AdminMovies = () => {
             setError(err.response?.data?.message || 'Xóa phim thất bại');
         }
     };
+    const nowShowingCount = movies.filter((movie) => normalizeStatus(movie.status) === 'now_showing').length;
+    const comingSoonCount = movies.filter((movie) => normalizeStatus(movie.status) === 'coming_soon').length;
+    const earlyScreeningCount = movies.filter((movie) => normalizeStatus(movie.status) === 'early_screening').length;
+    const endedCount = movies.filter((movie) => normalizeStatus(movie.status) === 'ended').length;
 
     return (
         <div className="content-wrapper">
@@ -328,6 +332,13 @@ const AdminMovies = () => {
 
             <section className="content">
                 <div className="container-fluid">
+                    <div className="admin-management-brief">
+                        <div><i className="fas fa-film"></i><p><span>Tổng số phim</span><strong>{movies.length.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-clapperboard"></i><p><span>Đang chiếu</span><strong>{nowShowingCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-calendar-plus"></i><p><span>Sắp / chiếu sớm</span><strong>{(comingSoonCount + earlyScreeningCount).toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-circle-stop"></i><p><span>Ngừng chiếu</span><strong>{endedCount.toLocaleString('vi-VN')}</strong></p></div>
+                    </div>
+
                     {error && !showModal && <div className="alert alert-warning">{error}</div>}
                     {success && !showModal && <div className="alert alert-success">{success}</div>}
 

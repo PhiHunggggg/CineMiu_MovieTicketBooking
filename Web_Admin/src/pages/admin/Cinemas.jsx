@@ -121,6 +121,9 @@ const AdminCinemas = () => {
             setError(err.response?.data?.message || 'Xóa chi nhánh rạp thất bại');
         }
     };
+    const activeCinemaCount = cinemas.filter((cinema) => cinema.isActive !== false).length;
+    const inactiveCinemaCount = cinemas.length - activeCinemaCount;
+    const cityCount = new Set(cinemas.map((cinema) => cinema.city).filter(Boolean)).size;
 
     return (
         <div className="content-wrapper">
@@ -132,6 +135,13 @@ const AdminCinemas = () => {
 
             <section className="content">
                 <div className="container-fluid">
+                    <div className="admin-management-brief">
+                        <div><i className="fas fa-building"></i><p><span>Tổng chi nhánh</span><strong>{cinemas.length.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-door-open"></i><p><span>Đang hoạt động</span><strong>{activeCinemaCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-power-off"></i><p><span>Ngừng hoạt động</span><strong>{inactiveCinemaCount.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-map-location-dot"></i><p><span>Thành phố</span><strong>{cityCount.toLocaleString('vi-VN')}</strong></p></div>
+                    </div>
+
                     {error && !showModal && <div className="alert alert-warning">{error}</div>}
                     <div className="card">
                         <div className="card-header">

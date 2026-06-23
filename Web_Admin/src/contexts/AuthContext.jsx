@@ -30,14 +30,16 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await authApi.login(email, password);
             const authData = response.data;
+            const payload = authData.user || authData;
             const userData = {
-                userId: Number(authData.userId),
-                roleId: authData.roleId,
-                role: authData.role,
-                fullName: authData.fullName,
-                email: authData.email,
-                phone: authData.phone,
-                avatarUrl: authData.avatarUrl,
+                userId: Number(payload.userId ?? payload.UserId ?? payload.id ?? authData.userId),
+                roleId: payload.roleId ?? payload.RoleId ?? authData.roleId,
+                cinemaId: payload.cinemaId ?? payload.CinemaId ?? authData.cinemaId,
+                role: payload.role ?? payload.Role ?? authData.role,
+                fullName: payload.fullName ?? payload.FullName ?? authData.fullName,
+                email: payload.email ?? payload.Email ?? authData.email,
+                phone: payload.phone ?? payload.Phone ?? authData.phone,
+                avatarUrl: payload.avatarUrl ?? payload.AvatarUrl ?? authData.avatarUrl,
             };
 
             localStorage.setItem('token', authData.token);
@@ -61,7 +63,7 @@ export const AuthProvider = ({ children }) => {
     const getRole = () => (user?.role || '').toString().toLowerCase();
     const getRoleId = () => Number(user?.roleId || 0);
     const isAdmin = () => getRoleId() === 4 || getRole().includes('admin');
-    const isCinemaManager = () => getRoleId() === 3 || isAdmin() || getRole().includes('manager');
+    const isCinemaManager = () => !isAdmin() && (getRoleId() === 3 || getRole().includes('manager'));
     const isTicketStaff = () => getRoleId() === 2 || getRole().includes('staff');
     const canCheckInTickets = () => isAdmin() || isCinemaManager() || isTicketStaff();
 
