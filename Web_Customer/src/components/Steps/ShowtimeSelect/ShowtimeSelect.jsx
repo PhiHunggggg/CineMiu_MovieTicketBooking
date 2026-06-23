@@ -61,8 +61,14 @@ export default function ShowtimeSelect() {
     setLoading(true);
     setError('');
     showtimeApi
-      .getAll({ movieId, cinemaId, dateFrom: weekStart, dateTo: weekEnd })
-      .then(data => setShowtimes(Array.isArray(data) ? data : []))
+      .getAll({ movieId, cinemaId, dateFrom: weekStart, dateTo: weekEnd, page:1, pageSize:100 })
+        .then(data => {
+            const items = Array.isArray(data)
+                ? data
+                : (data?.items ?? data?.Items ?? []);
+
+            setShowtimes(items);
+        })
       .catch(err => {
         console.error(err);
         setError(err.message || 'Khong the tai danh sach suat chieu.');

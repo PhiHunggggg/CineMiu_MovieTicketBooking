@@ -11,6 +11,13 @@ using Services.Theater;
 using Services.Booking;
 using Services.Loyalty;
 using Repository.EFCore.Bookings;
+using Repository.EFCore.Authen;
+using Services.Authen;
+using Repository.EFCore.Product;
+using Services.Product;
+using Repository.EFCore.Promotion;
+using Services.Promotion;
+using Repository.EFCore.Loyalty;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -23,12 +30,25 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtectionKeys")));
 
 builder.Services.AddScoped<IMovieService, MovieService>();
+builder.Services.AddScoped<ICinemaService, CinemaService>();
+builder.Services.AddScoped<ICinemaLookupService, CinemaLookupService>();
+builder.Services.AddScoped<ICinemaUserService, CinemaUserService>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<IPromotionService, PromotionService>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
+builder.Services.AddScoped<ILoyaltyRepository, LoyaltyRepository>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
 // Register EFCore theater repositories
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
+builder.Services.AddScoped<ICinemaRepository, CinemaRepository>();
+builder.Services.AddScoped<ICinemaLookupRepository, CinemaLookupRepository>();
+builder.Services.AddScoped<ICinemaUserRepository, CinemaUserRepository>();
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
 builder.Services.AddScoped<IShowtimeRepository, ShowtimeRepository>();
 var foodClientPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "BaseCore.Food"));
 

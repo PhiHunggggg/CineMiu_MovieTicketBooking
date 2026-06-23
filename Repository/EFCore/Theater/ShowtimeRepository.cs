@@ -27,7 +27,7 @@ namespace Repository.EFCore.Theater
             "original"
         };
 
-        public async Task<List<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, string? status)
+        public async Task<List<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, DateTime? dateFrom, DateTime? dateTo, string? status)
         {
             var query =
                 from showtime in context.ShowTimes.AsNoTracking()
@@ -68,6 +68,20 @@ namespace Repository.EFCore.Theater
                 var dayStart = date.Value.Date;
                 var dayEnd = dayStart.AddDays(1);
                 query = query.Where(x => x.showtime.StartTime >= dayStart && x.showtime.StartTime < dayEnd);
+            }
+            else
+            {
+                if (dateFrom.HasValue)
+                {
+                    var rangeStart = dateFrom.Value.Date;
+                    query = query.Where(x => x.showtime.StartTime >= rangeStart);
+                }
+
+                if (dateTo.HasValue)
+                {
+                    var rangeEnd = dateTo.Value.Date.AddDays(1);
+                    query = query.Where(x => x.showtime.StartTime < rangeEnd);
+                }
             }
 
             if (!string.IsNullOrWhiteSpace(status))

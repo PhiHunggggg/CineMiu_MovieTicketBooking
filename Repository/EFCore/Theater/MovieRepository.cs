@@ -1,63 +1,180 @@
-using Azure;
-using Entities;
 using DTO.Theater;
+using Entities;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Repository.EFCore.Theater
 {
     public class MovieRepository(SqlServerDbContext context) : IMovieRepository
     {
-        public async Task<List<MovieDTO.GenreResponse>> GetGenresAsync()
-        {
-            return await context.Genres
-                .AsNoTracking()
-                .OrderBy(x => x.GenreId)
-                .Select(x => new MovieDTO.GenreResponse
-                {
-                    GenreId = x.GenreId,
-                    GenreName = x.GenreName
-                })
-                .ToListAsync();
-        }
+        public Task<List<MovieDTO.GenreResponse>> GetGenresAsync() => context.Genres.AsNoTracking()
+            .OrderBy(x => x.GenreId)
+            .Select(x => new MovieDTO.GenreResponse { GenreId = x.GenreId, GenreName = x.GenreName })
+            .ToListAsync();
 
-        public async Task<List<DTO.Theater.MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, string? status, int? cinemaId)
+        public async Task<List<MovieDTO.MovieResponse>> GetAllMoviesAsync(
+            string? keyword,
+            IReadOnlyCollection<string> statusAliases,
+            int? cinemaId)
         {
             var query = context.Movies.AsNoTracking();
-
-            if(!string.IsNullOrEmpty(keyword))
+            if (!string.IsNullOrWhiteSpace(keyword))
             {
-                query = query.Where(m => m.Title.Contains(keyword) || (m.TitleEn != null && m.TitleEn.Contains(keyword)));
+                var value = keyword.Trim();
+                query = query.Where(x => x.Title.Contains(value) || (x.TitleEn != null && x.TitleEn.Contains(value)));
             }
 
-            // now_showing, coming_soon, ended
-            if(!string.IsNullOrEmpty(status))
+            if (statusAliases.Count > 0)
             {
-                query = query.Where(x => x.Status == status);
+                query = query.Where(x => x.Status != null && statusAliases.Contains(x.Status));
             }
 
-            // Tìm theo id phim
             if (cinemaId.HasValue)
             {
                 var movieIds = context.ShowTimes
-                    .Join(context.Halls, s => s.HallId, h => h.HallId, (s, h) => new { s.MovieId, h.CinemaId })
+                    .Join(context.Halls, showtime => showtime.HallId, hall => hall.HallId,
+                        (showtime, hall) => new { showtime.MovieId, hall.CinemaId })
                     .Where(x => x.CinemaId == cinemaId.Value)
                     .Select(x => x.MovieId)
                     .Distinct();
-
-                query = query.Where(m => movieIds.Contains(m.MovieId));
+                query = query.Where(x => movieIds.Contains(x.MovieId));
             }
-            var movies = await query.ToListAsync();
-            var movieIdsList = movies.Select(m => m.MovieId).ToList();
-            var movieGenres = await context.MovieGenres
-                .AsNoTracking()
-                .Where(mg => movieIdsList.Contains(mg.MovieId))
-                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.MovieId, g.GenreId })
+
+            var movies = await query.OrderByDescending(x => x.ReleaseDate).ToListAsync();
+            return await MapMoviesAsync(movies);
+        }
+
+        public async Task<MovieDTO.MovieDetailResponse> GetMovieByIdAsync(int movieId)
+        {
+            var movie = await context.Movies.AsNoTracking().FirstOrDefaultAsync(x => x.MovieId == movieId)
+                ?? throw new KeyNotFoundException("Movie not found");
+            var response = (await MapMoviesAsync([movie])).Single();
+            var genreIds = await context.MovieGenres.AsNoTracking()
+                .Where(x => x.MovieId == movieId)
+                .Select(x => x.GenreId)
                 .ToListAsync();
-            var genreIdsLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreId);
-            var items = movies.Select(x => new MovieDTO.MovieResponse
+            return new MovieDTO.MovieDetailResponse { Movie = response, GenreIds = genreIds };
+        }
+
+        public async Task<MovieDTO.MovieResponse> CreateAsync(MovieDTO.MovieRequest request)
+        {
+            await ValidateMovieAsync(request);
+            var now = DateTime.UtcNow;
+            var movie = new Movie
+            {
+                Title = request.Title,
+                TitleEn = request.TitleEn,
+                CountryId = request.CountryId,
+                DurationMins = request.DurationMins,
+                ReleaseDate = request.ReleaseDate,
+                EndDate = request.EndDate,
+                AgeRating = request.AgeRating ?? "P",
+                Status = request.Status ?? "ComingSoon",
+                Synopsis = request.Synopsis,
+                Director = request.Director,
+                CastMembers = request.CastMembers,
+                Language = request.Language,
+                Subtitle = request.Subtitle,
+                PosterUrl = request.PosterUrl,
+                BannerUrl = request.BannerUrl,
+                TrailerUrl = request.TrailerUrl,
+                ImdbRating = request.ImdbRating,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            context.Movies.Add(movie);
+            await context.SaveChangesAsync();
+            await ReplaceGenresAsync(movie.MovieId, request.GenreIds);
+            return (await GetMovieByIdAsync(movie.MovieId)).Movie;
+        }
+
+        public async Task<MovieDTO.MovieResponse> UpdateAsync(int movieId, MovieDTO.MovieRequest request)
+        {
+            await ValidateMovieAsync(request);
+            var movie = await context.Movies.FirstOrDefaultAsync(x => x.MovieId == movieId)
+                ?? throw new KeyNotFoundException("Movie not found");
+
+            movie.Title = request.Title;
+            movie.TitleEn = request.TitleEn;
+            movie.CountryId = request.CountryId;
+            movie.DurationMins = request.DurationMins;
+            movie.ReleaseDate = request.ReleaseDate;
+            movie.EndDate = request.EndDate;
+            movie.AgeRating = request.AgeRating ?? movie.AgeRating;
+            movie.Status = request.Status ?? movie.Status;
+            movie.Synopsis = request.Synopsis;
+            movie.Director = request.Director;
+            movie.CastMembers = request.CastMembers;
+            movie.Language = request.Language;
+            movie.Subtitle = request.Subtitle;
+            movie.PosterUrl = request.PosterUrl;
+            movie.BannerUrl = request.BannerUrl;
+            movie.TrailerUrl = request.TrailerUrl;
+            movie.ImdbRating = request.ImdbRating;
+            movie.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+            await ReplaceGenresAsync(movieId, request.GenreIds);
+            return (await GetMovieByIdAsync(movieId)).Movie;
+        }
+
+        public async Task DeleteAsync(int movieId)
+        {
+            var movie = await context.Movies.FirstOrDefaultAsync(x => x.MovieId == movieId)
+                ?? throw new KeyNotFoundException("Movie not found");
+            if (await context.ShowTimes.AnyAsync(x => x.MovieId == movieId))
+            {
+                throw new ArgumentException("Cannot delete movie because it has showtimes");
+            }
+
+            context.MovieGenres.RemoveRange(context.MovieGenres.Where(x => x.MovieId == movieId));
+            context.Movies.Remove(movie);
+            await context.SaveChangesAsync();
+        }
+
+        private async Task ReplaceGenresAsync(int movieId, IEnumerable<byte>? genreIds)
+        {
+            context.MovieGenres.RemoveRange(context.MovieGenres.Where(x => x.MovieId == movieId));
+            if (genreIds != null)
+            {
+                context.MovieGenres.AddRange(genreIds.Distinct().Select(genreId => new MovieGenre
+                {
+                    MovieId = movieId,
+                    GenreId = genreId
+                }));
+            }
+            await context.SaveChangesAsync();
+        }
+
+        private async Task ValidateMovieAsync(MovieDTO.MovieRequest request)
+        {
+            if (string.IsNullOrWhiteSpace(request.Title))
+                throw new ArgumentException("Movie title is required");
+            if (request.DurationMins <= 0)
+                throw new ArgumentException("Movie duration must be greater than zero");
+            if (request.ImdbRating.HasValue && (request.ImdbRating < 0 || request.ImdbRating > 10))
+                throw new ArgumentException("IMDb rating must be between 0 and 10");
+            if (request.CountryId.HasValue && !await context.Countries.AnyAsync(x => x.CountryId == request.CountryId))
+                throw new ArgumentException("Selected country does not exist");
+
+            if (request.GenreIds?.Count > 0)
+            {
+                var ids = request.GenreIds.Distinct().ToList();
+                if (await context.Genres.CountAsync(x => ids.Contains(x.GenreId)) != ids.Count)
+                    throw new ArgumentException("One or more selected genres do not exist");
+            }
+        }
+
+        private async Task<List<MovieDTO.MovieResponse>> MapMoviesAsync(List<Movie> movies)
+        {
+            if (movies.Count == 0) return [];
+            var movieIds = movies.Select(x => x.MovieId).ToList();
+            var genreRows = await context.MovieGenres.AsNoTracking()
+                .Where(x => movieIds.Contains(x.MovieId))
+                .Join(context.Genres.AsNoTracking(), movieGenre => movieGenre.GenreId, genre => genre.GenreId,
+                    (movieGenre, genre) => new { movieGenre.MovieId, genre.GenreName })
+                .ToListAsync();
+            var genres = genreRows.ToLookup(x => x.MovieId, x => x.GenreName);
+
+            return movies.Select(x => new MovieDTO.MovieResponse
             {
                 MovieId = x.MovieId,
                 Title = x.Title,
@@ -67,6 +184,7 @@ namespace Repository.EFCore.Theater
                 ReleaseDate = x.ReleaseDate,
                 EndDate = x.EndDate,
                 AgeRating = x.AgeRating,
+                Status = x.Status,
                 Synopsis = x.Synopsis,
                 Director = x.Director,
                 CastMembers = x.CastMembers,
@@ -76,185 +194,8 @@ namespace Repository.EFCore.Theater
                 BannerUrl = x.BannerUrl,
                 TrailerUrl = x.TrailerUrl,
                 ImdbRating = x.ImdbRating,
-                Status = x.Status,
-
-                GenreIds = genreIdsLookup[x.MovieId].ToList()
+                Genres = genres[x.MovieId].ToList()
             }).ToList();
-
-            return items;
-        }
-        public async Task<DTO.Theater.MovieDTO.MovieResponse> GetMovieByIdAsync(int movieId)
-        {
-            var movie = await context.Movies.AsNoTracking().FirstOrDefaultAsync(x => x.MovieId == movieId);
-            if (movie == null)
-            {
-                throw new ArgumentException("Movie not found");
-            }
-            var genreIds = await context.MovieGenres
-                .AsNoTracking()
-                .Where(mg => mg.MovieId == movieId)
-                .Select(mg => mg.GenreId)
-                .ToListAsync();
-            return new MovieDTO.MovieResponse
-            {
-                MovieId = movie.MovieId,
-                Title = movie.Title,
-                TitleEn = movie.TitleEn,
-                CountryId = movie.CountryId,
-                DurationMins = movie.DurationMins,
-                ReleaseDate = movie.ReleaseDate,
-                EndDate = movie.EndDate,
-                AgeRating = movie.AgeRating,
-                Synopsis = movie.Synopsis,
-                Director = movie.Director,
-                CastMembers = movie.CastMembers,
-                Language = movie.Language,
-                Subtitle = movie.Subtitle,
-                PosterUrl = movie.PosterUrl,
-                BannerUrl = movie.BannerUrl,
-                TrailerUrl = movie.TrailerUrl,
-                ImdbRating = movie.ImdbRating,
-                Status = movie.Status,
-                GenreIds = genreIds
-            };
-        }
-        public async Task CreateAsync(MovieDTO.MovieRequest movieRequest)
-        {
-            var validationError = await ValidateMovieDto(movieRequest);
-            if (validationError != null)
-            {
-                throw new ArgumentException(validationError);
-            }
-
-            var movie = new Movie
-            {
-                Title = movieRequest.Title,
-                TitleEn = movieRequest.TitleEn,
-                CountryId = movieRequest.CountryId,
-                DurationMins = movieRequest.DurationMins,
-                ReleaseDate = movieRequest.ReleaseDate,
-                EndDate = movieRequest.EndDate,
-                AgeRating = movieRequest.AgeRating,
-                Status = movieRequest.Status,
-                Synopsis = movieRequest.Synopsis,
-                Director = movieRequest.Director,
-                CastMembers = movieRequest.CastMembers,
-                Language = movieRequest.Language,
-                Subtitle = movieRequest.Subtitle,
-                PosterUrl = movieRequest.PosterUrl,
-                BannerUrl = movieRequest.BannerUrl,
-                TrailerUrl = movieRequest.TrailerUrl,
-                ImdbRating = movieRequest.ImdbRating,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            };
-
-            context.Movies.Add(movie);
-            await context.SaveChangesAsync();
-
-            if (movieRequest.GenreIds != null && movieRequest.GenreIds.Count > 0)
-            {
-                var movieGenres = movieRequest.GenreIds.Distinct().Select(genreId => new MovieGenre
-                {
-                    MovieId = movie.MovieId,
-                    GenreId = genreId
-                }).ToList();
-
-                context.MovieGenres.AddRange(movieGenres);
-                await context.SaveChangesAsync();
-            }
-        }
-        public async Task UpdateAsync(int movieId, MovieDTO.MovieRequest dto)
-        {
-            var validationError = await ValidateMovieDto(dto);
-
-            if (validationError != null)
-            {
-                throw new ArgumentException(validationError);
-            }
-            var movie = await context.Movies.FirstOrDefaultAsync(x => x.MovieId == movieId);
-            if (movie == null)
-            {
-                throw new ArgumentException("Movie not found");
-            }
-
-            movie.Title = dto.Title;
-            movie.TitleEn = dto.TitleEn;
-            movie.CountryId = dto.CountryId;
-            movie.DurationMins = dto.DurationMins;
-            movie.ReleaseDate = dto.ReleaseDate;
-            movie.EndDate = dto.EndDate;
-            movie.AgeRating = dto.AgeRating;
-            movie.Status = dto.Status;
-            movie.Synopsis = dto.Synopsis;
-            movie.Director = dto.Director;
-            movie.CastMembers = dto.CastMembers;
-            movie.Language = dto.Language;
-            movie.Subtitle = dto.Subtitle;
-            movie.PosterUrl = dto.PosterUrl;
-            movie.BannerUrl = dto.BannerUrl;
-            movie.TrailerUrl = dto.TrailerUrl;
-            movie.ImdbRating = dto.ImdbRating;
-            movie.UpdatedAt = DateTime.UtcNow;
-
-            // Cập nhật thể loại phim
-            if(dto.GenreIds != null) 
-            {
-                var existingGenres = await context.MovieGenres.Where(mg => mg.MovieId == movieId).ToListAsync();
-                context.MovieGenres.RemoveRange(existingGenres);
-                var newMovieGenres = dto.GenreIds.Distinct().Select(genreId => new MovieGenre
-                {
-                    MovieId = movieId,
-                    GenreId = genreId
-                }).ToList();
-                context.MovieGenres.AddRange(newMovieGenres);
-            }
-            await context.SaveChangesAsync();
-        }
-        public async Task DeleteAsync(int movieId)
-        {
-            var movie = await context.Movies.FirstOrDefaultAsync(x => x.MovieId == movieId);
-            if (movie == null)
-            {
-                throw new ArgumentException("Movie not found");
-            }
-            context.Movies.Remove(movie);
-            await context.SaveChangesAsync();
-        }
-        // Thêm, sửa, xóa phim sẽ cần thêm các phương thức tương ứng ở đây, ví dụ:
-        private async Task<string?> ValidateMovieDto(MovieDTO.MovieRequest dto)
-        {
-            if (string.IsNullOrWhiteSpace(dto.Title))
-            {
-                return "Movie title is required";
-            }
-
-            if (dto.DurationMins <= 0)
-            {
-                return "Movie duration must be greater than zero";
-            }
-
-            if (dto.ImdbRating.HasValue && (dto.ImdbRating < 0 || dto.ImdbRating > 10))
-            {
-                return "IMDb rating must be between 0 and 10";
-            }
-
-            if (dto.CountryId.HasValue && !await context.Countries.AnyAsync(x => x.CountryId == dto.CountryId.Value))
-            {
-                return "Selected country does not exist";
-            }
-
-            if (dto.GenreIds?.Count > 0)
-            {
-                var genreIds = dto.GenreIds.Distinct().ToList();
-                var existingCount = await context.Genres.CountAsync(x => genreIds.Contains(x.GenreId));
-                if (existingCount != genreIds.Count)
-                {
-                    return "One or more selected genres do not exist";
-                }
-            }
-
-            return null;
         }
     }
 }

@@ -6,12 +6,22 @@ import { getUserId } from '../../../utils/authUser';
 import './Invoice.css';
 import { generateQrCodeUrl, BANK_ID, ACCOUNT_NO, ACCOUNT_NAME } from '../../../staticThing';
 
-const PAYMENT_TIMEOUT_SECONDS = 5 * 60; // 5 phút
+const PAYMENT_TIMEOUT_SECONDS = 10 * 60; // 10 phút
 
 function getBookingId(order) {
-  return order?.bookingId ?? order?.BookingId ?? null;
+    return order?.bookingId
+        ?? order?.BookingId
+        ?? order?.booking?.bookingId
+        ?? order?.booking?.BookingId
+        ?? null;
 }
-
+function getBookingCode(order) {
+    return order?.bookingCode
+        ?? order?.BookingCode
+        ?? order?.booking?.bookingCode
+        ?? order?.booking?.BookingCode
+        ?? 'BOOKING';
+}
 function getStartTime(showtime) {
   return showtime?.startTime ?? showtime?.StartTime ?? null;
 }
@@ -61,7 +71,12 @@ export default function Invoice() {
   useEffect(() => {
     if (!isWaiting || !order) return;
 
-    const orderId = order.bookingId ?? order.BookingId;
+      const orderId = getBookingId(order);
+      if (!orderId) {
+          console.error('[Polling] Missing bookingId:', order);
+          setError('Không tìm thấy mã booking để xác nhận thanh toán.');
+          return;
+      }
     pollingRef.current = setInterval(async () => {
       try {
         const response = await bookingApi.getById(orderId);
@@ -295,7 +310,7 @@ export default function Invoice() {
   // ─── Màn hình chờ thanh toán QR ─────────────────────────────────────────────
   if (isWaiting) {
     const qrAmount = order?.finalAmount ?? order?.FinalAmount ?? order?.totalAmount ?? order?.TotalAmount ?? totalAmount;
-    const qrCode = order?.bookingCode ?? order?.BookingCode ?? 'BOOKING';
+      const qrCode = getBookingCode(order);
     const qrUrl = generateQrCodeUrl(qrAmount, qrCode);
 
     return (
@@ -384,7 +399,7 @@ export default function Invoice() {
   // ─── Màn hình thành công ─────────────────────────────────────────────────────
   if (success) {
     const qrAmount = order?.finalAmount ?? order?.FinalAmount ?? order?.totalAmount ?? order?.TotalAmount ?? totalAmount;
-    const qrCode = order?.bookingCode ?? order?.BookingCode ?? 'BOOKING';
+      const qrCode = getBookingCode(order);
     const tickets = order?.tickets ?? order?.Tickets ?? [];
     return (
       <div className="invoice-success" id="booking-success">

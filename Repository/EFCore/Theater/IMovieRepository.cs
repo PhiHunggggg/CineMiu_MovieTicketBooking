@@ -10,10 +10,10 @@ namespace Repository.EFCore.Theater
     public interface IMovieRepository
     {
         Task<List<MovieDTO.GenreResponse>> GetGenresAsync();
-        Task<List<DTO.Theater.MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, string? status, int? cinemaId);
-        Task CreateAsync(MovieDTO.MovieRequest movieRequest);
-        Task UpdateAsync(int movieId, MovieDTO.MovieRequest movieRequest);
+        Task<List<MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, IReadOnlyCollection<string> statusAliases, int? cinemaId);
+        Task<MovieDTO.MovieResponse> CreateAsync(MovieDTO.MovieRequest movieRequest);
+        Task<MovieDTO.MovieResponse> UpdateAsync(int movieId, MovieDTO.MovieRequest movieRequest);
         Task DeleteAsync(int movieId);
-        Task<DTO.Theater.MovieDTO.MovieResponse> GetMovieByIdAsync(int movieId);
+        Task<MovieDTO.MovieDetailResponse> GetMovieByIdAsync(int movieId);
     }
 }

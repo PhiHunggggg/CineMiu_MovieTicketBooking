@@ -14,6 +14,7 @@ namespace DTO.Theater
 
         public class MovieResponse
         {
+            public int Id => MovieId;
             public int MovieId { get; set; }
             public string Title { get; set; } = "";
             public string? TitleEn { get; set; }
@@ -32,7 +33,13 @@ namespace DTO.Theater
             public string? BannerUrl { get; set; }
             public string? TrailerUrl { get; set; }
             public decimal? ImdbRating { get; set; }
-            public List<byte>? GenreIds { get; set; }
+            public List<string> Genres { get; set; } = [];
+        }
+
+        public class MovieDetailResponse
+        {
+            public MovieResponse Movie { get; set; } = new();
+            public List<byte> GenreIds { get; set; } = [];
         }
         public class MovieRequest
         {

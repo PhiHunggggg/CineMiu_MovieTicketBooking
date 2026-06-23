@@ -11,12 +11,12 @@ namespace Services.Theater
         IShowtimeRepository showtimeRepository,
         SqlServerDbContext context) : IShowtimeService
     {
-        public async Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, string? status, int page = 1, int pageSize = 12)
+        public async Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, DateTime? dateFrom, DateTime? dateTo, string? status, int page = 1, int pageSize = 12)
         {
             page = Math.Max(page, 1);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
-            var showtimes = await showtimeRepository.GetAllShowtimesAsync(keyword, movieId, cinemaId, hallId, date, status);
+            var showtimes = await showtimeRepository.GetAllShowtimesAsync(keyword, movieId, cinemaId, hallId, date, dateFrom, dateTo, status);
             var totalCount = showtimes.Count;
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
             var items = showtimes.Skip((page - 1) * pageSize).Take(pageSize).ToList();
@@ -54,7 +54,7 @@ namespace Services.Theater
         // Legacy-compatible adapters
         public async Task<object> GetAllAsync(int? movieId, int? cinemaId, DateTime? date, int? seatTypeId, int? dayTypeId, int? hallTypeId)
         {
-            var results = await GetAllShowtimesAsync(null, movieId, cinemaId, null, date, null, 1, 1000);
+            var results = await GetAllShowtimesAsync(null, movieId, cinemaId, null, date, null, null, null, 1, 1000);
             return results;
         }
 
@@ -141,7 +141,7 @@ namespace Services.Theater
 
             var createdIds = created.Select(x => x.ShowtimeId).ToHashSet();
             var responses = await showtimeRepository.GetAllShowtimesAsync(
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
             return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
         }
 
@@ -269,16 +269,12 @@ namespace Services.Theater
 
         public async Task UnlockSeatsAsync(int id, int userId, string sessionId)
         {
-            var locks = await context.SeatLocks
-                .Where(x => x.ShowtimeId == id && x.UserId == userId && x.SessionId == sessionId)
-                .ToListAsync();
-            if (locks.Count == 0)
-            {
-                return;
-            }
+            await context.SeatLocks
+        .Where(x => x.ShowtimeId == id
+                 && x.UserId == userId
+                 && x.SessionId == sessionId)
+        .ExecuteDeleteAsync();
 
-            context.SeatLocks.RemoveRange(locks);
-            await context.SaveChangesAsync();
         }
     }
 }

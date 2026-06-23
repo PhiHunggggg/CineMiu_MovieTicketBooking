@@ -41,13 +41,18 @@ export default function SeatSelect() {
         setError('');
 
         try {
-            const [stData, lookups] = await Promise.all([
-                showtimeApi.getById(showtimeId),
+            const userId = getUserId(user);
+            const [seats, lookups] = await Promise.all([
+                showtimeApi.getSeats(showtimeId, { userId }),
                 lookupApi.getAll(),
             ]);
 
-            setShowtimeSeats(stData.seats || []);
+            const seatList = Array.isArray(seats) ? seats : [];
+            setShowtimeSeats(seatList);
             setSeatTypes(lookups.seatTypes || []);
+            if (seatList.length === 0) {
+              setError('Phòng chiếu này chưa có dữ liệu ghế. Vui lòng cấu hình sơ đồ ghế trước khi mở bán.');
+            }
         } catch (err) {
             console.error(err);
             setError(err.message || 'Không thể tải sơ đồ ghế.');
@@ -145,8 +150,11 @@ export default function SeatSelect() {
       // Refresh seats to show updated status
       const showtimeId = getShowtimeId(showtime);
       try {
-        const data = showtimeId ? await showtimeApi.getById(showtimeId) : null;
-        const updatedSeats = data?.seats || [];
+        const data = showtimeId ? await showtimeApi.getSeats(showtimeId, {
+          userId: getUserId(user),
+          sessionId,
+        }) : null;
+        const updatedSeats = Array.isArray(data) ? data : [];
         if (updatedSeats.length > 0) {
           setShowtimeSeats(updatedSeats);
         }

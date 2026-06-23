@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { cinemaApi, showtimeApi } from '../../../services/api';
+import { cinemaApi } from '../../../services/api';
 import { useBooking } from '../../../context/BookingContext';
 import './CinemaForMovieSelect.css';
 
@@ -17,39 +17,26 @@ export default function CinemaForMovieSelect() {
       return;
     }
 
+    const toLocalDateString = date =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const today = new Date();
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + 6);
+
     setLoading(true);
-    // Fetch all showtimes for the selected movie, then find which cinemas have them
-    Promise.all([
-      cinemaApi.getAll(),
-      showtimeApi.getAll({ movieId: movie.movieId })
-    ])
-      .then(([allCinemas, showtimeData]) => {
-        const showtimes = Array.isArray(showtimeData) ? showtimeData : [];
-        const now = new Date();
-        const sevenDaysLater = new Date(now);
-        sevenDaysLater.setDate(now.getDate() + 7);
+    cinemaApi
+      .getByMovie(movie.movieId, {
+        dateFrom: toLocalDateString(today),
+        dateTo: toLocalDateString(weekEnd)
+      })
+      .then(data => {
+        const availableCinemas = Array.isArray(data) ? data : [];
+        const counts = Object.fromEntries(
+          availableCinemas.map(cinema => [cinema.cinemaId, cinema.showtimeCount || 0])
+        );
 
-        // Filter showtimes within next 7 days
-        const upcomingShowtimes = showtimes.filter(item => {
-          if (!item.showtime?.startTime) return false;
-          const st = new Date(item.showtime.startTime);
-          return st >= now && st <= sevenDaysLater;
-        });
-
-        // Count showtimes per cinema
-        const counts = {};
-        upcomingShowtimes.forEach(item => {
-          const cId = item.cinema?.cinemaId || item.cinema?.id;
-          if (cId) {
-            counts[cId] = (counts[cId] || 0) + 1;
-          }
-        });
         setCinemaShowtimeCounts(counts);
-
-        // Filter cinemas that have showtimes
-        const cinemaIdsWithShowtimes = new Set(Object.keys(counts).map(Number));
-        const filteredCinemas = allCinemas.filter(c => cinemaIdsWithShowtimes.has(c.cinemaId));
-        setCinemas(filteredCinemas);
+        setCinemas(availableCinemas);
       })
       .catch(console.error)
       .finally(() => setLoading(false));

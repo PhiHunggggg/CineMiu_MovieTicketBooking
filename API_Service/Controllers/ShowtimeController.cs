@@ -5,6 +5,8 @@ using Services.Booking;
 using Services.Theater;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Text;
 
   namespace API_Service.Controllers
 {
@@ -28,6 +30,8 @@ using Microsoft.EntityFrameworkCore;
             [FromQuery] int? cinemaId, 
             [FromQuery] int? hallId,
             [FromQuery] DateTime? date,
+            [FromQuery] DateTime? dateFrom,
+            [FromQuery] DateTime? dateTo,
             [FromQuery] string? status,
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 12,
@@ -41,6 +45,8 @@ using Microsoft.EntityFrameworkCore;
                 cinemaId,
                 hallId,
                 date,
+                dateFrom,
+                dateTo,
                 status,
                 page,
                 pageSize);
@@ -97,6 +103,36 @@ using Microsoft.EntityFrameworkCore;
                 .Where(x => x.ShowtimeId == id && x.ExpiresAt > now && seatIds.Contains(x.SeatId))
                 .ToListAsync();
             var lockBySeat = locks.ToDictionary(x => x.SeatId);
+            var dayTypes = await _context.CinemaDayTypes.AsNoTracking().ToListAsync();
+            var dayTypeId = ResolveDayTypeId(details.StartTime, details.IsSpecial, dayTypes);
+            var timeSlot = ResolveTimeSlot(details.StartTime);
+            var seatTypeIds = seats.Select(x => x.SeatTypeId).Distinct().ToList();
+            var priceRules = dayTypeId.HasValue
+                ? await _context.CinemaTicketPrices.AsNoTracking()
+                    .Where(x =>
+                        x.CinemaId == details.Cinema.CinemaId &&
+                        x.HallTypeId == details.Hall.HallTypeId &&
+                        seatTypeIds.Contains(x.SeatTypeId) &&
+                        x.DayTypeId == dayTypeId.Value &&
+                        x.EffectiveFrom <= details.StartTime &&
+                        (!x.EffectiveTo.HasValue || x.EffectiveTo.Value >= details.StartTime))
+                    .ToListAsync()
+                : [];
+
+            decimal ResolveSeatPrice(byte seatTypeId, decimal modifier)
+            {
+                var rule = priceRules
+                    .Where(x => x.SeatTypeId == seatTypeId &&
+                        (string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase) ||
+                         string.Equals(x.TimeSlot, "all_day", StringComparison.OrdinalIgnoreCase)))
+                    .OrderByDescending(x => string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase))
+                    .ThenByDescending(x => x.EffectiveFrom)
+                    .FirstOrDefault();
+
+                // BasePrice in ticket_prices is already the final price for a seat type.
+                // PriceModifier is only a backwards-compatible fallback when no rule exists.
+                return rule?.BasePrice ?? Math.Max(0, details.BasePrice + modifier);
+            }
 
             return Ok(seats.Select(seat =>
             {
@@ -106,6 +142,9 @@ using Microsoft.EntityFrameworkCore;
                     userId.HasValue &&
                     seatLock.UserId == userId.Value &&
                     seatLock.SessionId == sessionId;
+                var isBooked = bookedSeatIds.Contains(seat.SeatId);
+                var isLocked = seatLock != null && !isCurrentSession;
+                var finalPrice = ResolveSeatPrice(seat.SeatTypeId, seatType?.PriceModifier ?? 0);
 
                 return new
                 {
@@ -116,13 +155,58 @@ using Microsoft.EntityFrameworkCore;
                     seat.RowLabel,
                     seat.ColNumber,
                     seat.SeatCode,
-                    price = Math.Max(0, details.BasePrice + (seatType?.PriceModifier ?? 0)),
-                    isBooked = bookedSeatIds.Contains(seat.SeatId),
-                    isLocked = seatLock != null && !isCurrentSession,
+                    price = finalPrice,
+                    finalPrice,
+                    status = isBooked ? "booked" : isLocked ? "locked" : "available",
+                    isBooked,
+                    isLocked,
                     isLockedByCurrentSession = isCurrentSession,
                     lockExpiresAt = seatLock?.ExpiresAt
                 };
             }));
+        }
+
+        private static byte? ResolveDayTypeId(DateTime startTime, bool isSpecial, List<DayType> dayTypes)
+        {
+            if (dayTypes.Count == 0) return null;
+
+            var names = isSpecial
+                ? new[] { "holiday", "ngay le", "special" }
+                : startTime.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday
+                    ? new[] { "weekend", "cuoi tuan" }
+                    : new[] { "weekday", "ngay thuong" };
+
+            foreach (var name in names)
+            {
+                var match = dayTypes.FirstOrDefault(x =>
+                    NormalizeLookup(x.TypeName).Contains(name) ||
+                    (!string.IsNullOrWhiteSpace(x.Description) && NormalizeLookup(x.Description).Contains(name)));
+                if (match != null) return match.DayTypeId;
+            }
+
+            return dayTypes.OrderBy(x => x.DayTypeId).First().DayTypeId;
+        }
+
+        private static string ResolveTimeSlot(DateTime startTime) => startTime.Hour switch
+        {
+            < 12 => "morning",
+            < 18 => "afternoon",
+            < 23 => "evening",
+            _ => "late_night"
+        };
+
+        private static string NormalizeLookup(string value)
+        {
+            var normalized = value.ToLowerInvariant().Normalize(NormalizationForm.FormD);
+            var result = new StringBuilder(normalized.Length);
+            foreach (var character in normalized)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                {
+                    result.Append(character);
+                }
+            }
+            return result.ToString().Normalize(NormalizationForm.FormC);
         }
 
         [HttpPost]
