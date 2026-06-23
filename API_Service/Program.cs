@@ -61,6 +61,8 @@ builder.Services.AddScoped<ITicketPriceRepository, TicketPriceRepository>();
 builder.Services.AddScoped<ITicketPriceService, TicketPriceService>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+
 var foodClientPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "BaseCore.Food"));
 
 // Add services to the container

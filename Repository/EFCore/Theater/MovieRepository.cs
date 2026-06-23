@@ -17,7 +17,7 @@ namespace Repository.EFCore.Theater
                 .OrderBy(x => x.GenreId)
                 .Select(x => new MovieDTO.GenreResponse
                 {
-                    GenreId = x.GenreId,
+                    GenreId = (int)x.GenreId,
                     GenreName = x.GenreName
                 })
                 .ToListAsync();
@@ -55,7 +55,7 @@ namespace Repository.EFCore.Theater
             var movieGenres = await context.MovieGenres
                 .AsNoTracking()
                 .Where(mg => movieIdsList.Contains(mg.MovieId))
-                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.MovieId, g.GenreId, g.GenreName })
+                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.MovieId, GenreId = (int)g.GenreId, g.GenreName })
                 .ToListAsync();
             var genreIdsLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreId);
             var genreNamesLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreName);
@@ -96,7 +96,7 @@ namespace Repository.EFCore.Theater
             var genreIds = await context.MovieGenres
                 .AsNoTracking()
                 .Where(mg => mg.MovieId == movieId)
-                .Select(mg => mg.GenreId)
+                .Select(mg => (int)mg.GenreId)
                 .ToListAsync();
             var genres = await context.MovieGenres
                 .AsNoTracking()
@@ -166,7 +166,7 @@ namespace Repository.EFCore.Theater
                 var movieGenres = movieRequest.GenreIds.Distinct().Select(genreId => new MovieGenre
                 {
                     MovieId = movie.MovieId,
-                    GenreId = genreId
+                    GenreId = (byte)genreId
                 }).ToList();
 
                 context.MovieGenres.AddRange(movieGenres);
@@ -214,7 +214,7 @@ namespace Repository.EFCore.Theater
                 var newMovieGenres = dto.GenreIds.Distinct().Select(genreId => new MovieGenre
                 {
                     MovieId = movieId,
-                    GenreId = genreId
+                    GenreId = (byte)genreId
                 }).ToList();
                 context.MovieGenres.AddRange(newMovieGenres);
             }
@@ -288,7 +288,13 @@ namespace Repository.EFCore.Theater
             if (dto.GenreIds?.Count > 0)
             {
                 var genreIds = dto.GenreIds.Distinct().ToList();
-                var existingCount = await context.Genres.CountAsync(x => genreIds.Contains(x.GenreId));
+                if (genreIds.Any(x => x < byte.MinValue || x > byte.MaxValue))
+                {
+                    return "One or more selected genres do not exist";
+                }
+
+                var genreBytes = genreIds.Select(x => (byte)x).ToList();
+                var existingCount = await context.Genres.CountAsync(x => genreBytes.Contains(x.GenreId));
                 if (existingCount != genreIds.Count)
                 {
                     return "One or more selected genres do not exist";
