@@ -52,6 +52,7 @@ namespace DTO.Theater
         public class HallResponse
         {
             public int HallId { get; set; }
+            public int Id => HallId;
             public int CinemaId { get; set; }
             public string? CinemaName { get; set; }
             public string? CinemaCity { get; set; }
@@ -63,7 +64,10 @@ namespace DTO.Theater
             public byte TotalCols { get; set; }
             public short TotalSeats { get; set; }
             public int ActiveSeatCount { get; set; }
+            public int UpcomingShowtimeCount { get; set; }
             public string Status { get; set; } = "active";
+            public DateTime CreatedAt { get; set; }
+            public DateTime? UpdatedAt { get; set; }
         }
 
         public class HallRequest
@@ -75,6 +79,27 @@ namespace DTO.Theater
             public byte TotalCols { get; set; }
             public string? Status { get; set; }
             public byte DefaultSeatTypeId { get; set; } = 1;
+        }
+
+        public class HallStatusRequest
+        {
+            public string Status { get; set; } = "";
+        }
+
+        public class HallStatusResponse
+        {
+            public int HallId { get; set; }
+            public string Status { get; set; } = "active";
+            public int UpcomingShowtimeCount { get; set; }
+        }
+
+        public class SeatLayoutItemRequest
+        {
+            public byte SeatTypeId { get; set; }
+            public string RowLabel { get; set; } = "";
+            public byte ColNumber { get; set; }
+            public string? SeatCode { get; set; }
+            public bool? IsActive { get; set; }
         }
     }
 }

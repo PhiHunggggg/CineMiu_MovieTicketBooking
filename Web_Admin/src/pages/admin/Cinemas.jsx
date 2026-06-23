@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import { cinemaApi, cinemaLookupApi } from '../../services/api';
 
 const emptyCinema = {
@@ -12,6 +11,8 @@ const emptyCinema = {
     email: '',
     mapUrl: '',
     imageUrl: '',
+    openingTime: '08:00',
+    closingTime: '23:00',
     isActive: true,
 };
 
@@ -46,7 +47,7 @@ const AdminCinemas = () => {
         try {
             const response = await cinemaApi.getAll({ city: city || undefined, activeOnly: false });
             setCinemas(getItems(response.data));
-        } catch {
+        } catch (err) {
             setError('Không tải được danh sách chi nhánh rạp');
         } finally {
             setLoading(false);
@@ -68,6 +69,8 @@ const AdminCinemas = () => {
                 email: cinema.email || '',
                 mapUrl: cinema.mapUrl || '',
                 imageUrl: cinema.imageUrl || '',
+                openingTime: String(cinema.openingTime || '08:00').substring(0, 5),
+                closingTime: String(cinema.closingTime || '23:00').substring(0, 5),
                 isActive: cinema.isActive ?? true,
             });
         } else {
@@ -159,47 +162,28 @@ const AdminCinemas = () => {
                                                 <th>Tên rạp</th>
                                                 <th>Địa chỉ</th>
                                                 <th>Thành phố</th>
-                                                <th>Liên hệ</th>
-                                                <th>Trạng thái</th>
-                                                <th style={{ width: '220px' }}>Thao tác</th>
+                                                 <th>Liên hệ</th>
+                                                 <th>Giờ hoạt động</th>
+                                                 <th>Trạng thái</th>
+                                                <th style={{ width: '105px' }}>Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody>
                                             {cinemas.length === 0 ? (
-                                                <tr><td colSpan="6" className="text-center">Không tìm thấy chi nhánh</td></tr>
+                                                 <tr><td colSpan="7" className="text-center">Không tìm thấy chi nhánh</td></tr>
                                             ) : cinemas.map((cinema) => (
                                                 <tr key={cinema.cinemaId || cinema.id}>
                                                     <td><strong>{cinema.cinemaName}</strong></td>
                                                     <td>{cinema.address}</td>
                                                     <td>{cinema.city}</td>
-                                                    <td>{cinema.phone || cinema.email || '-'}</td>
+                                                     <td>{cinema.phone || cinema.email || '-'}</td>
+                                                     <td><i className="far fa-clock text-muted mr-1"></i>{String(cinema.openingTime || '08:00').substring(0, 5)} – {String(cinema.closingTime || '23:00').substring(0, 5)}</td>
                                                     <td>
                                                         <span className={`badge ${cinema.isActive ? 'badge-success' : 'badge-secondary'}`}>
                                                             {cinema.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}
                                                         </span>
                                                     </td>
                                                     <td>
-                                                        <Link
-                                                            className="btn btn-sm btn-primary mr-1"
-                                                            to={`/admin/halls?create=1&cinemaId=${cinema.cinemaId || cinema.id}`}
-                                                            title="Thêm phòng cho chi nhánh"
-                                                        >
-                                                            <i className="fas fa-door-open"></i>
-                                                        </Link>
-                                                        <Link
-                                                            className="btn btn-sm btn-warning mr-1"
-                                                            to={`/admin/ticket-prices?create=1&cinemaId=${cinema.cinemaId || cinema.id}`}
-                                                            title="Thêm giá vé cho chi nhánh"
-                                                        >
-                                                            <i className="fas fa-tags"></i>
-                                                        </Link>
-                                                        <Link
-                                                            className="btn btn-sm btn-success mr-1"
-                                                            to={`/admin/showtimes?create=1&cinemaId=${cinema.cinemaId || cinema.id}`}
-                                                            title="Tạo lịch chiếu tại chi nhánh"
-                                                        >
-                                                            <i className="fas fa-calendar-plus"></i>
-                                                        </Link>
                                                         <button className="btn btn-sm btn-info mr-1" onClick={() => openModal(cinema)}>
                                                             <i className="fas fa-edit"></i>
                                                         </button>
@@ -263,11 +247,19 @@ const AdminCinemas = () => {
                                             <label>Email</label>
                                             <input type="email" className="form-control" value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
                                         </div>
-                                        <div className="col-md-6 form-group">
-                                            <label>Ảnh</label>
-                                            <input className="form-control" value={formData.imageUrl} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} />
-                                        </div>
-                                        <div className="col-md-6 form-group">
+                                         <div className="col-md-6 form-group">
+                                             <label>Ảnh</label>
+                                             <input className="form-control" value={formData.imageUrl} onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })} />
+                                         </div>
+                                         <div className="col-md-3 form-group">
+                                             <label>Giờ mở cửa</label>
+                                             <input type="time" className="form-control" value={formData.openingTime} onChange={(e) => setFormData({ ...formData, openingTime: e.target.value })} required />
+                                         </div>
+                                         <div className="col-md-3 form-group">
+                                             <label>Giờ đóng cửa</label>
+                                             <input type="time" className="form-control" value={formData.closingTime} onChange={(e) => setFormData({ ...formData, closingTime: e.target.value })} required />
+                                         </div>
+                                         <div className="col-md-6 form-group">
                                             <label>Trạng thái</label>
                                             <select className="form-control" value={String(formData.isActive)} onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}>
                                                 <option value="true">Hoạt động</option>

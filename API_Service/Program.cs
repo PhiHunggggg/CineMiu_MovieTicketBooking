@@ -12,6 +12,16 @@ using Services.Theater;
 using Services.Booking;
 using Services.Loyalty;
 using Repository.EFCore.Bookings;
+using Repository.EFCore.Administration;
+using Repository.EFCore.Concessions;
+using Repository.EFCore.Pricing;
+using Repository.EFCore.Reports;
+using Repository.EFCore.Authen;
+using Services.Authen;
+using Services.Administration;
+using Services.Concessions;
+using Services.Pricing;
+using Services.Reports;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,12 +35,30 @@ builder.Services.AddDataProtection()
 
 builder.Services.AddScoped<IMovieService, MovieService>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+builder.Services.AddScoped<ICinemaService, CinemaService>();
+builder.Services.AddScoped<IHallService, HallService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
 // Register EFCore theater repositories
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
 builder.Services.AddScoped<IShowtimeRepository, ShowtimeRepository>();
+builder.Services.AddScoped<ICinemaRepository, CinemaRepository>();
+builder.Services.AddScoped<IHallRepository, HallRepository>();
+builder.Services.AddScoped<IConcessionRepository, ConcessionRepository>();
+builder.Services.AddScoped<IConcessionService, ConcessionService>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
+builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAdminSystemRepository, AdminSystemRepository>();
+builder.Services.AddScoped<IAdminSystemService, AdminSystemService>();
+builder.Services.AddScoped<ITicketPriceRepository, TicketPriceRepository>();
+builder.Services.AddScoped<ITicketPriceService, TicketPriceService>();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
+builder.Services.AddScoped<IReportService, ReportService>();
 var foodClientPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "BaseCore.Food"));
 
 // Add services to the container

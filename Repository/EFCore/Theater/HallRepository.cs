@@ -80,12 +80,22 @@ namespace Repository.EFCore.Theater
             return await ToResponsesAsync(halls);
         }
 
+        public async Task<List<HallDTO.HallResponse>> GetHallsByCinemaAsync(int cinemaId)
+        {
+            if (!await context.Cinemas.AsNoTracking().AnyAsync(x => x.CinemaId == cinemaId))
+            {
+                throw new KeyNotFoundException("Cinema not found");
+            }
+
+            return await GetAllHallsAsync(null, cinemaId, null);
+        }
+
         public async Task<HallDTO.HallResponse> GetHallByIdAsync(int hallId)
         {
             var hall = await context.Halls.AsNoTracking().FirstOrDefaultAsync(x => x.HallId == hallId);
             if (hall == null)
             {
-                throw new ArgumentException("Hall not found");
+                throw new KeyNotFoundException("Hall not found");
             }
 
             return (await ToResponsesAsync([hall])).First();
@@ -95,7 +105,7 @@ namespace Repository.EFCore.Theater
         {
             if (!await context.Halls.AnyAsync(x => x.HallId == hallId))
             {
-                throw new ArgumentException("Hall not found");
+                throw new KeyNotFoundException("Hall not found");
             }
 
             var seatTypes = await context.SeatTypes
@@ -328,17 +338,167 @@ namespace Repository.EFCore.Theater
                 .ToList();
         }
 
-        public async Task CreateAsync(HallDTO.HallRequest hallRequest)
+        public async Task<HallDTO.SeatResponse> CreateSeatAsync(
+            int hallId,
+            HallDTO.SeatLayoutItemRequest seatRequest)
         {
-            var validationError = await ValidateHallDto(hallRequest);
-            if (await context.Halls.AnyAsync(x => x.CinemaId == hallRequest.CinemaId && x.HallName == hallRequest.HallName.Trim()))
+            if (!await context.Halls.AnyAsync(x => x.HallId == hallId))
             {
-                throw new ArgumentException("Hall name already exists in the selected cinema");
+                throw new KeyNotFoundException("Hall not found");
             }
 
+            var normalized = NormalizeSeatRequest(seatRequest);
+            await ValidateSeatTypeAsync(normalized.SeatTypeId);
+
+            if (await context.Seats.AnyAsync(x =>
+                    x.HallId == hallId &&
+                    (x.SeatCode == normalized.SeatCode ||
+                     (x.RowLabel == normalized.RowLabel && x.ColNumber == normalized.ColNumber))))
+            {
+                throw new InvalidOperationException("Seat already exists in this hall");
+            }
+
+            var now = DateTime.UtcNow;
+            var seat = new Seat
+            {
+                HallId = hallId,
+                SeatTypeId = normalized.SeatTypeId,
+                RowLabel = normalized.RowLabel,
+                ColNumber = normalized.ColNumber,
+                SeatCode = normalized.SeatCode,
+                IsActive = normalized.IsActive,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+
+            context.Seats.Add(seat);
+            var hall = await context.Halls.FirstAsync(x => x.HallId == hallId);
+            hall.TotalSeats++;
+            hall.UpdatedAt = now;
+            await context.SaveChangesAsync();
+
+            return (await GetSeatsAsync(hallId)).First(x => x.SeatId == seat.SeatId);
+        }
+
+        public async Task<List<HallDTO.SeatResponse>> ReplaceSeatsAsync(
+            int hallId,
+            IReadOnlyList<HallDTO.SeatLayoutItemRequest> seatRequests)
+        {
+            var hall = await context.Halls.FirstOrDefaultAsync(x => x.HallId == hallId);
+            if (hall == null)
+            {
+                throw new KeyNotFoundException("Hall not found");
+            }
+
+            if (seatRequests.Count == 0)
+            {
+                throw new ArgumentException("Seats are required");
+            }
+
+            var normalizedSeats = seatRequests.Select(NormalizeSeatRequest).ToList();
+            var duplicateCode = normalizedSeats
+                .GroupBy(x => x.SeatCode, StringComparer.OrdinalIgnoreCase)
+                .FirstOrDefault(group => group.Count() > 1)?.Key;
+            if (!string.IsNullOrWhiteSpace(duplicateCode))
+            {
+                throw new ArgumentException($"Duplicate seat code: {duplicateCode}");
+            }
+
+            var duplicatePosition = normalizedSeats
+                .GroupBy(x => (x.RowLabel, x.ColNumber))
+                .FirstOrDefault(group => group.Count() > 1)?.Key;
+            if (duplicatePosition.HasValue)
+            {
+                throw new ArgumentException(
+                    $"Duplicate seat position: {duplicatePosition.Value.RowLabel}{duplicatePosition.Value.ColNumber}");
+            }
+
+            var requestedSeatTypeIds = normalizedSeats.Select(x => x.SeatTypeId).Distinct().ToList();
+            var validSeatTypeCount = await context.SeatTypes
+                .CountAsync(x => requestedSeatTypeIds.Contains(x.SeatTypeId));
+            if (validSeatTypeCount != requestedSeatTypeIds.Count)
+            {
+                throw new ArgumentException("Invalid seat type");
+            }
+
+            var existingSeats = await context.Seats.Where(x => x.HallId == hallId).ToListAsync();
+            var existingByCode = existingSeats.ToDictionary(x => x.SeatCode, StringComparer.OrdinalIgnoreCase);
+            var requestedCodes = normalizedSeats
+                .Select(x => x.SeatCode)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var existingSeatIds = existingSeats.Select(x => x.SeatId).ToList();
+            var usedSeatIds = await context.Tickets
+                .Where(x => existingSeatIds.Contains(x.SeatId))
+                .Select(x => x.SeatId)
+                .ToHashSetAsync();
+
+            var seatsToRemove = existingSeats.Where(x => !requestedCodes.Contains(x.SeatCode)).ToList();
+            if (seatsToRemove.Any(x => usedSeatIds.Contains(x.SeatId)))
+            {
+                throw new InvalidOperationException("Cannot remove seats that already have tickets");
+            }
+
+            context.Seats.RemoveRange(seatsToRemove);
+            var now = DateTime.UtcNow;
+            foreach (var requestedSeat in normalizedSeats)
+            {
+                if (existingByCode.TryGetValue(requestedSeat.SeatCode, out var seat))
+                {
+                    seat.SeatTypeId = requestedSeat.SeatTypeId;
+                    seat.RowLabel = requestedSeat.RowLabel;
+                    seat.ColNumber = requestedSeat.ColNumber;
+                    seat.IsActive = requestedSeat.IsActive;
+                    seat.UpdatedAt = now;
+                }
+                else
+                {
+                    context.Seats.Add(new Seat
+                    {
+                        HallId = hallId,
+                        SeatTypeId = requestedSeat.SeatTypeId,
+                        RowLabel = requestedSeat.RowLabel,
+                        ColNumber = requestedSeat.ColNumber,
+                        SeatCode = requestedSeat.SeatCode,
+                        IsActive = requestedSeat.IsActive,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                }
+            }
+
+            hall.TotalSeats = checked((short)normalizedSeats.Count);
+            hall.UpdatedAt = now;
+            await context.SaveChangesAsync();
+            return await GetSeatsAsync(hallId);
+        }
+
+        public async Task<HallDTO.HallResponse> CreateAsync(HallDTO.HallRequest hallRequest)
+        {
+            if (!await context.Cinemas.AnyAsync(x => x.CinemaId == hallRequest.CinemaId))
+            {
+                throw new KeyNotFoundException("Cinema not found");
+            }
+
+            var validationError = await ValidateHallDto(hallRequest);
             if (validationError != null)
             {
                 throw new ArgumentException(validationError);
+            }
+
+            var hallName = hallRequest.HallName.Trim();
+            if (await context.Halls.AnyAsync(x => x.CinemaId == hallRequest.CinemaId && x.HallName == hallName))
+            {
+                throw new InvalidOperationException("Hall name already exists in the selected cinema");
+            }
+
+            var seatTypeIds = await context.SeatTypes
+                .AsNoTracking()
+                .OrderBy(x => x.SeatTypeId)
+                .Select(x => x.SeatTypeId)
+                .ToListAsync();
+            if (seatTypeIds.Count == 0)
+            {
+                throw new ArgumentException("At least one seat type is required before creating a hall");
             }
 
             var now = DateTime.UtcNow;
@@ -346,7 +506,7 @@ namespace Repository.EFCore.Theater
             {
                 CinemaId = hallRequest.CinemaId,
                 HallTypeId = hallRequest.HallTypeId,
-                HallName = hallRequest.HallName.Trim(),
+                HallName = hallName,
                 TotalRows = hallRequest.TotalRows,
                 TotalCols = hallRequest.TotalCols,
                 TotalSeats = checked((short)(hallRequest.TotalRows * hallRequest.TotalCols)),
@@ -355,58 +515,117 @@ namespace Repository.EFCore.Theater
                 UpdatedAt = now
             };
 
-            context.Halls.Add(hall);
-            await context.SaveChangesAsync();
+            async Task SaveHallAndSeatsAsync()
+            {
+                context.Halls.Add(hall);
+                await context.SaveChangesAsync();
+                context.Seats.AddRange(BuildSeats(hall, seatTypeIds, now));
+                await context.SaveChangesAsync();
+            }
 
-            context.Seats.AddRange(BuildSeats(hall, hallRequest.DefaultSeatTypeId, now));
-            await context.SaveChangesAsync();
+            if (context.Database.IsRelational())
+            {
+                var strategy = context.Database.CreateExecutionStrategy();
+                await strategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await context.Database.BeginTransactionAsync();
+                    await SaveHallAndSeatsAsync();
+                    await transaction.CommitAsync();
+                });
+            }
+            else
+            {
+                await SaveHallAndSeatsAsync();
+            }
+
+            return await GetHallByIdAsync(hall.HallId);
         }
 
-        public async Task UpdateAsync(int hallId, HallDTO.HallRequest hallRequest)
+        public async Task<HallDTO.HallResponse> UpdateAsync(int hallId, HallDTO.HallRequest hallRequest)
         {
+            var hall = await context.Halls.FirstOrDefaultAsync(x => x.HallId == hallId);
+            if (hall == null)
+            {
+                throw new KeyNotFoundException("Hall not found");
+            }
+
+            hallRequest.CinemaId = hall.CinemaId;
             var validationError = await ValidateHallDto(hallRequest);
             if (validationError != null)
             {
                 throw new ArgumentException(validationError);
             }
 
-            var hall = await context.Halls.FirstOrDefaultAsync(x => x.HallId == hallId);
-            if (hall == null)
-            {
-                throw new ArgumentException("Hall not found");
-            }
-
+            var hallName = hallRequest.HallName.Trim();
             if (await context.Halls.AnyAsync(x => 
                 x.HallId != hallId &&
                 x.CinemaId == hallRequest.CinemaId &&
-                x.HallName == hallRequest.HallName.Trim()))
+                x.HallName == hallName))
             {
-                throw new ArgumentException ("Hall name already exists in the selected cinema");
+                throw new InvalidOperationException("Hall name already exists in the selected cinema");
             }
 
             var layoutChanged = hall.TotalRows != hallRequest.TotalRows || hall.TotalCols != hallRequest.TotalCols;
-            if (layoutChanged && await context.ShowTimes.AnyAsync(x => x.HallId == hallId))
-            {
-                throw new ArgumentException("Cannot change hall layout because it already has showtimes");
-            }
-
-            hall.CinemaId = hallRequest.CinemaId;
-            hall.HallTypeId = hallRequest.HallTypeId;
-            hall.HallName = hallRequest.HallName.Trim();
-            hall.TotalRows = hallRequest.TotalRows;
-            hall.TotalCols = hallRequest.TotalCols;
-            hall.TotalSeats = checked((short)(hallRequest.TotalRows * hallRequest.TotalCols));
-            hall.Status = NormalizeStatus(hallRequest.Status);
-            hall.UpdatedAt = DateTime.UtcNow;
-
             if (layoutChanged)
             {
-                var oldSeats = await context.Seats.Where(x => x.HallId == hallId).ToListAsync();
-                context.Seats.RemoveRange(oldSeats);
-                context.Seats.AddRange(BuildSeats(hall, hallRequest.DefaultSeatTypeId, DateTime.UtcNow));
+                throw new InvalidOperationException("Use the seat layout editor to change an existing hall layout");
             }
 
+            var status = NormalizeStatus(hallRequest.Status ?? hall.Status);
+            var upcomingShowtimeCount = await GetUpcomingShowtimeCountAsync(hallId);
+            if (!string.Equals(hall.Status, status, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(status, "active", StringComparison.OrdinalIgnoreCase) &&
+                upcomingShowtimeCount > 0)
+            {
+                throw new InvalidOperationException(
+                    "Cancel or move upcoming showtimes before taking this hall out of service");
+            }
+
+            hall.HallTypeId = hallRequest.HallTypeId;
+            hall.HallName = hallName;
+            hall.Status = status;
+            hall.UpdatedAt = DateTime.UtcNow;
+
             await context.SaveChangesAsync();
+            return await GetHallByIdAsync(hallId);
+        }
+
+        public async Task<HallDTO.HallStatusResponse> UpdateStatusAsync(int hallId, string status)
+        {
+            var hall = await context.Halls.FirstOrDefaultAsync(x => x.HallId == hallId);
+            if (hall == null)
+            {
+                throw new KeyNotFoundException("Hall not found");
+            }
+
+            var normalizedStatus = NormalizeStatus(status);
+            if (!AllowedStatuses.Contains(normalizedStatus))
+            {
+                throw new ArgumentException("Hall status is invalid");
+            }
+
+            var upcomingShowtimeCount = await GetUpcomingShowtimeCountAsync(hallId);
+            if (!string.Equals(hall.Status, normalizedStatus, StringComparison.OrdinalIgnoreCase) &&
+                !string.Equals(normalizedStatus, "active", StringComparison.OrdinalIgnoreCase) &&
+                upcomingShowtimeCount > 0)
+            {
+                throw new InvalidOperationException(
+                    "Cancel or move upcoming showtimes before taking this hall out of service");
+            }
+
+            if (!string.Equals(hall.Status, normalizedStatus, StringComparison.OrdinalIgnoreCase))
+            {
+                hall.Status = normalizedStatus;
+                hall.UpdatedAt = DateTime.UtcNow;
+                await context.SaveChangesAsync();
+            }
+
+            return new HallDTO.HallStatusResponse
+            {
+                HallId = hall.HallId,
+                Status = hall.Status,
+                UpcomingShowtimeCount = upcomingShowtimeCount
+            };
         }
 
         public async Task DeleteAsync(int hallId)
@@ -414,12 +633,12 @@ namespace Repository.EFCore.Theater
             var hall = await context.Halls.FirstOrDefaultAsync(x => x.HallId == hallId);
             if (hall == null)
             {
-                throw new ArgumentException("Hall not found");
+                throw new KeyNotFoundException("Hall not found");
             }
 
             if (await context.ShowTimes.AnyAsync(x => x.HallId == hallId))
             {
-                throw new ArgumentException("Cannot delete hall because it has showtimes");
+                throw new InvalidOperationException("Cannot delete hall because it has showtimes");
             }
 
             var seats = await context.Seats.Where(x => x.HallId == hallId).ToListAsync();
@@ -438,11 +657,6 @@ namespace Repository.EFCore.Theater
             if (dto.HallTypeId == 0 || !await context.HallTypes.AnyAsync(x => x.HallTypeId == dto.HallTypeId))
             {
                 return "Selected hall type does not exist";
-            }
-
-            if (dto.DefaultSeatTypeId == 0 || !await context.SeatTypes.AnyAsync(x => x.SeatTypeId == dto.DefaultSeatTypeId))
-            {
-                return "Selected seat type does not exist";
             }
 
             if (string.IsNullOrWhiteSpace(dto.HallName))
@@ -496,6 +710,18 @@ namespace Repository.EFCore.Theater
                 .Select(x => new { HallId = x.Key, Count = x.Count() })
                 .ToDictionaryAsync(x => x.HallId, x => x.Count);
 
+            var now = DateTime.Now;
+            var upcomingShowtimeCounts = await context.ShowTimes
+                .AsNoTracking()
+                .Where(x =>
+                    hallIds.Contains(x.HallId) &&
+                    x.EndTime > now &&
+                    x.Status != "cancelled" &&
+                    x.Status != "completed")
+                .GroupBy(x => x.HallId)
+                .Select(x => new { HallId = x.Key, Count = x.Count() })
+                .ToDictionaryAsync(x => x.HallId, x => x.Count);
+
             return halls.Select(hall =>
             {
                 cinemas.TryGetValue(hall.CinemaId, out var cinema);
@@ -515,17 +741,29 @@ namespace Repository.EFCore.Theater
                     TotalCols = hall.TotalCols,
                     TotalSeats = hall.TotalSeats,
                     ActiveSeatCount = activeSeatCounts.GetValueOrDefault(hall.HallId),
-                    Status = hall.Status
+                    UpcomingShowtimeCount = upcomingShowtimeCounts.GetValueOrDefault(hall.HallId),
+                    Status = hall.Status,
+                    CreatedAt = hall.CreatedAt,
+                    UpdatedAt = hall.UpdatedAt
                 };
             }).ToList();
         }
 
-        private static List<Seat> BuildSeats(Hall hall, byte seatTypeId, DateTime now)
+        private static List<Seat> BuildSeats(Hall hall, IReadOnlyList<byte> seatTypeIds, DateTime now)
         {
+            var standardSeatTypeId = seatTypeIds[0];
+            var vipSeatTypeId = seatTypeIds.Count > 1 ? seatTypeIds[1] : standardSeatTypeId;
+            var coupleSeatTypeId = seatTypeIds.Count > 2 ? seatTypeIds[2] : vipSeatTypeId;
             var seats = new List<Seat>();
             for (var row = 1; row <= hall.TotalRows; row++)
             {
-                var rowLabel = ((char)('A' + row - 1)).ToString();
+                var rowLabel = ToRowLabel(row);
+                var seatTypeId = row == hall.TotalRows
+                    ? coupleSeatTypeId
+                    : row >= hall.TotalRows - 1
+                        ? vipSeatTypeId
+                        : standardSeatTypeId;
+
                 for (var col = 1; col <= hall.TotalCols; col++)
                 {
                     seats.Add(new Seat
@@ -547,8 +785,59 @@ namespace Repository.EFCore.Theater
 
         private static string NormalizeStatus(string? status)
         {
-            var trimmed = status?.Trim();
-            return string.IsNullOrWhiteSpace(trimmed) ? "active" : trimmed;
+            var normalized = status?.Trim().ToLowerInvariant();
+            return string.IsNullOrWhiteSpace(normalized) ? "active" : normalized;
+        }
+
+        private async Task<int> GetUpcomingShowtimeCountAsync(int hallId)
+        {
+            var now = DateTime.Now;
+            return await context.ShowTimes.CountAsync(x =>
+                x.HallId == hallId &&
+                x.EndTime > now &&
+                x.Status != "cancelled" &&
+                x.Status != "completed");
+        }
+
+        private async Task ValidateSeatTypeAsync(byte seatTypeId)
+        {
+            if (seatTypeId == 0 || !await context.SeatTypes.AnyAsync(x => x.SeatTypeId == seatTypeId))
+            {
+                throw new ArgumentException("Invalid seat type");
+            }
+        }
+
+        private static NormalizedSeatRequest NormalizeSeatRequest(HallDTO.SeatLayoutItemRequest request)
+        {
+            var rowLabel = request.RowLabel?.Trim().ToUpperInvariant() ?? "";
+            if (string.IsNullOrWhiteSpace(rowLabel) || request.ColNumber == 0)
+            {
+                throw new ArgumentException("Seat row and column are required");
+            }
+
+            var seatCode = string.IsNullOrWhiteSpace(request.SeatCode)
+                ? $"{rowLabel}{request.ColNumber}"
+                : request.SeatCode.Trim().ToUpperInvariant();
+
+            return new NormalizedSeatRequest(
+                request.SeatTypeId,
+                rowLabel,
+                request.ColNumber,
+                seatCode,
+                request.IsActive ?? true);
+        }
+
+        private static string ToRowLabel(int rowNumber)
+        {
+            var label = "";
+            while (rowNumber > 0)
+            {
+                rowNumber--;
+                label = (char)('A' + rowNumber % 26) + label;
+                rowNumber /= 26;
+            }
+
+            return label;
         }
 
         private static bool IsSoldBookingStatus(string? status)
@@ -557,5 +846,12 @@ namespace Repository.EFCore.Theater
                    string.Equals(status, "paid", StringComparison.OrdinalIgnoreCase) ||
                    string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase);
         }
+
+        private sealed record NormalizedSeatRequest(
+            byte SeatTypeId,
+            string RowLabel,
+            byte ColNumber,
+            string SeatCode,
+            bool IsActive);
     }
 }

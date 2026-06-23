@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { cinemaLookupApi, userApi } from '../../services/api';
+import React, { useEffect, useState } from 'react';
+import { bookingAdminApi, cinemaLookupApi, userApi } from '../../services/api';
 
 const emptyUser = {
     roleId: '',
@@ -24,6 +24,9 @@ const Users = () => {
     const [editingUser, setEditingUser] = useState(null);
     const [formData, setFormData] = useState(emptyUser);
     const [error, setError] = useState('');
+    const [historyUser, setHistoryUser] = useState(null);
+    const [bookingHistory, setBookingHistory] = useState([]);
+    const [historyLoading, setHistoryLoading] = useState(false);
 
     useEffect(() => {
         loadLookups();
@@ -109,15 +112,37 @@ const Users = () => {
         }
     };
 
-    const handleDelete = async (user) => {
-        if (!window.confirm(`Xóa người dùng "${user.fullName || user.name || user.email}"?`)) return;
-
+    const handleToggleStatus = async (user) => {
         setError('');
         try {
-            await userApi.delete(user.userId || user.id);
+            await userApi.update(user.userId || user.id, {
+                roleId: user.roleId,
+                cinemaId: user.cinemaId || null,
+                fullName: user.fullName || user.name || '',
+                email: user.email,
+                phone: user.phone || null,
+                avatarUrl: user.avatarUrl || null,
+                dateOfBirth: user.dateOfBirth || null,
+                gender: user.gender || null,
+                isActive: !user.isActive,
+            });
             loadUsers();
         } catch (err) {
-            setError(err.response?.data?.message || 'Xóa người dùng thất bại');
+            setError(err.response?.data?.message || 'Thay đổi trạng thái khách hàng thất bại');
+        }
+    };
+
+    const openBookingHistory = async (user) => {
+        setHistoryUser(user);
+        setBookingHistory([]);
+        setHistoryLoading(true);
+        try {
+            const response = await bookingAdminApi.getByUser(user.userId || user.id);
+            setBookingHistory(response.data?.items || response.data?.data || response.data || []);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Không tải được lịch sử đặt vé');
+        } finally {
+            setHistoryLoading(false);
         }
     };
 
@@ -130,7 +155,7 @@ const Users = () => {
         <div className="content-wrapper">
             <div className="content-header">
                 <div className="container-fluid">
-                    <h1 className="m-0">Quản lý người dùng</h1>
+                    <div className="admin-page-title"><div><p className="admin-eyebrow">Khách hàng</p><h1>Quản lý người dùng</h1><span>Xem tài khoản, lịch sử đặt vé và kiểm soát truy cập.</span></div></div>
                 </div>
             </div>
 
@@ -176,7 +201,7 @@ const Users = () => {
                                                 <th>Số điện thoại</th>
                                                 <th>Vai trò</th>
                                                 <th>Trạng thái</th>
-                                                <th style={{ width: '105px' }}>Thao tác</th>
+                                                <th style={{ width: '145px' }}>Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -184,7 +209,7 @@ const Users = () => {
                                                 <tr>
                                                     <td colSpan="6" className="text-center">Không tìm thấy người dùng</td>
                                                 </tr>
-                                            ) : users.map((user) => (
+                                            ) : users.filter((user) => Number(user.roleId) === 1).map((user) => (
                                                 <tr key={user.userId || user.id}>
                                                     <td>{user.fullName || user.name}</td>
                                                     <td>{user.email}</td>
@@ -196,11 +221,14 @@ const Users = () => {
                                                         </span>
                                                     </td>
                                                     <td className="text-center">
+                                                        <button className="btn btn-sm btn-light mr-1" type="button" title="Lịch sử đặt vé" onClick={() => openBookingHistory(user)}>
+                                                            <i className="fas fa-history"></i>
+                                                        </button>
                                                         <button className="btn btn-sm btn-info mr-1" type="button" onClick={() => openModal(user)}>
                                                             <i className="fas fa-edit"></i>
                                                         </button>
-                                                        <button className="btn btn-sm btn-danger" type="button" onClick={() => handleDelete(user)}>
-                                                            <i className="fas fa-trash"></i>
+                                                        <button className={`btn btn-sm ${user.isActive ? 'btn-danger' : 'btn-success'}`} type="button" title={user.isActive ? 'Khóa tài khoản' : 'Mở tài khoản'} onClick={() => handleToggleStatus(user)}>
+                                                            <i className={`fas fa-${user.isActive ? 'lock' : 'unlock'}`}></i>
                                                         </button>
                                                     </td>
                                                 </tr>
@@ -282,6 +310,28 @@ const Users = () => {
                 </div>
             )}
             {showModal && <div className="modal-backdrop fade show"></div>}
+            {historyUser && (
+                <>
+                    <div className="modal fade show admin-modal" style={{ display: 'block' }} tabIndex="-1">
+                        <div className="modal-dialog modal-xl"><div className="modal-content">
+                            <div className="modal-header"><div><small>LỊCH SỬ GIAO DỊCH</small><h5>{historyUser.fullName || historyUser.email}</h5></div><button type="button" className="close" onClick={() => setHistoryUser(null)}><span>&times;</span></button></div>
+                            <div className="modal-body p-0">
+                                {historyLoading ? <div className="admin-loading"><div className="spinner-border text-primary"></div></div> : <div className="table-responsive"><table className="table admin-table mb-0">
+                                    <thead><tr><th>Mã đặt vé</th><th>Phim</th><th>Rạp</th><th>Ngày đặt</th><th>Giá trị</th><th>Trạng thái</th></tr></thead>
+                                    <tbody>{bookingHistory.length === 0 ? <tr><td colSpan="6" className="text-center py-5 text-muted">Khách hàng chưa có lịch sử đặt vé</td></tr> : bookingHistory.map((item, index) => {
+                                        const booking = item.booking || item.Booking || item;
+                                        const movie = item.movie || item.Movie || {};
+                                        const cinema = item.cinema || item.Cinema || {};
+                                        return <tr key={booking.bookingId || booking.BookingId || index}><td><strong>{booking.bookingCode || booking.BookingCode || '-'}</strong></td><td>{movie.title || movie.Title || '-'}</td><td>{cinema.cinemaName || cinema.CinemaName || '-'}</td><td>{booking.createdAt || booking.CreatedAt ? new Date(booking.createdAt || booking.CreatedAt).toLocaleString('vi-VN') : '-'}</td><td>{Number(booking.finalAmount || booking.FinalAmount || 0).toLocaleString('vi-VN')} ₫</td><td><span className="badge badge-info">{booking.status || booking.Status || '-'}</span></td></tr>;
+                                    })}</tbody>
+                                </table></div>}
+                            </div>
+                            <div className="modal-footer"><button type="button" className="btn btn-light" onClick={() => setHistoryUser(null)}>Đóng</button></div>
+                        </div></div>
+                    </div>
+                    <div className="modal-backdrop fade show"></div>
+                </>
+            )}
         </div>
     );
 };

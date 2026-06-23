@@ -36,6 +36,11 @@ namespace Services.Theater
             };
         }
 
+        public async Task<List<HallDTO.HallResponse>> GetHallsByCinemaAsync(int cinemaId)
+        {
+            return await hallRepository.GetHallsByCinemaAsync(cinemaId);
+        }
+
         public async Task<HallDTO.HallResponse> GetHallByIdAsync(int hallId)
         {
             return await hallRepository.GetHallByIdAsync(hallId);
@@ -61,14 +66,29 @@ namespace Services.Theater
             return await hallRepository.UpdateSeatsAsync(hallId, seatRequest);
         }
 
-        public async Task CreateAsync(HallDTO.HallRequest hallRequest)
+        public async Task<HallDTO.SeatResponse> CreateSeatAsync(int hallId, HallDTO.SeatLayoutItemRequest seatRequest)
         {
-            await hallRepository.CreateAsync(hallRequest);
+            return await hallRepository.CreateSeatAsync(hallId, seatRequest);
         }
 
-        public async Task UpdateAsync(int hallId, HallDTO.HallRequest hallRequest)
+        public async Task<List<HallDTO.SeatResponse>> ReplaceSeatsAsync(int hallId, IReadOnlyList<HallDTO.SeatLayoutItemRequest> seatRequests)
         {
-            await hallRepository.UpdateAsync(hallId, hallRequest);
+            return await hallRepository.ReplaceSeatsAsync(hallId, seatRequests);
+        }
+
+        public async Task<HallDTO.HallResponse> CreateAsync(HallDTO.HallRequest hallRequest)
+        {
+            return await hallRepository.CreateAsync(hallRequest);
+        }
+
+        public async Task<HallDTO.HallResponse> UpdateAsync(int hallId, HallDTO.HallRequest hallRequest)
+        {
+            return await hallRepository.UpdateAsync(hallId, hallRequest);
+        }
+
+        public async Task<HallDTO.HallStatusResponse> UpdateStatusAsync(int hallId, string status)
+        {
+            return await hallRepository.UpdateStatusAsync(hallId, status);
         }
 
         public async Task DeleteAsync(int hallId)

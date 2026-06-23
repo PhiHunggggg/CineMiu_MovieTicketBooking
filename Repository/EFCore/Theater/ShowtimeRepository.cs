@@ -261,12 +261,213 @@ namespace Repository.EFCore.Theater
                 throw new ArgumentException("Showtime not found");
             }
 
-            if (await context.Bookings.AnyAsync(x => x.ShowtimeId == showtimeId))
+            if (await context.Bookings.AnyAsync(x => x.ShowtimeId == showtimeId && x.Status != "cancelled"))
             {
-                throw new ArgumentException("Cannot delete showtime because it already has bookings");
+                throw new ArgumentException("Cannot delete showtime because it has bookings");
             }
 
+            context.SeatLocks.RemoveRange(context.SeatLocks.Where(x => x.ShowtimeId == showtimeId));
             context.ShowTimes.Remove(showtime);
+            await context.SaveChangesAsync();
+        }
+
+        public async Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateUpcomingAsync(int days)
+        {
+            var movies = await context.Movies.AsNoTracking()
+                .Where(x => x.Status == "NowShowing" || x.Status == "now_showing" || x.Status == "nowshowing")
+                .OrderBy(x => x.MovieId).ToListAsync();
+            var halls = await context.Halls.AsNoTracking()
+                .Where(x => x.Status == "active").OrderBy(x => x.HallId).ToListAsync();
+            if (movies.Count == 0 || halls.Count == 0) return [];
+
+            var today = DateTime.Today;
+            var existing = await context.ShowTimes
+                .Where(x => x.StartTime >= today && x.StartTime < today.AddDays(days)).ToListAsync();
+            var candidates = new List<ShowTime>();
+            int[] slots = [9, 12, 15, 18, 21];
+
+            for (var dayIndex = 0; dayIndex < days; dayIndex++)
+            {
+                var date = today.AddDays(dayIndex);
+                for (var hallIndex = 0; hallIndex < halls.Count; hallIndex++)
+                {
+                    var hall = halls[hallIndex];
+                    for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
+                    {
+                        var start = date.AddHours(slots[slotIndex]);
+                        var movie = movies[(dayIndex * halls.Count * slots.Length + hallIndex * slots.Length + slotIndex) % movies.Count];
+                        var end = start.AddMinutes(movie.DurationMins);
+                        if (existing.Concat(candidates).Any(x => x.HallId == hall.HallId && x.Status != "cancelled" &&
+                                x.StartTime < end && start < x.EndTime)) continue;
+                        candidates.Add(new ShowTime
+                        {
+                            MovieId = movie.MovieId,
+                            HallId = hall.HallId,
+                            StartTime = start,
+                            EndTime = end,
+                            LanguageType = "subtitled",
+                            Status = "scheduled"
+                        });
+                    }
+                }
+            }
+
+            var createdIds = new HashSet<int>();
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    createdIds.Add(await CreateAsync(new ShowtimeDTO.ShowtimeRequest
+                    {
+                        MovieId = candidate.MovieId,
+                        HallId = candidate.HallId,
+                        StartTime = candidate.StartTime,
+                        EndTime = candidate.EndTime,
+                        LanguageType = candidate.LanguageType,
+                        Status = candidate.Status
+                    }));
+                }
+                catch (ArgumentException)
+                {
+                    // A concurrent generator may already have occupied this slot.
+                }
+            }
+
+            if (createdIds.Count == 0) return [];
+            var responses = await GetAllShowtimesAsync(null, null, null, null, null, null);
+            return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
+        }
+
+        public async Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(
+            int showtimeId,
+            ShowtimeDTO.ShowtimeResponse details,
+            int? userId,
+            string? sessionId)
+        {
+            var now = DateTime.UtcNow;
+            var showtime = await context.ShowTimes.AsNoTracking().FirstAsync(x => x.ShowtimeId == showtimeId);
+            var seats = await context.Seats.AsNoTracking()
+                .Where(x => x.HallId == details.HallId && x.IsActive)
+                .OrderBy(x => x.RowLabel).ThenBy(x => x.ColNumber).ToListAsync();
+            var seatIds = seats.Select(x => x.SeatId).ToList();
+            var usedSeatTypeIds = seats.Select(x => x.SeatTypeId).Distinct().ToList();
+            var seatTypes = await context.SeatTypes.AsNoTracking()
+                .Where(x => usedSeatTypeIds.Contains(x.SeatTypeId)).ToDictionaryAsync(x => x.SeatTypeId);
+            var standardSeatTypeId = await ResolveStandardSeatTypeIdAsync();
+            var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
+            var priceSeatTypeIds = seatTypes.Keys.Append(standardSeatTypeId).Distinct().ToList();
+            var priceRules = await context.TicketPrices.AsNoTracking().Where(x =>
+                x.CinemaId == details.Hall.CinemaId &&
+                x.HallTypeId == details.Hall.HallTypeId &&
+                priceSeatTypeIds.Contains(x.SeatTypeId)).ToListAsync();
+            var bookedSeatIds = await context.Tickets.AsNoTracking()
+                .Join(context.Bookings.AsNoTracking().Where(x => x.ShowtimeId == showtimeId && x.Status != "cancelled"),
+                    ticket => ticket.BookingId, booking => booking.BookingId, (ticket, booking) => ticket.SeatId)
+                .Where(x => seatIds.Contains(x)).ToHashSetAsync();
+            var locks = await context.SeatLocks.AsNoTracking()
+                .Where(x => x.ShowtimeId == showtimeId && x.ExpiresAt > now && seatIds.Contains(x.SeatId))
+                .ToDictionaryAsync(x => x.SeatId);
+
+            return seats.Select(seat =>
+            {
+                seatTypes.TryGetValue(seat.SeatTypeId, out var seatType);
+                locks.TryGetValue(seat.SeatId, out var seatLock);
+                var currentSession = seatLock != null && userId.HasValue && seatLock.UserId == userId && seatLock.SessionId == sessionId;
+                var price = TicketPriceCalculator.ResolvePrice(
+                    showtime, details.Hall.CinemaId, details.Hall.HallTypeId, seat.SeatTypeId,
+                    seatType?.PriceModifier ?? 0, standardSeatTypeId, dayTypes, priceRules);
+                var booked = bookedSeatIds.Contains(seat.SeatId);
+                var locked = seatLock != null && !currentSession;
+                return new ShowtimeDTO.SeatResponse
+                {
+                    SeatId = seat.SeatId,
+                    HallId = seat.HallId,
+                    SeatTypeId = seat.SeatTypeId,
+                    SeatTypeName = seatType?.TypeName,
+                    RowLabel = seat.RowLabel,
+                    ColNumber = seat.ColNumber,
+                    SeatCode = seat.SeatCode,
+                    Price = price,
+                    FinalPrice = price,
+                    Status = booked ? "booked" : locked ? "locked" : "available",
+                    IsBooked = booked,
+                    IsLocked = locked,
+                    IsLockedByCurrentSession = currentSession,
+                    LockExpiresAt = seatLock?.ExpiresAt
+                };
+            }).ToList();
+        }
+
+        public async Task<List<Entities.Bookings.SeatLock>> LockSeatsAsync(
+            int showtimeId, int userId, string sessionId, List<int> seatIds, int minutes)
+        {
+            var showtime = await context.ShowTimes.FirstOrDefaultAsync(x => x.ShowtimeId == showtimeId)
+                ?? throw new InvalidOperationException("Showtime not found");
+            if (showtime.Status is "cancelled" or "completed" || showtime.EndTime <= DateTime.Now)
+                throw new InvalidOperationException("Showtime is not available");
+            if (!await context.Halls.AsNoTracking().AnyAsync(x => x.HallId == showtime.HallId && x.Status == "active"))
+                throw new InvalidOperationException("The hall is currently unavailable");
+            if (!await context.Users.AnyAsync(x => x.UserId == userId && x.IsActive))
+                throw new InvalidOperationException("User not found");
+
+            var requested = seatIds.Distinct().ToList();
+            var validSeatCount = await context.Seats.CountAsync(x =>
+                requested.Contains(x.SeatId) && x.HallId == showtime.HallId && x.IsActive);
+            if (validSeatCount != requested.Count)
+                throw new InvalidOperationException("Some seats are invalid for this showtime");
+
+            var now = DateTime.UtcNow;
+            context.SeatLocks.RemoveRange(await context.SeatLocks.Where(x => x.ExpiresAt <= now).ToListAsync());
+            var booked = await context.Tickets
+                .Join(context.Bookings.Where(x => x.ShowtimeId == showtimeId && x.Status != "cancelled"),
+                    ticket => ticket.BookingId, booking => booking.BookingId, (ticket, booking) => ticket.SeatId)
+                .AnyAsync(x => requested.Contains(x));
+            if (booked) throw new InvalidOperationException("Some seats are already booked");
+
+            var conflict = await context.SeatLocks.AnyAsync(x =>
+                x.ShowtimeId == showtimeId && requested.Contains(x.SeatId) && x.ExpiresAt > now &&
+                (x.UserId != userId || x.SessionId != sessionId));
+            if (conflict) throw new InvalidOperationException("Some seats are being held by another customer");
+
+            var ownLocks = await context.SeatLocks
+                .Where(x => x.ShowtimeId == showtimeId && x.UserId == userId && x.SessionId == sessionId).ToListAsync();
+            context.SeatLocks.RemoveRange(ownLocks.Where(x => !requested.Contains(x.SeatId)));
+            var expiresAt = now.AddMinutes(Math.Clamp(minutes, 1, 15));
+            foreach (var seatId in requested)
+            {
+                var seatLock = ownLocks.FirstOrDefault(x => x.SeatId == seatId);
+                if (seatLock == null)
+                {
+                    context.SeatLocks.Add(new Entities.Bookings.SeatLock
+                    {
+                        ShowtimeId = showtimeId,
+                        SeatId = seatId,
+                        UserId = userId,
+                        SessionId = sessionId,
+                        LockedAt = now,
+                        ExpiresAt = expiresAt
+                    });
+                }
+                else
+                {
+                    seatLock.LockedAt = now;
+                    seatLock.ExpiresAt = expiresAt;
+                }
+            }
+
+            try { await context.SaveChangesAsync(); }
+            catch (DbUpdateException) { throw new InvalidOperationException("Some seats are no longer available"); }
+            return await context.SeatLocks.AsNoTracking().Where(x =>
+                x.ShowtimeId == showtimeId && x.UserId == userId && x.SessionId == sessionId && requested.Contains(x.SeatId))
+                .ToListAsync();
+        }
+
+        public async Task UnlockSeatsAsync(int showtimeId, int userId, string sessionId)
+        {
+            var locks = await context.SeatLocks
+                .Where(x => x.ShowtimeId == showtimeId && x.UserId == userId && x.SessionId == sessionId).ToListAsync();
+            if (locks.Count == 0) return;
+            context.SeatLocks.RemoveRange(locks);
             await context.SaveChangesAsync();
         }
 
