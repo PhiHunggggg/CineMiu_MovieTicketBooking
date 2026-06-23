@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { bookingAdminApi, cinemaApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -15,6 +15,7 @@ const getItems = (data) => data?.items || data?.data || data || [];
 const getBookingId = (booking) => booking?.bookingId ?? booking?.BookingId ?? booking?.id;
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString('vi-VN') : '-');
+const toDateInput = (value) => (value ? String(value).substring(0, 10) : '');
 
 const getStatusLabel = (status) => {
     const map = {

@@ -1,46 +1,59 @@
 const API_BASE = '/api';
 
+function buildQuery(params = {}) {
+  const query = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== '') {
+      query.set(key, String(value));
+    }
+  });
+
+  const value = query.toString();
+  return value ? `?${value}` : '';
+}
+
 function getToken() {
   try {
     const data = JSON.parse(localStorage.getItem('cineverse_auth') || '{}');
-    return data.token || null;
-  } catch { return null; }
+    return data.token || data.Token || localStorage.getItem('token') || null;
+  } catch {
+    return localStorage.getItem('token') || null;
+  }
 }
 
 async function request(endpoint, options = {}) {
   const url = `${API_BASE}${endpoint}`;
   const token = getToken();
+  const { headers, ...restOptions } = options;
   const config = {
+    ...restOptions,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
     },
-    ...options,
   };
-
-  console.log(`[API] ${options.method || 'GET'} ${url}`);
 
   let response;
   try {
     response = await fetch(url, config);
   } catch (networkErr) {
-    console.error('[API] Network error:', networkErr);
-    throw new Error('Không thể kết nối đến server. Vui lòng kiểm tra backend đang chạy.', { cause: networkErr });
+    throw new Error('Khong the ket noi den server. Vui long kiem tra backend dang chay.', { cause: networkErr });
   }
 
-  // Read response body as text first to avoid json parse failures
   const text = await response.text();
   let data;
   try {
     data = text ? JSON.parse(text) : null;
   } catch {
-    data = null;
+    data = text || null;
   }
 
   if (!response.ok) {
-    const errMsg = data?.message || data?.title || `HTTP ${response.status}: ${response.statusText}`;
-    console.error(`[API] Error ${response.status}:`, data || text);
-    throw new Error(errMsg);
+    const error = new Error(data?.message || data?.title || data || `HTTP ${response.status}: ${response.statusText}`);
+    error.status = response.status;
+    error.data = data;
+    throw error;
   }
 
   return data;
@@ -54,7 +67,6 @@ function getItems(response) {
   return [];
 }
 
-// ===== Auth =====
 export const authApi = {
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
@@ -62,27 +74,22 @@ export const authApi = {
   updateProfile: (data) => request('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
-// ===== Cinemas =====
 export const cinemaApi = {
-  getAll: (city) => request(`/cinemas${city ? `?city=${encodeURIComponent(city)}` : ''}`),
+  getAll: (params = {}) => {
+    if (typeof params === 'string') {
+      return request(`/cinemas${buildQuery({ city: params })}`);
+    }
+    return request(`/cinemas${buildQuery(params)}`);
+  },
   getById: (id) => request(`/cinemas/${id}`),
   getSeats: (hallId) => request(`/cinemas/halls/${hallId}/seats`),
 };
 
 export const movieApi = {
-  getAll: (params = {}) => {
-    const qs = new URLSearchParams();
-    if (params.keyword) qs.set('keyword', params.keyword);
-    if (params.status) qs.set('status', params.status);
-    if (params.cinemaId) qs.set('cinemaId', params.cinemaId);
-    if (params.page) qs.set('page', params.page);
-    if (params.pageSize) qs.set('pageSize', params.pageSize);
-    return request(`/movies?${qs.toString()}`);
-  },
+  getAll: (params = {}) => request(`/movies${buildQuery(params)}`),
   getById: (id) => request(`/movies/${id}`),
 };
 
-// ===== Showtimes =====
 export const showtimeApi = {
   getAll: (params = {}) => {
     const qs = new URLSearchParams();
@@ -95,6 +102,7 @@ export const showtimeApi = {
     qs.set('pageSize', params.pageSize || 100);
     return request(`/showtimes?${qs.toString()}`).then(getItems);
   },
+  getAll: (params = {}) => request(`/showtimes${buildQuery(params)}`),
   getById: (id) => request(`/showtimes/${id}`),
   getSeats: (id, params = {}) => {
     const qs = new URLSearchParams();
@@ -103,47 +111,46 @@ export const showtimeApi = {
     const query = qs.toString();
     return request(`/showtimes/${id}/seats${query ? `?${query}` : ''}`);
   },
+  getSeats: (id, params = {}) => request(`/showtimes/${id}/seats${buildQuery(params)}`),
   lockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/locks`, { method: 'POST', body: JSON.stringify(data) }),
   unlockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/unlocks`, { method: 'POST', body: JSON.stringify(data) }),
 };
 
-// ===== Bookings =====
 export const bookingApi = {
   create: (data) => request('/bookings', { method: 'POST', body: JSON.stringify(data) }),
   getById: (id) => request(`/bookings/${id}`),
   getByUser: (userId) => request(`/bookings/user/${userId}`),
-  getByEmail: (email) => request(`/bookings/user-by-email?email=${encodeURIComponent(email)}`),
+  getByEmail: (email) => request(`/bookings/user-by-email${buildQuery({ email })}`),
   addPayment: (id, data) => request(`/bookings/${id}/payments`, { method: 'POST', body: JSON.stringify(data) }),
   cancel: (id, reason) => request(`/bookings/${id}/cancel`, { method: 'POST', body: JSON.stringify({ reason }) }),
 };
 
-// ===== Products =====
 export const productApi = {
-  getAll: (categoryId) => request(`/products${categoryId ? `?categoryId=${categoryId}` : ''}`),
+  getAll: (categoryId) => request(`/products${buildQuery({ categoryId })}`),
 };
 
-// ===== Lookups =====
 export const lookupApi = {
   getAll: () => request('/lookups'),
 };
 
-// ===== Promotions =====
 export const promotionApi = {
-  getAll: () => request('/promotions'),
+  getAll: (params = {}) => request(`/promotions${buildQuery(params)}`),
+  getByCode: (code) => request(`/promotions/code/${encodeURIComponent(code)}`),
   getVoucher: (code) => request(`/promotions/vouchers/${encodeURIComponent(code)}`),
   validate: (data) => request('/promotions/validate', { method: 'POST', body: JSON.stringify(data) }),
 };
 
-// ===== Users =====
 export const userApi = {
   getById: (id) => request(`/cinema-users/${id}`),
   create: (data) => request('/cinema-users', { method: 'POST', body: JSON.stringify(data) }),
 };
-// Loyalty
+
 export const loyaltyApi = {
   getByUser: (userId) => request(`/loyalty/users/${userId}`),
-  getByEmail: (email) => request(`/loyalty/by-email?email=${encodeURIComponent(email)}`),
+  getByEmail: (email) => request(`/loyalty/by-email${buildQuery({ email })}`),
   getTransactions: (userId) => request(`/loyalty/users/${userId}/transactions`),
+  getTransactionsByEmail: (email) => request(`/loyalty/by-email/transactions${buildQuery({ email })}`),
+};
   getTransactionsByEmail: (email) => request(`/loyalty/transactions-by-email?email=${encodeURIComponent(email)}`),
 };
 

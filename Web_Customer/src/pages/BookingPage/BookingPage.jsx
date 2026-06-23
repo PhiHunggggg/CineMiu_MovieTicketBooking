@@ -85,7 +85,7 @@ function BookingContent() {
         })
         .catch(console.error);
     }
-    
+
  }, [searchParams, setBookingFlow, selectMovieFirst, selectCinema, selectCinemaForMovie]);
 
   // Require login before choosing a showtime and continuing the booking flow.

@@ -14,6 +14,18 @@ export function useAuth() {
   return ctx;
 }
 
+function storeAuth(auth) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+  localStorage.setItem('token', auth.token || '');
+  localStorage.setItem('user', JSON.stringify(auth.user));
+}
+
+function clearStoredAuth() {
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getStoredAuth()?.user || null);
   const [token, setToken] = useState(() => getStoredAuth()?.token || null);
@@ -45,15 +57,16 @@ export function AuthProvider({ children }) {
         setLoading(false);
         return;
     }
+
     authApi.getProfile()
       .then(profile => {
-        setUser(profile);
-        const stored = getStoredAuth();
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...stored, user: profile }));
+        const nextUser = normalizeUser(profile);
+        const nextAuth = { token, user: nextUser };
+        storeAuth(nextAuth);
+        setUser(nextUser);
       })
       .catch(() => {
-        // Token expired or invalid
-        localStorage.removeItem(STORAGE_KEY);
+        clearStoredAuth();
         setUser(null);
         setToken(null);
       })
@@ -75,32 +88,32 @@ export function AuthProvider({ children }) {
   }, [login]);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
+    clearStoredAuth();
     setToken(null);
     setUser(null);
   }, []);
 
   const loginSocial = useCallback((userData, tokenData = 'social_token') => {
-    const result = { user: userData, token: tokenData };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(result));
-    setToken(tokenData);
-    setUser(userData);
+    const auth = normalizeAuthResult({ user: userData, token: tokenData });
+    storeAuth(auth);
+    setToken(auth.token);
+    setUser(auth.user);
   }, []);
 
   const updateProfile = useCallback(async (data) => {
-    const profile = await authApi.updateProfile(data);
-    setUser(profile);
-    const stored = getStoredAuth();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...stored, user: profile }));
-    return profile;
-  }, []);
+    const nextUser = normalizeUser(await authApi.updateProfile(data));
+    const nextAuth = { token, user: nextUser };
+    storeAuth(nextAuth);
+    setUser(nextUser);
+    return nextUser;
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{
       user,
       token,
       loading,
-      isLoggedIn: !!user,
+      isLoggedIn: Boolean(user),
       login,
       loginSocial,
       register,

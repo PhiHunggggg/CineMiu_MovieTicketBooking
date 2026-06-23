@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Data.SqlClient;
 using Microsoft.OpenApi.Models;
 using Entities;
 using Repository;
@@ -11,6 +12,16 @@ using Services.Theater;
 using Services.Booking;
 using Services.Loyalty;
 using Repository.EFCore.Bookings;
+using Repository.EFCore.Administration;
+using Repository.EFCore.Concessions;
+using Repository.EFCore.Pricing;
+using Repository.EFCore.Reports;
+using Repository.EFCore.Authen;
+using Services.Authen;
+using Services.Administration;
+using Services.Concessions;
+using Services.Pricing;
+using Services.Reports;
 using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -25,6 +36,8 @@ builder.Services.AddDataProtection()
 builder.Services.AddScoped<IMovieService, MovieService>();
 builder.Services.AddScoped<ICategoriesService, CategoriesService>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
+builder.Services.AddScoped<ICinemaService, CinemaService>();
+builder.Services.AddScoped<IHallService, HallService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
@@ -32,6 +45,22 @@ builder.Services.AddScoped<IBookingService, BookkingService>();
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
 builder.Services.AddScoped<ICategoriesRepository, CategoriesRepository>();
 builder.Services.AddScoped<IShowtimeRepository, ShowtimeRepository>();
+builder.Services.AddScoped<ICinemaRepository, CinemaRepository>();
+builder.Services.AddScoped<IHallRepository, HallRepository>();
+builder.Services.AddScoped<IConcessionRepository, ConcessionRepository>();
+builder.Services.AddScoped<IConcessionService, ConcessionService>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
+builder.Services.AddScoped<IReviewService, ReviewService>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAdminSystemRepository, AdminSystemRepository>();
+builder.Services.AddScoped<IAdminSystemService, AdminSystemService>();
+builder.Services.AddScoped<ITicketPriceRepository, TicketPriceRepository>();
+builder.Services.AddScoped<ITicketPriceService, TicketPriceService>();
+builder.Services.AddScoped<IReportRepository, ReportRepository>();
+builder.Services.AddScoped<IReportService, ReportService>();
 var foodClientPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "BaseCore.Food"));
 
 // Add services to the container
@@ -64,9 +93,10 @@ builder.Services.AddCors(options =>
 
 
 
-var connectionString = builder.Configuration.GetConnectionString("ConnectedDb")
-    ?? "Server=(localdb)\\MSSQLLocalDB;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
 var useInMemoryDatabase = builder.Configuration.GetValue("UseInMemoryDatabase", true);
+var connectionString = useInMemoryDatabase
+    ? null
+    : BuildSqlServerConnectionString(builder.Configuration, "ConnectedDb");
 builder.Services.AddDbContext<SqlServerDbContext>(options =>
 {
     if (useInMemoryDatabase)
@@ -75,7 +105,7 @@ builder.Services.AddDbContext<SqlServerDbContext>(options =>
     }
     else
     {
-        options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure());
+        options.UseSqlServer(connectionString!, sql => sql.EnableRetryOnFailure());
     }
 });
 
@@ -133,8 +163,12 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
 
-Console.WriteLine("Cinema Booking API Service running on port 5001");
-Console.WriteLine("Endpoints: /api/movies, /api/cinemas, /api/showtimes, /api/bookings");
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    Console.WriteLine($"Cinema Booking API Service running at {string.Join(", ", app.Urls)}");
+    Console.WriteLine("Endpoints: /api/movies, /api/cinemas, /api/showtimes, /api/bookings");
+});
+
 app.Run();
 
 static async Task EnsureCinemaRolesAsync(IServiceProvider services)
@@ -225,4 +259,41 @@ static async Task EnsureShowtimesAsync(IServiceProvider services)
     {
         Console.WriteLine($"Skipping showtime auto-generation because database is not ready: {ex.Message}");
     }
+}
+
+static string BuildSqlServerConnectionString(IConfiguration configuration, string connectionStringName)
+{
+    if (!configuration.GetValue("SqlServerAuth:Enabled", false))
+    {
+        return configuration.GetConnectionString(connectionStringName)
+            ?? "Server=DESKTOP-FNMVI5L;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
+    }
+
+    var userId = Environment.GetEnvironmentVariable("CINEMIU_DB_USER")
+        ?? configuration["SqlServerAuth:UserId"];
+    var password = Environment.GetEnvironmentVariable("CINEMIU_DB_PASSWORD")
+        ?? configuration["SqlServerAuth:Password"];
+
+    if (string.IsNullOrWhiteSpace(userId))
+    {
+        throw new InvalidOperationException("SqlServerAuth:UserId or CINEMIU_DB_USER must be set when SQL Server authentication is enabled.");
+    }
+
+    if (string.IsNullOrWhiteSpace(password))
+    {
+        throw new InvalidOperationException("SqlServerAuth:Password or CINEMIU_DB_PASSWORD must be set when SQL Server authentication is enabled.");
+    }
+
+    var sqlConnection = new SqlConnectionStringBuilder
+    {
+        DataSource = configuration["SqlServerAuth:Server"] ?? "DESKTOP-FNMVI5L",
+        InitialCatalog = configuration["SqlServerAuth:Database"] ?? "BaseCoreBookingMovie",
+        UserID = userId,
+        Password = password,
+        IntegratedSecurity = false,
+        TrustServerCertificate = true
+    };
+    sqlConnection["Encrypt"] = false;
+
+    return sqlConnection.ConnectionString;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { cinemaApi, revenueApi } from '../../services/api';
 
 const currentDate = new Date();

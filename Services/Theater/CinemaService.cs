@@ -11,6 +11,11 @@ namespace Services.Theater
             return await cinemaRepository.GetChainsAsync();
         }
 
+        public async Task<List<CinemaDTO.CinemaResponse>> GetAllAsync(string? city, bool activeOnly = true)
+        {
+            return await cinemaRepository.GetAllCinemasAsync(null, city, activeOnly ? true : null);
+        }
+
         public async Task<Paging.PaginationResponse<CinemaDTO.CinemaResponse>> GetAllCinemasAsync(string? keyword, string? city, bool? isActive, int page = 1, int pageSize = 12)
         {
             page = Math.Max(page, 1);
@@ -36,14 +41,14 @@ namespace Services.Theater
             return await cinemaRepository.GetCinemaByIdAsync(cinemaId);
         }
 
-        public async Task CreateAsync(CinemaDTO.CinemaRequest cinemaRequest)
+        public async Task<CinemaDTO.CinemaResponse> CreateAsync(CinemaDTO.CinemaRequest cinemaRequest)
         {
-            await cinemaRepository.CreateAsync(cinemaRequest);
+            return await cinemaRepository.CreateAsync(cinemaRequest);
         }
 
-        public async Task UpdateAsync(int cinemaId, CinemaDTO.CinemaRequest cinemaRequest)
+        public async Task<CinemaDTO.CinemaResponse> UpdateAsync(int cinemaId, CinemaDTO.CinemaRequest cinemaRequest)
         {
-            await cinemaRepository.UpdateAsync(cinemaId, cinemaRequest);
+            return await cinemaRepository.UpdateAsync(cinemaId, cinemaRequest);
         }
 
         public async Task DeleteAsync(int cinemaId)

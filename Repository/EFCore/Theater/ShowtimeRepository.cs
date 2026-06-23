@@ -1,16 +1,14 @@
 using DTO.Theater;
 using Entities;
 using Microsoft.EntityFrameworkCore;
-using System.Globalization;
-using System.Text;
-using TicketPriceEntity = Entities.Tickets.TicketPrice;
+using Microsoft.EntityFrameworkCore.Storage;
+using Repository.Pricing;
+using System.Data;
 
 namespace Repository.EFCore.Theater
 {
     public class ShowtimeRepository(SqlServerDbContext context) : IShowtimeRepository
     {
-        private const decimal DefaultBasePrice = 75000;
-
         private static readonly HashSet<string> AllowedStatuses = new(StringComparer.OrdinalIgnoreCase)
         {
             "scheduled",
@@ -84,15 +82,44 @@ namespace Repository.EFCore.Theater
 
             if (!string.IsNullOrWhiteSpace(status))
             {
-                var trimmedStatus = status.Trim();
-                query = query.Where(x => x.showtime.Status == trimmedStatus);
+                var normalizedStatus = status.Trim().ToLower();
+                var now = DateTime.Now;
+
+                query = normalizedStatus switch
+                {
+                    "upcoming" => query.Where(x =>
+                        x.showtime.Status != "cancelled" &&
+                        x.showtime.Status != "completed" &&
+                        x.showtime.Status != "selling" &&
+                        x.showtime.StartTime > now),
+                    "showing" => query.Where(x =>
+                        x.showtime.Status != "cancelled" &&
+                        x.showtime.Status != "completed" &&
+                        x.showtime.EndTime > now &&
+                        (x.showtime.Status == "selling" || x.showtime.StartTime <= now)),
+                    "ended" => query.Where(x =>
+                        x.showtime.Status != "cancelled" &&
+                        (x.showtime.Status == "completed" || x.showtime.EndTime <= now)),
+                    "cancelled" => query.Where(x => x.showtime.Status == "cancelled"),
+                    _ => query.Where(x => x.showtime.Status == normalizedStatus)
+                };
             }
 
+            if (upcomingOnly)
+            {
+                var now = DateTime.Now;
+                query = query.Where(x =>
+                    x.showtime.EndTime > now &&
+                    x.showtime.Status != "cancelled" &&
+                    x.showtime.Status != "completed");
+            }
+
+            var totalCount = await query.CountAsync();
             var rows = await query
                 .OrderBy(x => x.showtime.StartTime)
                 .ToListAsync();
 
-            return await ToResponsesAsync(rows);
+            return (await ToResponsesAsync(rows), totalCount);
         }
 
         public async Task<ShowtimeDTO.ShowtimeResponse> GetShowtimeByIdAsync(int showtimeId)
@@ -116,68 +143,100 @@ namespace Repository.EFCore.Theater
             return (await ToResponsesAsync(rows)).First();
         }
 
-        public async Task CreateAsync(ShowtimeDTO.ShowtimeRequest showtimeRequest)
+        public async Task<int> CreateAsync(ShowtimeDTO.ShowtimeRequest showtimeRequest)
         {
-            var prepared = await PrepareShowtimeAsync(showtimeRequest, null);
-            if (prepared.Error != null)
+            return await ExecuteInSerializableTransactionAsync(async () =>
             {
-                throw new ArgumentException(prepared.Error);
-            }
+                await AcquireHallScheduleLockAsync(showtimeRequest.HallId);
 
-            var now = DateTime.UtcNow;
-            var showtime = new ShowTime
-            {
-                MovieId = showtimeRequest.MovieId,
-                HallId = showtimeRequest.HallId,
-                StartTime = showtimeRequest.StartTime,
-                EndTime = prepared.EndTime,
-                LanguageType = prepared.LanguageType,
-                IsSpecial = showtimeRequest.IsSpecial,
-                Status = prepared.Status,
-                CreatedAt = now,
-                UpdatedAt = now
-            };
+                var prepared = await PrepareShowtimeAsync(showtimeRequest, null);
+                if (prepared.Error != null)
+                {
+                    throw new ArgumentException(prepared.Error);
+                }
 
-            context.ShowTimes.Add(showtime);
-            await context.SaveChangesAsync();
+                var now = DateTime.UtcNow;
+                var showtime = new ShowTime
+                {
+                    MovieId = showtimeRequest.MovieId,
+                    HallId = showtimeRequest.HallId,
+                    StartTime = showtimeRequest.StartTime,
+                    EndTime = prepared.EndTime,
+                    LanguageType = prepared.LanguageType,
+                    IsSpecial = showtimeRequest.IsSpecial,
+                    Status = prepared.Status,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+
+                context.ShowTimes.Add(showtime);
+                await context.SaveChangesAsync();
+
+                return showtime.ShowtimeId;
+            });
         }
 
         public async Task UpdateAsync(int showtimeId, ShowtimeDTO.ShowtimeRequest showtimeRequest)
         {
-            var showtime = await context.ShowTimes.FirstOrDefaultAsync(x => x.ShowtimeId == showtimeId);
-            if (showtime == null)
+            await ExecuteInSerializableTransactionAsync(async () =>
             {
-                throw new ArgumentException("Showtime not found");
-            }
+                await AcquireHallScheduleLockAsync(showtimeRequest.HallId);
 
-            var prepared = await PrepareShowtimeAsync(showtimeRequest, showtimeId);
-            if (prepared.Error != null)
+                var showtime = await context.ShowTimes.FirstOrDefaultAsync(x => x.ShowtimeId == showtimeId);
+                if (showtime == null)
+                {
+                    throw new ArgumentException("Showtime not found");
+                }
+
+                var prepared = await PrepareShowtimeAsync(showtimeRequest, showtimeId);
+                if (prepared.Error != null)
+                {
+                    throw new ArgumentException(prepared.Error);
+                }
+
+                var hasBookings = await context.Bookings.AnyAsync(x => x.ShowtimeId == showtimeId);
+                var scheduleChanged =
+                    showtime.MovieId != showtimeRequest.MovieId ||
+                    showtime.HallId != showtimeRequest.HallId ||
+                    showtime.StartTime != showtimeRequest.StartTime ||
+                    showtime.EndTime != prepared.EndTime;
+
+                if (hasBookings && scheduleChanged)
+                {
+                    throw new ArgumentException("Cannot change movie, hall or time because this showtime already has bookings");
+                }
+
+                showtime.MovieId = showtimeRequest.MovieId;
+                showtime.HallId = showtimeRequest.HallId;
+                showtime.StartTime = showtimeRequest.StartTime;
+                showtime.EndTime = prepared.EndTime;
+                showtime.LanguageType = prepared.LanguageType;
+                showtime.IsSpecial = showtimeRequest.IsSpecial;
+                showtime.Status = prepared.Status;
+                showtime.UpdatedAt = DateTime.UtcNow;
+
+                await context.SaveChangesAsync();
+
+                return true;
+            });
+        }
+
+        private async Task<TResult> ExecuteInSerializableTransactionAsync<TResult>(Func<Task<TResult>> operation)
+        {
+            var strategy = context.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
             {
-                throw new ArgumentException(prepared.Error);
-            }
+                if (!context.Database.IsRelational())
+                {
+                    return await operation();
+                }
 
-            var hasBookings = await context.Bookings.AnyAsync(x => x.ShowtimeId == showtimeId);
-            var scheduleChanged =
-                showtime.MovieId != showtimeRequest.MovieId ||
-                showtime.HallId != showtimeRequest.HallId ||
-                showtime.StartTime != showtimeRequest.StartTime ||
-                showtime.EndTime != prepared.EndTime;
-
-            if (hasBookings && scheduleChanged)
-            {
-                throw new ArgumentException("Cannot change movie, hall or time because this showtime already has bookings");
-            }
-
-            showtime.MovieId = showtimeRequest.MovieId;
-            showtime.HallId = showtimeRequest.HallId;
-            showtime.StartTime = showtimeRequest.StartTime;
-            showtime.EndTime = prepared.EndTime;
-            showtime.LanguageType = prepared.LanguageType;
-            showtime.IsSpecial = showtimeRequest.IsSpecial;
-            showtime.Status = prepared.Status;
-            showtime.UpdatedAt = DateTime.UtcNow;
-
-            await context.SaveChangesAsync();
+                await using var transaction = await context.Database.BeginTransactionAsync(IsolationLevel.Serializable);
+                var result = await operation();
+                await transaction.CommitAsync();
+                return result;
+            });
         }
 
         public async Task DeleteAsync(int showtimeId)
@@ -188,12 +247,213 @@ namespace Repository.EFCore.Theater
                 throw new ArgumentException("Showtime not found");
             }
 
-            if (await context.Bookings.AnyAsync(x => x.ShowtimeId == showtimeId))
+            if (await context.Bookings.AnyAsync(x => x.ShowtimeId == showtimeId && x.Status != "cancelled"))
             {
-                throw new ArgumentException("Cannot delete showtime because it already has bookings");
+                throw new ArgumentException("Cannot delete showtime because it has bookings");
             }
 
+            context.SeatLocks.RemoveRange(context.SeatLocks.Where(x => x.ShowtimeId == showtimeId));
             context.ShowTimes.Remove(showtime);
+            await context.SaveChangesAsync();
+        }
+
+        public async Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateUpcomingAsync(int days)
+        {
+            var movies = await context.Movies.AsNoTracking()
+                .Where(x => x.Status == "NowShowing" || x.Status == "now_showing" || x.Status == "nowshowing")
+                .OrderBy(x => x.MovieId).ToListAsync();
+            var halls = await context.Halls.AsNoTracking()
+                .Where(x => x.Status == "active").OrderBy(x => x.HallId).ToListAsync();
+            if (movies.Count == 0 || halls.Count == 0) return [];
+
+            var today = DateTime.Today;
+            var existing = await context.ShowTimes
+                .Where(x => x.StartTime >= today && x.StartTime < today.AddDays(days)).ToListAsync();
+            var candidates = new List<ShowTime>();
+            int[] slots = [9, 12, 15, 18, 21];
+
+            for (var dayIndex = 0; dayIndex < days; dayIndex++)
+            {
+                var date = today.AddDays(dayIndex);
+                for (var hallIndex = 0; hallIndex < halls.Count; hallIndex++)
+                {
+                    var hall = halls[hallIndex];
+                    for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
+                    {
+                        var start = date.AddHours(slots[slotIndex]);
+                        var movie = movies[(dayIndex * halls.Count * slots.Length + hallIndex * slots.Length + slotIndex) % movies.Count];
+                        var end = start.AddMinutes(movie.DurationMins);
+                        if (existing.Concat(candidates).Any(x => x.HallId == hall.HallId && x.Status != "cancelled" &&
+                                x.StartTime < end && start < x.EndTime)) continue;
+                        candidates.Add(new ShowTime
+                        {
+                            MovieId = movie.MovieId,
+                            HallId = hall.HallId,
+                            StartTime = start,
+                            EndTime = end,
+                            LanguageType = "subtitled",
+                            Status = "scheduled"
+                        });
+                    }
+                }
+            }
+
+            var createdIds = new HashSet<int>();
+            foreach (var candidate in candidates)
+            {
+                try
+                {
+                    createdIds.Add(await CreateAsync(new ShowtimeDTO.ShowtimeRequest
+                    {
+                        MovieId = candidate.MovieId,
+                        HallId = candidate.HallId,
+                        StartTime = candidate.StartTime,
+                        EndTime = candidate.EndTime,
+                        LanguageType = candidate.LanguageType,
+                        Status = candidate.Status
+                    }));
+                }
+                catch (ArgumentException)
+                {
+                    // A concurrent generator may already have occupied this slot.
+                }
+            }
+
+            if (createdIds.Count == 0) return [];
+            var responses = await GetAllShowtimesAsync(null, null, null, null, null, null);
+            return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
+        }
+
+        public async Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(
+            int showtimeId,
+            ShowtimeDTO.ShowtimeResponse details,
+            int? userId,
+            string? sessionId)
+        {
+            var now = DateTime.UtcNow;
+            var showtime = await context.ShowTimes.AsNoTracking().FirstAsync(x => x.ShowtimeId == showtimeId);
+            var seats = await context.Seats.AsNoTracking()
+                .Where(x => x.HallId == details.HallId && x.IsActive)
+                .OrderBy(x => x.RowLabel).ThenBy(x => x.ColNumber).ToListAsync();
+            var seatIds = seats.Select(x => x.SeatId).ToList();
+            var usedSeatTypeIds = seats.Select(x => x.SeatTypeId).Distinct().ToList();
+            var seatTypes = await context.SeatTypes.AsNoTracking()
+                .Where(x => usedSeatTypeIds.Contains(x.SeatTypeId)).ToDictionaryAsync(x => x.SeatTypeId);
+            var standardSeatTypeId = await ResolveStandardSeatTypeIdAsync();
+            var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
+            var priceSeatTypeIds = seatTypes.Keys.Append(standardSeatTypeId).Distinct().ToList();
+            var priceRules = await context.TicketPrices.AsNoTracking().Where(x =>
+                x.CinemaId == details.Hall.CinemaId &&
+                x.HallTypeId == details.Hall.HallTypeId &&
+                priceSeatTypeIds.Contains(x.SeatTypeId)).ToListAsync();
+            var bookedSeatIds = await context.Tickets.AsNoTracking()
+                .Join(context.Bookings.AsNoTracking().Where(x => x.ShowtimeId == showtimeId && x.Status != "cancelled"),
+                    ticket => ticket.BookingId, booking => booking.BookingId, (ticket, booking) => ticket.SeatId)
+                .Where(x => seatIds.Contains(x)).ToHashSetAsync();
+            var locks = await context.SeatLocks.AsNoTracking()
+                .Where(x => x.ShowtimeId == showtimeId && x.ExpiresAt > now && seatIds.Contains(x.SeatId))
+                .ToDictionaryAsync(x => x.SeatId);
+
+            return seats.Select(seat =>
+            {
+                seatTypes.TryGetValue(seat.SeatTypeId, out var seatType);
+                locks.TryGetValue(seat.SeatId, out var seatLock);
+                var currentSession = seatLock != null && userId.HasValue && seatLock.UserId == userId && seatLock.SessionId == sessionId;
+                var price = TicketPriceCalculator.ResolvePrice(
+                    showtime, details.Hall.CinemaId, details.Hall.HallTypeId, seat.SeatTypeId,
+                    seatType?.PriceModifier ?? 0, standardSeatTypeId, dayTypes, priceRules);
+                var booked = bookedSeatIds.Contains(seat.SeatId);
+                var locked = seatLock != null && !currentSession;
+                return new ShowtimeDTO.SeatResponse
+                {
+                    SeatId = seat.SeatId,
+                    HallId = seat.HallId,
+                    SeatTypeId = seat.SeatTypeId,
+                    SeatTypeName = seatType?.TypeName,
+                    RowLabel = seat.RowLabel,
+                    ColNumber = seat.ColNumber,
+                    SeatCode = seat.SeatCode,
+                    Price = price,
+                    FinalPrice = price,
+                    Status = booked ? "booked" : locked ? "locked" : "available",
+                    IsBooked = booked,
+                    IsLocked = locked,
+                    IsLockedByCurrentSession = currentSession,
+                    LockExpiresAt = seatLock?.ExpiresAt
+                };
+            }).ToList();
+        }
+
+        public async Task<List<Entities.Bookings.SeatLock>> LockSeatsAsync(
+            int showtimeId, int userId, string sessionId, List<int> seatIds, int minutes)
+        {
+            var showtime = await context.ShowTimes.FirstOrDefaultAsync(x => x.ShowtimeId == showtimeId)
+                ?? throw new InvalidOperationException("Showtime not found");
+            if (showtime.Status is "cancelled" or "completed" || showtime.EndTime <= DateTime.Now)
+                throw new InvalidOperationException("Showtime is not available");
+            if (!await context.Halls.AsNoTracking().AnyAsync(x => x.HallId == showtime.HallId && x.Status == "active"))
+                throw new InvalidOperationException("The hall is currently unavailable");
+            if (!await context.Users.AnyAsync(x => x.UserId == userId && x.IsActive))
+                throw new InvalidOperationException("User not found");
+
+            var requested = seatIds.Distinct().ToList();
+            var validSeatCount = await context.Seats.CountAsync(x =>
+                requested.Contains(x.SeatId) && x.HallId == showtime.HallId && x.IsActive);
+            if (validSeatCount != requested.Count)
+                throw new InvalidOperationException("Some seats are invalid for this showtime");
+
+            var now = DateTime.UtcNow;
+            context.SeatLocks.RemoveRange(await context.SeatLocks.Where(x => x.ExpiresAt <= now).ToListAsync());
+            var booked = await context.Tickets
+                .Join(context.Bookings.Where(x => x.ShowtimeId == showtimeId && x.Status != "cancelled"),
+                    ticket => ticket.BookingId, booking => booking.BookingId, (ticket, booking) => ticket.SeatId)
+                .AnyAsync(x => requested.Contains(x));
+            if (booked) throw new InvalidOperationException("Some seats are already booked");
+
+            var conflict = await context.SeatLocks.AnyAsync(x =>
+                x.ShowtimeId == showtimeId && requested.Contains(x.SeatId) && x.ExpiresAt > now &&
+                (x.UserId != userId || x.SessionId != sessionId));
+            if (conflict) throw new InvalidOperationException("Some seats are being held by another customer");
+
+            var ownLocks = await context.SeatLocks
+                .Where(x => x.ShowtimeId == showtimeId && x.UserId == userId && x.SessionId == sessionId).ToListAsync();
+            context.SeatLocks.RemoveRange(ownLocks.Where(x => !requested.Contains(x.SeatId)));
+            var expiresAt = now.AddMinutes(Math.Clamp(minutes, 1, 15));
+            foreach (var seatId in requested)
+            {
+                var seatLock = ownLocks.FirstOrDefault(x => x.SeatId == seatId);
+                if (seatLock == null)
+                {
+                    context.SeatLocks.Add(new Entities.Bookings.SeatLock
+                    {
+                        ShowtimeId = showtimeId,
+                        SeatId = seatId,
+                        UserId = userId,
+                        SessionId = sessionId,
+                        LockedAt = now,
+                        ExpiresAt = expiresAt
+                    });
+                }
+                else
+                {
+                    seatLock.LockedAt = now;
+                    seatLock.ExpiresAt = expiresAt;
+                }
+            }
+
+            try { await context.SaveChangesAsync(); }
+            catch (DbUpdateException) { throw new InvalidOperationException("Some seats are no longer available"); }
+            return await context.SeatLocks.AsNoTracking().Where(x =>
+                x.ShowtimeId == showtimeId && x.UserId == userId && x.SessionId == sessionId && requested.Contains(x.SeatId))
+                .ToListAsync();
+        }
+
+        public async Task UnlockSeatsAsync(int showtimeId, int userId, string sessionId)
+        {
+            var locks = await context.SeatLocks
+                .Where(x => x.ShowtimeId == showtimeId && x.UserId == userId && x.SessionId == sessionId).ToListAsync();
+            if (locks.Count == 0) return;
+            context.SeatLocks.RemoveRange(locks);
             await context.SaveChangesAsync();
         }
 
@@ -250,11 +510,46 @@ namespace Repository.EFCore.Theater
 
                 if (hasOverlap)
                 {
-                    return (default, "", "", "Selected hall already has another showtime in this time range");
+                    return (default, "", "", "Phòng chiếu đã có suất khác trong khoảng thời gian này");
                 }
             }
 
             return (endTime, languageType, status, null);
+        }
+
+        private async Task AcquireHallScheduleLockAsync(int hallId)
+        {
+            if (!context.Database.IsSqlServer())
+            {
+                return;
+            }
+
+            var currentTransaction = context.Database.CurrentTransaction
+                ?? throw new InvalidOperationException("A schedule transaction is required");
+            var connection = context.Database.GetDbConnection();
+
+            await using var command = connection.CreateCommand();
+            command.Transaction = currentTransaction.GetDbTransaction();
+            command.CommandText = """
+                DECLARE @result int;
+                EXEC @result = sys.sp_getapplock
+                    @Resource = @resource,
+                    @LockMode = 'Exclusive',
+                    @LockOwner = 'Transaction',
+                    @LockTimeout = 10000;
+                SELECT @result;
+                """;
+
+            var resourceParameter = command.CreateParameter();
+            resourceParameter.ParameterName = "@resource";
+            resourceParameter.Value = $"showtime-hall:{hallId}";
+            command.Parameters.Add(resourceParameter);
+
+            var result = Convert.ToInt32(await command.ExecuteScalarAsync());
+            if (result < 0)
+            {
+                throw new ArgumentException("Phòng chiếu đang được cập nhật lịch. Vui lòng thử lại");
+            }
         }
 
         private async Task<List<ShowtimeDTO.ShowtimeResponse>> ToResponsesAsync<T>(List<T> rows)
@@ -288,22 +583,64 @@ namespace Repository.EFCore.Theater
 
             var cinemaIds = items.Select(x => x.Cinema.CinemaId).Distinct().ToList();
             var hallTypeIds = items.Select(x => x.Hall.HallTypeId).Distinct().ToList();
+            var hallIds = items.Select(x => x.Hall.HallId).Distinct().ToList();
             var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
             var standardSeatTypeId = await ResolveStandardSeatTypeIdAsync();
+            var activeHallSeats = await context.Seats
+                .AsNoTracking()
+                .Where(x => hallIds.Contains(x.HallId) && x.IsActive)
+                .Select(x => new { x.HallId, x.SeatTypeId })
+                .ToListAsync();
+            var seatTypeIds = activeHallSeats
+                .Select(x => x.SeatTypeId)
+                .Append(standardSeatTypeId)
+                .Distinct()
+                .ToList();
+            var seatTypes = await context.SeatTypes
+                .AsNoTracking()
+                .Where(x => seatTypeIds.Contains(x.SeatTypeId))
+                .ToDictionaryAsync(x => x.SeatTypeId);
+            var seatTypeIdsByHall = activeHallSeats
+                .GroupBy(x => x.HallId)
+                .ToDictionary(
+                    x => x.Key,
+                    x => x.Select(seat => seat.SeatTypeId).Distinct().ToList());
             var priceRules = await context.TicketPrices
                 .AsNoTracking()
                 .Where(x =>
                     cinemaIds.Contains(x.CinemaId) &&
                     hallTypeIds.Contains(x.HallTypeId) &&
-                    x.SeatTypeId == standardSeatTypeId)
+                    seatTypeIds.Contains(x.SeatTypeId))
                 .ToListAsync();
+
+            var now = DateTime.Now;
 
             return items.Select(item =>
             {
                 var bookedSeats = bookedSeatCounts.GetValueOrDefault(item.Showtime.ShowtimeId);
                 var totalSeats = item.Hall.TotalSeats;
                 var availableSeats = Math.Max(totalSeats - bookedSeats, 0);
-                var basePrice = ResolveBasePrice(item.Showtime, item.Cinema, item.Hall, dayTypes, priceRules);
+                var effectiveStatus = ResolveEffectiveStatus(item.Showtime, now);
+                var hallSeatTypeIds = seatTypeIdsByHall.TryGetValue(item.Hall.HallId, out var configuredSeatTypeIds) &&
+                    configuredSeatTypeIds.Count > 0
+                        ? configuredSeatTypeIds
+                        : [standardSeatTypeId];
+                var basePrice = hallSeatTypeIds
+                    .Select(seatTypeId =>
+                    {
+                        seatTypes.TryGetValue(seatTypeId, out var seatType);
+                        return TicketPriceCalculator.ResolvePrice(
+                            item.Showtime,
+                            item.Cinema.CinemaId,
+                            item.Hall.HallTypeId,
+                            seatTypeId,
+                            seatType?.PriceModifier ?? 0,
+                            standardSeatTypeId,
+                            dayTypes,
+                            priceRules);
+                    })
+                    .DefaultIfEmpty(TicketPriceCalculator.DefaultBasePrice)
+                    .Min();
                 var summary = new ShowtimeDTO.ShowtimeSummary
                 {
                     ShowtimeId = item.Showtime.ShowtimeId,
@@ -313,7 +650,7 @@ namespace Repository.EFCore.Theater
                     EndTime = item.Showtime.EndTime,
                     LanguageType = item.Showtime.LanguageType,
                     IsSpecial = item.Showtime.IsSpecial,
-                    Status = item.Showtime.Status,
+                    Status = effectiveStatus,
                     BasePrice = basePrice,
                     TotalSeats = totalSeats,
                     AvailableSeats = availableSeats
@@ -407,102 +744,54 @@ namespace Repository.EFCore.Theater
                 .FirstOrDefaultAsync();
         }
 
-        private static decimal ResolveBasePrice(ShowTime showtime, Cinema cinema, Hall hall, List<DayType> dayTypes, List<TicketPriceEntity> priceRules)
-        {
-            var dayTypeId = ResolveDayTypeId(showtime, dayTypes);
-            if (!dayTypeId.HasValue)
-            {
-                return DefaultBasePrice;
-            }
-
-            var timeSlot = ResolveTimeSlot(showtime.StartTime);
-            var applicablePrices = priceRules
-                .Where(x =>
-                    x.CinemaId == cinema.CinemaId &&
-                    x.HallTypeId == hall.HallTypeId &&
-                    x.DayTypeId == dayTypeId.Value &&
-                    x.EffectiveFrom <= showtime.StartTime &&
-                    (!x.EffectiveTo.HasValue || x.EffectiveTo.Value >= showtime.StartTime) &&
-                    (string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(x.TimeSlot, "all_day", StringComparison.OrdinalIgnoreCase)))
-                .OrderByDescending(x => string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase))
-                .ThenByDescending(x => x.EffectiveFrom)
-                .ThenBy(x => x.BasePrice)
-                .ToList();
-
-            return applicablePrices.FirstOrDefault()?.BasePrice ?? DefaultBasePrice;
-        }
-
-        private static byte? ResolveDayTypeId(ShowTime showtime, List<DayType> dayTypes)
-        {
-            if (dayTypes.Count == 0)
-            {
-                return null;
-            }
-
-            var candidateNames = showtime.IsSpecial
-                ? new[] { "holiday", "ngay le", "le", "special" }
-                : showtime.StartTime.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday
-                    ? new[] { "weekend", "cuoi tuan" }
-                    : new[] { "weekday", "ngay thuong" };
-
-            foreach (var candidateName in candidateNames)
-            {
-                var dayType = dayTypes.FirstOrDefault(x =>
-                    NormalizeLookup(x.TypeName).Contains(candidateName) ||
-                    (!string.IsNullOrWhiteSpace(x.Description) && NormalizeLookup(x.Description).Contains(candidateName)));
-
-                if (dayType != null)
-                {
-                    return dayType.DayTypeId;
-                }
-            }
-
-            return dayTypes.OrderBy(x => x.DayTypeId).First().DayTypeId;
-        }
-
-        private static string ResolveTimeSlot(DateTime startTime)
-        {
-            var hour = startTime.Hour;
-            if (hour < 12)
-            {
-                return "morning";
-            }
-
-            if (hour < 18)
-            {
-                return "afternoon";
-            }
-
-            return hour < 23 ? "evening" : "late_night";
-        }
-
-        private static string NormalizeLookup(string value)
-        {
-            var formD = value.ToLowerInvariant().Normalize(NormalizationForm.FormD);
-            var builder = new StringBuilder(formD.Length);
-
-            foreach (var character in formD)
-            {
-                if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
-                {
-                    builder.Append(character);
-                }
-            }
-
-            return builder.ToString().Normalize(NormalizationForm.FormC);
-        }
-
         private static string NormalizeStatus(string? status)
         {
             var trimmed = status?.Trim();
-            return string.IsNullOrWhiteSpace(trimmed) ? "scheduled" : trimmed;
+            if (string.IsNullOrWhiteSpace(trimmed))
+            {
+                return "scheduled";
+            }
+
+            return trimmed.ToLowerInvariant() switch
+            {
+                "upcoming" => "scheduled",
+                "showing" => "selling",
+                "ended" => "completed",
+                _ => trimmed.ToLowerInvariant()
+            };
         }
 
         private static string NormalizeLanguageType(string? languageType)
         {
             var trimmed = languageType?.Trim();
             return string.IsNullOrWhiteSpace(trimmed) ? "subtitled" : trimmed;
+        }
+
+        private static string ResolveEffectiveStatus(ShowTime showtime, DateTime now)
+        {
+            if (string.Equals(showtime.Status, "cancelled", StringComparison.OrdinalIgnoreCase))
+            {
+                return "cancelled";
+            }
+
+            if (string.Equals(showtime.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(showtime.Status, "ended", StringComparison.OrdinalIgnoreCase))
+            {
+                return "ended";
+            }
+
+            if (showtime.EndTime <= now)
+            {
+                return "ended";
+            }
+
+            if (string.Equals(showtime.Status, "selling", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(showtime.Status, "showing", StringComparison.OrdinalIgnoreCase))
+            {
+                return "showing";
+            }
+
+            return showtime.StartTime <= now ? "showing" : "upcoming";
         }
     }
 }

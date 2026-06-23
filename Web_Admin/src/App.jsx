@@ -4,7 +4,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
 // Sửa lại đường dẫn này - MainLayout đang ở components, không phải layouts
 import MainLayout from './components/MainLayout';  // <-- Sửa lại thành components
-import Login from './pages/Login';
+//import Login from './pages/Login';
 
 // Import từ pages/admin/
 import Dashboard from './pages/admin/Dashboard';
@@ -21,6 +21,7 @@ import TicketPrices from './pages/admin/TicketPrices';
 import Reviews from './pages/admin/Reviews';
 import AdminNotifications from './pages/admin/Notification';
 import System from './pages/admin/System';
+import Login from './pages/admin/Login';
 
 function App() {
   return (

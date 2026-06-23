@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Data.SqlClient;
 using Microsoft.OpenApi.Models;
 using Libs.Auth;
 using System.Text;
@@ -38,9 +39,10 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddSwaggerGen();
 
-var connectionString = builder.Configuration.GetConnectionString("SqlServerConnection")
-    ?? "Server=(localdb)\\MSSQLLocalDB;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
 var useInMemoryDatabase = builder.Configuration.GetValue("UseInMemoryDatabase", true);
+var connectionString = useInMemoryDatabase
+    ? null
+    : BuildSqlServerConnectionString(builder.Configuration, "SqlServerConnection");
 builder.Services.AddDbContext<SqlServerDbContext>(options =>
 {
     if (useInMemoryDatabase)
@@ -49,7 +51,7 @@ builder.Services.AddDbContext<SqlServerDbContext>(options =>
     }
     else
     {
-        options.UseSqlServer(connectionString, sql => sql.EnableRetryOnFailure());
+        options.UseSqlServer(connectionString!, sql => sql.EnableRetryOnFailure());
     }
 });
 
@@ -131,3 +133,40 @@ app.MapControllers();
 Console.WriteLine("BaseCore Auth Service running on port 5002");
 Console.WriteLine("Endpoints: /api/auth, /api/users, /api/roles");
 app.Run();
+
+static string BuildSqlServerConnectionString(IConfiguration configuration, string connectionStringName)
+{
+    if (!configuration.GetValue("SqlServerAuth:Enabled", false))
+    {
+        return configuration.GetConnectionString(connectionStringName)
+            ?? "Server=DESKTOP-FNMVI5L;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
+    }
+
+    var userId = Environment.GetEnvironmentVariable("CINEMIU_DB_USER")
+        ?? configuration["SqlServerAuth:UserId"];
+    var password = Environment.GetEnvironmentVariable("CINEMIU_DB_PASSWORD")
+        ?? configuration["SqlServerAuth:Password"];
+
+    if (string.IsNullOrWhiteSpace(userId))
+    {
+        throw new InvalidOperationException("SqlServerAuth:UserId or CINEMIU_DB_USER must be set when SQL Server authentication is enabled.");
+    }
+
+    if (string.IsNullOrWhiteSpace(password))
+    {
+        throw new InvalidOperationException("SqlServerAuth:Password or CINEMIU_DB_PASSWORD must be set when SQL Server authentication is enabled.");
+    }
+
+    var sqlConnection = new SqlConnectionStringBuilder
+    {
+        DataSource = configuration["SqlServerAuth:Server"] ?? "DESKTOP-FNMVI5L",
+        InitialCatalog = configuration["SqlServerAuth:Database"] ?? "BaseCoreBookingMovie",
+        UserID = userId,
+        Password = password,
+        IntegratedSecurity = false,
+        TrustServerCertificate = true
+    };
+    sqlConnection["Encrypt"] = false;
+
+    return sqlConnection.ConnectionString;
+}

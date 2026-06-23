@@ -1,4 +1,5 @@
 ﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore.Design;
 
 namespace Repository
@@ -16,6 +17,22 @@ namespace Repository
             optionsBuilder.UseSqlServer(connectionString);
 
             return new SqlServerDbContext(optionsBuilder.Options);
+        }
+
+        private static string BuildSqlAuthConnectionString(string password)
+        {
+            var sqlConnection = new SqlConnectionStringBuilder
+            {
+                DataSource = Environment.GetEnvironmentVariable("CINEMIU_DB_SERVER") ?? "DESKTOP-FNMVI5L",
+                InitialCatalog = Environment.GetEnvironmentVariable("CINEMIU_DB_NAME") ?? "BaseCoreBookingMovie",
+                UserID = Environment.GetEnvironmentVariable("CINEMIU_DB_USER") ?? "sa",
+                Password = password,
+                IntegratedSecurity = false,
+                TrustServerCertificate = true
+            };
+            sqlConnection["Encrypt"] = false;
+
+            return sqlConnection.ConnectionString;
         }
     }
 }

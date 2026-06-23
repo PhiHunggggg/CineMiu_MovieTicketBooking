@@ -7,12 +7,23 @@ const PAGE_SIZE = 8
 
 const statusOptions = [
   { value: '', label: 'Tất cả trạng thái' },
-  { value: 'scheduled', label: 'Đã lên lịch' },
-  { value: 'selling', label: 'Đang bán' },
-  { value: 'sold_out', label: 'Hết vé' },
+  { value: 'upcoming', label: 'Sắp chiếu' },
+  { value: 'showing', label: 'Đang chiếu' },
+  { value: 'ended', label: 'Đã kết thúc' },
   { value: 'cancelled', label: 'Đã hủy' },
-  { value: 'completed', label: 'Hoàn tất' },
 ]
+
+const formStatusOptions = [
+  { value: 'upcoming', label: 'Sắp chiếu' },
+  { value: 'showing', label: 'Đang chiếu' },
+  { value: 'ended', label: 'Đã kết thúc' },
+]
+
+const persistedStatusByDisplayStatus = {
+  upcoming: 'scheduled',
+  showing: 'selling',
+  ended: 'completed',
+}
 
 const languageOptions = [
   { value: 'subtitled', label: 'Phụ đề' },
@@ -27,7 +38,7 @@ const initialForm = {
   startTime: '',
   endTime: '',
   languageType: 'subtitled',
-  status: 'scheduled',
+  status: 'upcoming',
   isSpecial: false,
 }
 
@@ -45,6 +56,26 @@ function getShowtimeInfo(item) {
 
 function getItems(data) {
   return data?.items || data?.data || data || []
+}
+
+async function getAllTicketPriceItems() {
+  const firstResponse = await ticketPriceApi.getAll({ page: 1, pageSize: 50 })
+  const firstData = firstResponse.data ?? {}
+  const totalPages = Math.max(Number(firstData.totalPages) || 1, 1)
+
+  if (totalPages === 1) return getItems(firstData)
+
+  const remainingResponses = await Promise.all(
+    Array.from(
+      { length: totalPages - 1 },
+      (_, index) => ticketPriceApi.getAll({ page: index + 2, pageSize: 50 }),
+    ),
+  )
+
+  return [
+    ...getItems(firstData),
+    ...remainingResponses.flatMap((response) => getItems(response.data)),
+  ]
 }
 
 function toInteger(value) {
@@ -109,8 +140,119 @@ function formatDuration(startTime, endTime) {
   return `${Math.round((end.getTime() - start.getTime()) / 60000)} phút`
 }
 
+function formatCurrency(value) {
+  const numericValue = Number(value)
+  if (!Number.isFinite(numericValue)) return 'Chưa có giá'
+
+  return new Intl.NumberFormat('vi-VN', {
+    style: 'currency',
+    currency: 'VND',
+    maximumFractionDigits: 0,
+  }).format(numericValue)
+}
+
+function getPriceEntity(item) {
+  return item?.price || item?.Price || item || {}
+}
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function normalizeSlot(value) {
+  return normalizeText(value || 'all_day').replace(/\s+/g, '_')
+}
+
+function toDateOnly(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function resolveTimeSlot(value) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'all_day'
+
+  const hour = date.getHours()
+  if (hour < 12) return 'morning'
+  if (hour < 18) return 'afternoon'
+  return hour < 23 ? 'evening' : 'late_night'
+}
+
+function resolveDayType(value, isSpecial) {
+  if (isSpecial) return 'holiday'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return 'weekday'
+
+  return date.getDay() === 0 || date.getDay() === 6 ? 'weekend' : 'weekday'
+}
+
+function priceEffectiveOn(price, showDate) {
+  if (!showDate) return true
+
+  const effectiveFrom = toDateOnly(price?.effectiveFrom ?? price?.EffectiveFrom)
+  const effectiveToValue = price?.effectiveTo ?? price?.EffectiveTo
+  const effectiveTo = effectiveToValue ? toDateOnly(effectiveToValue) : null
+
+  return (!effectiveFrom || effectiveFrom <= showDate) && (!effectiveTo || effectiveTo >= showDate)
+}
+
+function priceMatchesDayType(item, dayType) {
+  const price = getPriceEntity(item)
+  const dayTypeId = Number(price?.dayTypeId ?? price?.DayTypeId)
+  const dayTypeText = normalizeText([
+    item?.dayType?.typeName,
+    item?.dayType?.TypeName,
+    item?.dayType?.description,
+    item?.dayType?.Description,
+  ].filter(Boolean).join(' '))
+
+  if (dayType === 'weekday') {
+    return dayTypeId === 1 || dayTypeText.includes('weekday') || dayTypeText.includes('ngay thuong')
+  }
+
+  if (dayType === 'weekend') {
+    return dayTypeId === 2 || dayTypeText.includes('weekend') || dayTypeText.includes('cuoi tuan')
+  }
+
+  return dayTypeId === 3 ||
+    dayTypeText.includes('holiday') ||
+    dayTypeText.includes('special') ||
+    dayTypeText.includes('ngay le') ||
+    dayTypeText.includes('ngay dac biet')
+}
+
+function priceMatchesTimeSlot(price, timeSlot) {
+  const priceSlot = normalizeSlot(price?.timeSlot ?? price?.TimeSlot)
+  return priceSlot === 'all_day' || priceSlot === timeSlot
+}
+
 function getStatusLabel(value) {
   return statusOptions.find((option) => option.value === value)?.label ?? 'Chưa rõ'
+}
+
+function resolveShowtimeStatus(showtime, nowValue) {
+  if (showtime?.status === 'cancelled') return 'cancelled'
+  if (showtime?.status === 'completed' || showtime?.status === 'ended') return 'ended'
+  if (showtime?.status === 'selling' || showtime?.status === 'showing') return 'showing'
+
+  const now = new Date(nowValue ?? 0)
+  const start = new Date(showtime?.startTime)
+  const end = new Date(showtime?.endTime)
+
+  if (!Number.isNaN(end.getTime()) && end <= now) return 'ended'
+  if (!Number.isNaN(start.getTime()) && start <= now && !Number.isNaN(end.getTime()) && end > now) {
+    return 'showing'
+  }
+  if (!Number.isNaN(start.getTime()) && start > now) return 'upcoming'
+
+  return 'upcoming'
 }
 
 function getLanguageLabel(value) {
@@ -129,7 +271,7 @@ function toForm(item) {
     startTime: toDateTimeLocal(showtime.startTime),
     endTime: toDateTimeLocal(showtime.endTime),
     languageType: showtime.languageType ?? 'subtitled',
-    status: showtime.status ?? 'scheduled',
+    status: resolveShowtimeStatus(showtime, Date.now()),
     isSpecial: Boolean(showtime.isSpecial),
   }
 }
@@ -142,7 +284,7 @@ function buildPayload(form) {
     endTime: toApiDateTime(form.endTime),
     languageType: form.languageType,
     isSpecial: Boolean(form.isSpecial),
-    status: form.status,
+    status: persistedStatusByDisplayStatus[form.status] ?? 'scheduled',
   }
 }
 
@@ -153,7 +295,7 @@ function validateForm(form, halls) {
   const hallId = toInteger(form.hallId)
   const start = form.startTime ? new Date(form.startTime) : null
   const end = form.endTime ? new Date(form.endTime) : null
-  const validStatuses = statusOptions.map((option) => option.value).filter(Boolean)
+  const validStatuses = formStatusOptions.map((option) => option.value)
   const validLanguages = languageOptions.map((option) => option.value)
   const selectedHall = halls.find((hall) => hall.hallId === hallId)
 
@@ -198,7 +340,10 @@ function validateForm(form, halls) {
 
 function Showtimes() {
   const [searchParams] = useSearchParams()
+  const initialDate = searchParams.get('date') || ''
+  const initialStatus = searchParams.get('status') || (searchParams.get('upcoming') === '1' ? 'upcoming' : '')
   const queryAppliedRef = useRef(false)
+  const autoScheduleGeneratedRef = useRef(false)
   const [showtimes, setShowtimes] = useState([])
   const [movies, setMovies] = useState([])
   const [cinemas, setCinemas] = useState([])
@@ -211,8 +356,14 @@ function Showtimes() {
     totalPages: 1,
   })
   const [page, setPage] = useState(1)
-  const [statusInput, setStatusInput] = useState('')
-  const [status, setStatus] = useState('')
+  const [cinemaInput, setCinemaInput] = useState(searchParams.get('cinemaId') || '')
+  const [hallInput, setHallInput] = useState(searchParams.get('hallId') || '')
+  const [dateInput, setDateInput] = useState(initialDate)
+  const [cinemaFilter, setCinemaFilter] = useState(searchParams.get('cinemaId') || '')
+  const [hallFilter, setHallFilter] = useState(searchParams.get('hallId') || '')
+  const [dateFilter, setDateFilter] = useState(initialDate)
+  const [statusInput, setStatusInput] = useState(initialStatus)
+  const [status, setStatus] = useState(initialStatus)
   const [isLoading, setIsLoading] = useState(false)
   const [isLookupsLoading, setIsLookupsLoading] = useState(false)
   const [error, setError] = useState('')
@@ -223,15 +374,16 @@ function Showtimes() {
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   const [deletingId, setDeletingId] = useState(null)
+  const [statusClock, setStatusClock] = useState(null)
 
   const fetchLookups = useCallback(async () => {
     setIsLookupsLoading(true)
 
     try {
-      const [movieResponse, cinemaResponse, priceResponse] = await Promise.all([
+      const [movieResponse, cinemaResponse, priceItems] = await Promise.all([
         movieApi.getAll({ page: 1, pageSize: 100 }),
         cinemaApi.getAll({ activeOnly: true }),
-        ticketPriceApi.getAll(),
+        getAllTicketPriceItems(),
       ])
 
       const movieItems = getItems(movieResponse.data)
@@ -256,7 +408,7 @@ function Showtimes() {
       setMovies(movieItems.filter((movie) => movie.status !== 'ended'))
       setCinemas(cinemaItems)
       setHalls(hallResponses.flat())
-      setTicketPrices(getItems(priceResponse.data))
+      setTicketPrices(priceItems)
     } catch (lookupError) {
       setMovies([])
       setCinemas([])
@@ -268,12 +420,32 @@ function Showtimes() {
     }
   }, [])
 
+  const ensureAutoSchedule = useCallback(async () => {
+    if (autoScheduleGeneratedRef.current) return
+
+    autoScheduleGeneratedRef.current = true
+
+    try {
+      const response = await showtimeApi.generate(5)
+      const createdCount = getItems(response.data).length
+      if (createdCount > 0) {
+        setNotice(`Đã tự động tạo ${createdCount} suất chiếu cho 5 ngày tới.`)
+      }
+    } catch (scheduleError) {
+      setError(getErrorMessage(scheduleError, 'Không tự động tạo được lịch chiếu 5 ngày tới.'))
+    }
+  }, [])
+
   const fetchShowtimes = useCallback(async () => {
     setIsLoading(true)
     setError('')
 
     try {
+      await ensureAutoSchedule()
       const response = await showtimeApi.getAll({
+        cinemaId: cinemaFilter || undefined,
+        hallId: hallFilter || undefined,
+        date: dateFilter || undefined,
         status: status || undefined,
         page,
         pageSize: PAGE_SIZE,
@@ -293,7 +465,7 @@ function Showtimes() {
     } finally {
       setIsLoading(false)
     }
-  }, [page, status])
+  }, [cinemaFilter, dateFilter, ensureAutoSchedule, hallFilter, page, status])
 
   useEffect(() => {
     fetchLookups()
@@ -302,6 +474,12 @@ function Showtimes() {
   useEffect(() => {
     fetchShowtimes()
   }, [fetchShowtimes])
+
+  useEffect(() => {
+    setStatusClock(Date.now())
+    const timer = window.setInterval(() => setStatusClock(Date.now()), 30000)
+    return () => window.clearInterval(timer)
+  }, [])
 
   const shownRange = useMemo(() => {
     if (pagination.totalCount === 0) return '0'
@@ -320,6 +498,11 @@ function Showtimes() {
     [form.cinemaId, halls],
   )
 
+  const filterHallOptions = useMemo(
+    () => halls.filter((hall) => !cinemaInput || String(hall.cinemaId) === cinemaInput),
+    [cinemaInput, halls],
+  )
+
   const selectedMovie = useMemo(
     () => movies.find((movie) => String(movie.movieId) === form.movieId),
     [form.movieId, movies],
@@ -333,12 +516,36 @@ function Showtimes() {
   const matchingPriceRules = useMemo(() => {
     if (!selectedHall || !form.cinemaId) return []
 
+    const showDate = toDateOnly(form.startTime || new Date())
+    const dayType = resolveDayType(form.startTime || new Date(), form.isSpecial)
+    const timeSlot = resolveTimeSlot(form.startTime || new Date())
+
     return ticketPrices.filter((item) => {
-      const price = item?.price || item
+      const price = getPriceEntity(item)
+
       return Number(price?.cinemaId) === Number(form.cinemaId)
         && Number(price?.hallTypeId) === Number(selectedHall.hallTypeId)
+        && priceEffectiveOn(price, showDate)
+        && priceMatchesDayType(item, dayType)
+        && priceMatchesTimeSlot(price, timeSlot)
     })
-  }, [form.cinemaId, selectedHall, ticketPrices])
+  }, [form.cinemaId, form.isSpecial, form.startTime, selectedHall, ticketPrices])
+
+  const matchingPriceRange = useMemo(() => {
+    const prices = matchingPriceRules
+      .map((item) => {
+        const price = getPriceEntity(item)
+        return Number(price?.basePrice ?? price?.BasePrice)
+      })
+      .filter(Number.isFinite)
+
+    if (prices.length === 0) return null
+
+    return {
+      min: Math.min(...prices),
+      max: Math.max(...prices),
+    }
+  }, [matchingPriceRules])
 
   const dependencyCounts = useMemo(() => ({
     movies: movies.length,
@@ -438,11 +645,20 @@ function Showtimes() {
 
   const handleSearch = (event) => {
     event.preventDefault()
+    setCinemaFilter(cinemaInput)
+    setHallFilter(hallInput)
+    setDateFilter(dateInput)
     setStatus(statusInput)
     setPage(1)
   }
 
   const resetFilters = () => {
+    setCinemaInput('')
+    setHallInput('')
+    setDateInput('')
+    setCinemaFilter('')
+    setHallFilter('')
+    setDateFilter('')
     setStatusInput('')
     setStatus('')
     setPage(1)
@@ -555,6 +771,40 @@ function Showtimes() {
 
         <form className="showtimes-filters" onSubmit={handleSearch}>
           <select
+            value={cinemaInput}
+            onChange={(event) => {
+              setCinemaInput(event.target.value)
+              setHallInput('')
+            }}
+            aria-label="Lọc chi nhánh"
+          >
+            <option value="">Tất cả chi nhánh</option>
+            {cinemas.map((cinema) => (
+              <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>
+                {cinema.cinemaName || cinema.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={hallInput}
+            onChange={(event) => {
+              const nextHallId = event.target.value
+              const nextHall = halls.find((hall) => String(hall.hallId) === nextHallId)
+              setHallInput(nextHallId)
+              if (nextHall) setCinemaInput(String(nextHall.cinemaId))
+            }}
+            aria-label="Lọc phòng chiếu"
+          >
+            <option value="">Tất cả phòng chiếu</option>
+            {filterHallOptions.map((hall) => (
+              <option key={hall.hallId} value={hall.hallId}>
+                {hall.hallName || hall.name} - {hall.cinemaName}
+              </option>
+            ))}
+          </select>
+
+          <select
             value={statusInput}
             onChange={(event) => setStatusInput(event.target.value)}
             aria-label="Lọc trạng thái suất chiếu"
@@ -565,6 +815,14 @@ function Showtimes() {
               </option>
             ))}
           </select>
+
+          <input
+            type="date"
+            value={dateInput}
+            onChange={(event) => setDateInput(event.target.value)}
+            aria-label="Tìm theo ngày chiếu"
+            title="Ngày chiếu"
+          />
 
           <button className="secondary-button" type="submit">
             <Icon name="search" />
@@ -592,6 +850,7 @@ function Showtimes() {
                 <th>Giờ kết thúc</th>
                 <th>Phim</th>
                 <th>Phòng chiếu</th>
+                <th>Giá vé từ</th>
                 <th>Trạng thái</th>
                 <th>Thao tác</th>
               </tr>
@@ -599,13 +858,14 @@ function Showtimes() {
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan="6" className="table-state">
+                  <td colSpan="7" className="table-state">
                     Đang tải danh sách suất chiếu...
                   </td>
                 </tr>
               ) : showtimes.length > 0 ? (
                 showtimes.map((item) => {
                   const showtime = getShowtimeInfo(item)
+                  const effectiveStatus = resolveShowtimeStatus(showtime, statusClock)
                   const movie = item.movie ?? {}
                   const hall = item.hall ?? {}
                   const cinema = item.cinema ?? {}
@@ -643,8 +903,14 @@ function Showtimes() {
                         </div>
                       </td>
                       <td>
-                        <span className={`status-badge status-${showtime.status || 'unknown'}`}>
-                          {getStatusLabel(showtime.status)}
+                        <div className="showtime-price-cell">
+                          <strong className="price-value">{formatCurrency(showtime.basePrice)}</strong>
+                          <span>Ghế thường</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`status-badge status-${effectiveStatus}`}>
+                          {getStatusLabel(effectiveStatus)}
                         </span>
                       </td>
                       <td>
@@ -675,7 +941,7 @@ function Showtimes() {
                 })
               ) : (
                 <tr>
-                  <td colSpan="6" className="table-state">
+                  <td colSpan="7" className="table-state">
                     Chưa có suất chiếu phù hợp.
                   </td>
                 </tr>
@@ -728,6 +994,8 @@ function Showtimes() {
             </div>
 
             <form className="movie-form showtime-form" onSubmit={handleSubmit}>
+              {error ? <div className="alert alert-error">{error}</div> : null}
+
               <div className="form-grid">
                 <label className="form-field required">
                   <span>Phim</span>
@@ -792,14 +1060,13 @@ function Showtimes() {
                 <label className="form-field required">
                   <span>Trạng thái</span>
                   <select name="status" value={form.status} onChange={handleFieldChange}>
-                    {statusOptions
-                      .filter((option) => option.value)
-                      .map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
+                    {formStatusOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
                   </select>
+                  <small className="form-hint">Trạng thái cũng được tự động cập nhật theo thời gian bắt đầu và kết thúc.</small>
                   {formErrors.status ? <em>{formErrors.status}</em> : null}
                 </label>
 
@@ -854,12 +1121,12 @@ function Showtimes() {
                     <div>
                       <strong>
                         {matchingPriceRules.length
-                          ? `${matchingPriceRules.length} mức giá phù hợp`
+                          ? `Giá vé từ ${formatCurrency(matchingPriceRange?.min)}`
                           : 'Chưa có bảng giá cho loại phòng này'}
                       </strong>
                       <small>
                         {matchingPriceRules.length
-                          ? 'Giá vé sẽ tự áp dụng theo ngày và khung giờ.'
+                          ? `${matchingPriceRules.length} mức giá phù hợp, tối đa ${formatCurrency(matchingPriceRange?.max)} theo loại ghế, ngày và khung giờ.`
                           : 'Nếu vẫn lưu, hệ thống dùng giá mặc định 75.000 đ.'}
                       </small>
                     </div>

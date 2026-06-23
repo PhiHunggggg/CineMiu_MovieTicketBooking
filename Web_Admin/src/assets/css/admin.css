@@ -688,3 +688,140 @@
         display: none;
     }
 }
+
+/* Hall seat type editor */
+.seat-layout-dialog {
+    max-width: min(1120px, calc(100vw - 32px));
+}
+
+.seat-layout-body {
+    max-height: 72vh;
+    overflow: auto;
+}
+
+.seat-type-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 24px;
+}
+
+.seat-type-option {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    min-width: 150px;
+    padding: 11px 14px;
+    border: 2px solid transparent;
+    border-radius: 10px;
+    color: #263247;
+    background: #eef2f7;
+    cursor: pointer;
+}
+
+.seat-type-option strong {
+    min-width: 26px;
+    margin-left: auto;
+    padding: 2px 7px;
+    border-radius: 999px;
+    color: #fff;
+    background: #526174;
+    text-align: center;
+}
+
+.seat-type-option.selected {
+    border-color: #118ab2;
+    box-shadow: 0 0 0 3px rgba(17, 138, 178, 0.15);
+}
+
+.seat-layout-editor {
+    min-width: max-content;
+    padding: 6px 16px 24px;
+}
+
+.cinema-screen {
+    width: min(620px, 75vw);
+    margin: 0 auto 34px;
+    padding: 8px;
+    border-top: 5px solid #73c6e8;
+    border-radius: 50% 50% 0 0;
+    color: #718096;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 4px;
+    text-align: center;
+}
+
+.seat-layout-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.seat-layout-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.seat-row-label {
+    width: 24px;
+    color: #64748b;
+    text-align: center;
+}
+
+.seat-layout-seats {
+    display: flex;
+    gap: 8px;
+}
+
+.seat-layout-seat {
+    min-width: 44px;
+    height: 38px;
+    padding: 0 7px;
+    border: 0;
+    border-radius: 9px 9px 5px 5px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.seat-layout-seat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(15, 23, 42, 0.2);
+}
+
+.seat-standard {
+    background: #64748b;
+}
+
+.seat-vip {
+    background: #e59b16;
+}
+
+.seat-couple {
+    background: #c2418c;
+}
+
+.seat-layout-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 260px;
+}
+
+.seat-action {
+    color: #c2418c;
+}
+
+@media (max-width: 768px) {
+    .seat-type-option {
+        flex: 1 1 140px;
+    }
+
+    .seat-layout-body {
+        padding-inline: 10px;
+    }
+}

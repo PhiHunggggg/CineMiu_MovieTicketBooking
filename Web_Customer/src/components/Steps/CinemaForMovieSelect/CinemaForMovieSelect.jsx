@@ -18,10 +18,13 @@ export default function CinemaForMovieSelect() {
 
   useEffect(() => {
     if (!movie) {
+      setCinemas([]);
       setLoading(false);
       return;
     }
 
+    let ignore = false;
+    const movieId = movie.movieId ?? movie.MovieId ?? movie.id ?? movie.Id;
     setLoading(true);
     const now = new Date();
     const sevenDaysLater = new Date(now);
@@ -42,15 +45,17 @@ export default function CinemaForMovieSelect() {
 
         // Filter showtimes within next 7 days
         const upcomingShowtimes = showtimes.filter(item => {
-          if (!item.showtime?.startTime) return false;
-          const st = new Date(item.showtime.startTime);
+          const startTime = item.showtime?.startTime ?? item.startTime;
+          if (!startTime) return false;
+          const st = new Date(startTime);
           return st >= now && st <= sevenDaysLater;
         });
 
         // Count showtimes per cinema
         const counts = {};
         upcomingShowtimes.forEach(item => {
-          const cId = item.cinema?.cinemaId || item.cinema?.id;
+          const cId = item.cinema?.cinemaId ?? item.cinema?.CinemaId
+            ?? item.hall?.cinemaId ?? item.hall?.CinemaId;
           if (cId) {
             counts[cId] = (counts[cId] || 0) + 1;
           }
@@ -59,11 +64,20 @@ export default function CinemaForMovieSelect() {
 
         // Filter cinemas that have showtimes
         const cinemaIdsWithShowtimes = new Set(Object.keys(counts).map(Number));
-        const filteredCinemas = allCinemas.filter(c => cinemaIdsWithShowtimes.has(c.cinemaId));
+        const filteredCinemas = cinemaItems.filter(c => {
+          const cinemaId = c.cinemaId ?? c.CinemaId ?? c.id ?? c.Id;
+          return cinemaIdsWithShowtimes.has(Number(cinemaId));
+        });
         setCinemas(filteredCinemas);
       })
       .catch(console.error)
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [movie]);
 
   const cities = [...new Set(cinemas.map(c => c.city))].sort();

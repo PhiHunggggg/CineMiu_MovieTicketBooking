@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { movieApi, lookupApi } from '../../services/api';
 import MovieCard from '../../components/MovieCard/MovieCard';
@@ -6,7 +6,6 @@ import './MoviesPage.css';
 
 export default function MoviesPage() {
   const [movies, setMovies] = useState([]);
-  const [genres, setGenres] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('now_showing');
   const [search, setSearch] = useState('');

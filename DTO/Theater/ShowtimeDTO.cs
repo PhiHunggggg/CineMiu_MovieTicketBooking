@@ -46,5 +46,37 @@ namespace DTO.Theater
             public bool IsSpecial { get; set; }
             public string? Status { get; set; }
         }
+
+        public class SeatLockRequest
+        {
+            public int UserId { get; set; }
+            public string? SessionId { get; set; }
+            public int Minutes { get; set; } = 10;
+            public List<int> SeatIds { get; set; } = [];
+        }
+
+        public class SeatUnlockRequest
+        {
+            public int UserId { get; set; }
+            public string? SessionId { get; set; }
+        }
+
+        public class SeatResponse
+        {
+            public int SeatId { get; set; }
+            public int HallId { get; set; }
+            public byte SeatTypeId { get; set; }
+            public string? SeatTypeName { get; set; }
+            public string RowLabel { get; set; } = "";
+            public int ColNumber { get; set; }
+            public string SeatCode { get; set; } = "";
+            public decimal Price { get; set; }
+            public decimal FinalPrice { get; set; }
+            public string Status { get; set; } = "available";
+            public bool IsBooked { get; set; }
+            public bool IsLocked { get; set; }
+            public bool IsLockedByCurrentSession { get; set; }
+            public DateTime? LockExpiresAt { get; set; }
+        }
     }
 }

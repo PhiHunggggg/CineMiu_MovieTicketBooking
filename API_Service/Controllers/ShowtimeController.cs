@@ -1,284 +1,73 @@
-using Entities;
-using Repository;
-using Services;
-using Services.Booking;
-using Services.Theater;
+using DTO.Theater;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Services.Theater;
 
-  namespace API_Service.Controllers
+namespace API_Service.Controllers;
+
+[Route("api/showtimes")]
+[ApiController]
+public class ShowtimesController(IShowtimeService service) : ApiControllerBase
 {
-    [Route("api/showtimes")]
-    [ApiController]
-    public class ShowtimesController : ControllerBase
+    [HttpGet]
+    public async Task<IActionResult> GetAll(
+        [FromQuery] string? keyword,
+        [FromQuery] int? movieId,
+        [FromQuery] int? cinemaId,
+        [FromQuery] int? hallId,
+        [FromQuery] DateTime? date,
+        [FromQuery] string? status,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = 12,
+        [FromQuery] bool upcomingOnly = false) =>
+        Ok(await service.GetAllShowtimesAsync(
+            keyword, movieId, cinemaId, hallId, date, status, page, pageSize, upcomingOnly));
+
+    [HttpPost("generate")]
+    public async Task<IActionResult> Generate([FromQuery] int days = 5) =>
+        Ok(await service.GenerateUpcomingAsync(days));
+
+    [HttpGet("{id:int}")]
+    public Task<IActionResult> GetById(int id) => ExecuteAsync(async () =>
     {
-        private readonly IShowtimeService _showtimeService;
-        private readonly SqlServerDbContext _context;
+        var result = await service.GetShowtimeDetailsAsync(id);
+        return result == null ? NotFound(new { message = "Showtime not found" }) : Ok(result);
+    });
 
-        public ShowtimesController(IShowtimeService showtimeService, SqlServerDbContext context)
+    [HttpGet("{id:int}/seats")]
+    public Task<IActionResult> GetSeats(int id, [FromQuery] int? userId, [FromQuery] string? sessionId) =>
+        ExecuteAsync(async () => Ok(await service.GetSeatsAsync(id, userId, sessionId)));
+
+    [HttpPost]
+    public Task<IActionResult> Create([FromBody] ShowtimeDTO.ShowtimeRequest request) => ExecuteAsync(async () =>
+    {
+        await service.CreateAsync(request);
+        return NoContent();
+    });
+
+    [HttpPut("{id:int}")]
+    public Task<IActionResult> Update(int id, [FromBody] ShowtimeDTO.ShowtimeRequest request) => ExecuteAsync(async () =>
+    {
+        await service.UpdateAsync(id, request);
+        return Ok(await service.GetShowtimeByIdAsync(id));
+    });
+
+    [HttpDelete("{id:int}")]
+    public Task<IActionResult> Delete(int id) => ExecuteAsync(async () =>
+    {
+        await service.DeleteAsync(id);
+        return NoContent();
+    });
+
+    [HttpPost("{id:int}/locks")]
+    public Task<IActionResult> LockSeats(int id, [FromBody] ShowtimeDTO.SeatLockRequest request) =>
+        ExecuteAsync(async () => Ok(await service.LockSeatsAsync(
+            id, request.UserId, request.SessionId ?? "", request.SeatIds, request.Minutes)));
+
+    [HttpPost("{id:int}/unlocks")]
+    public Task<IActionResult> UnlockSeats(int id, [FromBody] ShowtimeDTO.SeatUnlockRequest request) =>
+        ExecuteAsync(async () =>
         {
-            _showtimeService = showtimeService;
-            _context = context;
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> GetAll(
-            [FromQuery] string? keyword,
-            [FromQuery] int? movieId, 
-            [FromQuery] int? cinemaId, 
-            [FromQuery] int? hallId,
-            [FromQuery] DateTime? date,
-            [FromQuery] DateTime? dateFrom,
-            [FromQuery] DateTime? dateTo,
-            [FromQuery] string? status,
-            [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 12,
-            [FromQuery] int? seatTypeId = null,
-            [FromQuery] int? dayTypeId = null,
-            [FromQuery] int? hallTypeId = null)
-        {
-            var response = await _showtimeService.GetAllShowtimesAsync(
-                keyword,
-                movieId,
-                cinemaId,
-                hallId,
-                date,
-                dateFrom,
-                dateTo,
-                status,
-                page,
-                pageSize);
-            return Ok(response);
-        }
-
-        [HttpPost("generate")]
-        public async Task<IActionResult> Generate([FromQuery] int days = 5)
-        {
-            var result = await _showtimeService.GenerateUpcomingAsync(days);
-            return Ok(result);
-        }
-
-        [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetById(int id)
-        {
-            var result = await _showtimeService.GetShowtimeDetailsAsync(id);
-            if (result == null) return NotFound(new { message = "Showtime not found" });
-            return Ok(result);
-        }
-
-        [HttpGet("{id:int}/seats")]
-        public async Task<IActionResult> GetSeats(
-            int id,
-            [FromQuery] int? userId,
-            [FromQuery] string? sessionId)
-        {
-            var details = await _showtimeService.GetShowtimeDetailsAsync(id);
-            if (details == null)
-            {
-                return NotFound(new { message = "Showtime not found" });
-            }
-
-            var now = DateTime.UtcNow;
-            var seats = await _context.CinemaSeats.AsNoTracking()
-                .Where(x => x.HallId == details.HallId && x.IsActive)
-                .OrderBy(x => x.RowLabel)
-                .ThenBy(x => x.ColNumber)
-                .ToListAsync();
-            var seatIds = seats.Select(x => x.SeatId).ToList();
-            var seatTypes = await _context.CinemaSeatTypes.AsNoTracking()
-                .Where(x => seats.Select(seat => seat.SeatTypeId).Contains(x.SeatTypeId))
-                .ToDictionaryAsync(x => x.SeatTypeId);
-            var bookedSeatIds = await _context.CinemaTickets.AsNoTracking()
-                .Join(
-                    _context.CinemaBookings.AsNoTracking()
-                        .Where(x => x.ShowtimeId == id && x.Status != "cancelled"),
-                    ticket => ticket.BookingId,
-                    booking => booking.BookingId,
-                    (ticket, booking) => ticket.SeatId)
-                .Where(x => seatIds.Contains(x))
-                .ToHashSetAsync();
-            var locks = await _context.CinemaSeatLocks.AsNoTracking()
-                .Where(x => x.ShowtimeId == id && x.ExpiresAt > now && seatIds.Contains(x.SeatId))
-                .ToListAsync();
-            var lockBySeat = locks.ToDictionary(x => x.SeatId);
-
-            return Ok(seats.Select(seat =>
-            {
-                seatTypes.TryGetValue(seat.SeatTypeId, out var seatType);
-                lockBySeat.TryGetValue(seat.SeatId, out var seatLock);
-                var isCurrentSession = seatLock != null &&
-                    userId.HasValue &&
-                    seatLock.UserId == userId.Value &&
-                    seatLock.SessionId == sessionId;
-
-                return new
-                {
-                    seatId = seat.SeatId,
-                    seat.HallId,
-                    seat.SeatTypeId,
-                    seatTypeName = seatType?.TypeName,
-                    seat.RowLabel,
-                    seat.ColNumber,
-                    seat.SeatCode,
-                    price = Math.Max(0, details.BasePrice + (seatType?.PriceModifier ?? 0)),
-                    isBooked = bookedSeatIds.Contains(seat.SeatId),
-                    isLocked = seatLock != null && !isCurrentSession,
-                    isLockedByCurrentSession = isCurrentSession,
-                    lockExpiresAt = seatLock?.ExpiresAt
-                };
-            }));
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> Create([FromBody] ShowtimeDto dto)
-        {
-            if (!await _context.CinemaMovies.AnyAsync(x => x.MovieId == dto.MovieId))
-            {
-                return BadRequest(new { message = "Movie not found" });
-            }
-
-            if (!await _context.CinemaHalls.AnyAsync(x => x.HallId == dto.HallId))
-            {
-                return BadRequest(new { message = "Hall not found" });
-            }
-
-            var request = new DTO.Theater.ShowtimeDTO.ShowtimeRequest
-            {
-                MovieId = dto.MovieId,
-                HallId = dto.HallId,
-                StartTime = dto.StartTime,
-                EndTime = dto.EndTime,
-                LanguageType = dto.LanguageType ?? "subtitled",
-                IsSpecial = dto.IsSpecial,
-                Status = dto.Status ?? "scheduled"
-            };
-
-            try
-            {
-                await _showtimeService.CreateAsync(request);
-                return NoContent();
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] ShowtimeDto dto)
-        {
-            var showtime = await _context.CinemaShowtimes.FindAsync(id);
-            if (showtime == null)
-            {
-                return NotFound(new { message = "Showtime not found" });
-            }
-
-            if (!await _context.CinemaMovies.AnyAsync(x => x.MovieId == dto.MovieId))
-            {
-                return BadRequest(new { message = "Movie not found" });
-            }
-
-            if (!await _context.CinemaHalls.AnyAsync(x => x.HallId == dto.HallId))
-            {
-                return BadRequest(new { message = "Hall not found" });
-            }
-
-            var request = new DTO.Theater.ShowtimeDTO.ShowtimeRequest
-            {
-                MovieId = dto.MovieId,
-                HallId = dto.HallId,
-                StartTime = dto.StartTime,
-                EndTime = dto.EndTime,
-                LanguageType = dto.LanguageType,
-                IsSpecial = dto.IsSpecial,
-                Status = dto.Status
-            };
-
-            try
-            {
-                await _showtimeService.UpdateAsync(id, request);
-                return Ok(await _showtimeService.GetShowtimeByIdAsync(id));
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
-
-        [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
-        {
-            var showtime = await _context.CinemaShowtimes.FindAsync(id);
-            if (showtime == null)
-            {
-                return NotFound(new { message = "Showtime not found" });
-            }
-
-            if (await _context.CinemaBookings.AnyAsync(x => x.ShowtimeId == id && x.Status != "cancelled"))
-            {
-                return BadRequest(new { message = "Cannot delete showtime because it has bookings" });
-            }
-
-            _context.CinemaSeatLocks.RemoveRange(_context.CinemaSeatLocks.Where(x => x.ShowtimeId == id));
-            _context.CinemaShowtimes.Remove(showtime);
-            await _context.SaveChangesAsync();
-            return NoContent();
-        }
-
-        [HttpPost("{id:int}/locks")]
-        public async Task<IActionResult> LockSeats(int id, [FromBody] SeatLockDto dto)
-        {
-            if (dto.UserId <= 0 || string.IsNullOrWhiteSpace(dto.SessionId))
-            {
-                return BadRequest(new { message = "UserId and SessionId are required" });
-            }
-
-            try
-            {
-                var locks = await _showtimeService.LockSeatsAsync(id, dto.UserId, dto.SessionId, dto.SeatIds, dto.Minutes);
-                return Ok(locks);
-            }
-            catch (InvalidOperationException ex)
-            {
-                return Conflict(new { message = ex.Message });
-            }
-        }
-
-        [HttpPost("{id:int}/unlocks")]
-        public async Task<IActionResult> UnlockSeats(int id, [FromBody] SeatUnlockDto dto)
-        {
-            if (dto.UserId <= 0 || string.IsNullOrWhiteSpace(dto.SessionId))
-            {
-                return BadRequest(new { message = "UserId and SessionId are required" });
-            }
-
-            await _showtimeService.UnlockSeatsAsync(id, dto.UserId, dto.SessionId);
+            await service.UnlockSeatsAsync(id, request.UserId, request.SessionId ?? "");
             return Ok(new { message = "Seats unlocked" });
-        }
-    }
-
-    public class SeatUnlockDto
-    {
-        public int UserId { get; set; }
-        public string? SessionId { get; set; }
-    }
-
-    public class ShowtimeDto
-    {
-        public int MovieId { get; set; }
-        public int HallId { get; set; }
-        public DateTime StartTime { get; set; }
-        public DateTime? EndTime { get; set; }
-        public string? LanguageType { get; set; }
-        public bool IsSpecial { get; set; }
-        public string? Status { get; set; }
-    }
-
-    public class SeatLockDto
-    {
-        public int UserId { get; set; }
-        public string? SessionId { get; set; }
-        public int Minutes { get; set; } = 10;
-        public List<int> SeatIds { get; set; } = new();
-    }
+        });
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { promotionApi } from '../../services/api';
 
 const discountTypes = [

@@ -1,4 +1,5 @@
 ﻿using DTO.Authen;
+using DTO.Authen;
 using Entities;
 using Libs.Auth;
 using Microsoft.AspNetCore.Authorization;
@@ -31,6 +32,7 @@ namespace AuthServices.Controllers
                 _secretKey = _configuration["Jwt:SecretKey"] ?? "default_secret_key_12345";
             }
         [HttpPost("login")]
+        public async Task<IActionResult> Login([FromBody] LoginDto.LoginRequest request)
         public async Task<IActionResult> Login([FromBody] LoginDto.LoginRequest request)
         {
             if (request == null)
@@ -75,7 +77,9 @@ namespace AuthServices.Controllers
                 return BadRequest(new { message = "Invalid request" });
             }
 
-            if (string.IsNullOrWhiteSpace(request.FullName) || string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            if (string.IsNullOrWhiteSpace(request.FullName) ||
+                string.IsNullOrWhiteSpace(request.Email) ||
+                string.IsNullOrWhiteSpace(request.Password))
             {
                 return BadRequest(new { message = "Full name, email and password are required" });
             }
@@ -117,6 +121,7 @@ namespace AuthServices.Controllers
 
         [Authorize]
         [HttpGet("profile")]
+        [HttpGet("me")]
         public async Task<IActionResult> Profile()
         {
             try{
@@ -137,8 +142,8 @@ namespace AuthServices.Controllers
         [HttpPut("profile")]
         public async Task<IActionResult> UpdateProfile([FromBody] UserRequest request)
         {
-            var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(claimValue, out var userId))
+            var user = await GetAuthenticatedUser(trackChanges: true);
+            if (user == null)
             {
                 return Unauthorized(new { message = "User ID not found in token" });
             }

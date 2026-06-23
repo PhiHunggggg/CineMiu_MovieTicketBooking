@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { productApi, categoryApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -130,7 +130,7 @@ const Products = () => {
         try {
             await productApi.delete(id);
             loadProducts();
-        } catch {
+        } catch (error) {
             alert('Failed to delete product');
         }
     };

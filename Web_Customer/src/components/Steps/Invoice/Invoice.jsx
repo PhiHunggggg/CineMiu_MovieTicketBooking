@@ -6,7 +6,7 @@ import { getUserId } from '../../../utils/authUser';
 import './Invoice.css';
 import { generateQrCodeUrl, BANK_ID, ACCOUNT_NO, ACCOUNT_NAME } from '../../../staticThing';
 
-const PAYMENT_TIMEOUT_SECONDS = 5 * 60; // 5 phút
+const PAYMENT_TIMEOUT_SECONDS = 5 * 60; // 5 ph�t
 
 function getBookingId(order) {
   return order?.bookingId ?? order?.BookingId ?? null;
@@ -14,6 +14,11 @@ function getBookingId(order) {
 
 function getStartTime(showtime) {
   return showtime?.startTime ?? showtime?.StartTime ?? null;
+}
+
+function getSeatPrice(seat) {
+  const price = Number(seat?.finalPrice ?? seat?.FinalPrice ?? seat?.price ?? seat?.Price);
+  return Number.isFinite(price) ? price : 0;
 }
 
 function getTicketQrUrl(code) {
@@ -34,15 +39,15 @@ export default function Invoice() {
   const [success, setSuccess] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [cancelled, setCancelled] = useState(false);
-  const [paymentTimeLeft, setPaymentTimeLeft] = useState(PAYMENT_TIMEOUT_SECONDS); // 5 phút thanh toán
+  const [paymentTimeLeft, setPaymentTimeLeft] = useState(PAYMENT_TIMEOUT_SECONDS); // 5 ph�t thanh to�n
   const pollingRef = useRef(null);
   const countdownRef = useRef(null);
 
-  // ─── Bộ đếm ngược 5 phút cho riêng bước thanh toán ──────────────────────────
+  // ─── Bộ đếm ngược 5 ph�t cho ri�ng bước thanh to�n ──────────────────────────
   useEffect(() => {
     if (!isWaiting) return;
 
-    setPaymentTimeLeft(PAYMENT_TIMEOUT_SECONDS); // Reset về 5 phút khi bắt đầu chờ
+    setPaymentTimeLeft(PAYMENT_TIMEOUT_SECONDS); // Reset về 5 ph�t khi bắt đầu chờ
 
     countdownRef.current = setInterval(() => {
       setPaymentTimeLeft(prev => {
@@ -57,7 +62,7 @@ export default function Invoice() {
     return () => clearInterval(countdownRef.current);
   }, [isWaiting]);
 
-  // ─── Polling kiểm tra trạng thái đơn ────────────────────────────────────────
+  // ─── Polling kiểm tra trạng th�i đơn ────────────────────────────────────────
   useEffect(() => {
     if (!isWaiting || !order) return;
 
@@ -94,13 +99,13 @@ export default function Invoice() {
     setIsWaiting(false);
     setPaymentWaiting(false); // re-enable stepper navigation
 
-    // Mở khóa ghế ngay lập tức
+    // Mở kh�a ghế ngay lập tức
     unlockSeats();
 
     if (order) {
       const orderId = order.bookingId ?? order.BookingId;
       try {
-        await bookingApi.cancel(orderId, 'Hết thời gian chờ thanh toán QR (5 phút)');
+        await bookingApi.cancel(orderId, 'Hết thời gian chờ thanh to�n QR (5 ph�t)');
         console.log(`[Invoice] Order ${orderId} cancelled due to timeout`);
       } catch (err) {
         console.error('[Invoice] Cancel error:', err);
@@ -109,7 +114,7 @@ export default function Invoice() {
     setCancelled(true);
   };
 
-  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(p) + 'đ';
+  const formatPrice = (p) => new Intl.NumberFormat('vi-VN').format(Number(p) || 0) + 'đ';
 
   const formatCountdown = (secs) => {
     const m = Math.floor(secs / 60).toString().padStart(2, '0');
@@ -124,7 +129,7 @@ export default function Invoice() {
     try {
       const bookingId = getBookingId(order);
       if (!bookingId) {
-        throw new Error('Không tìm thấy mã booking để xác nhận thanh toán.');
+        throw new Error('Kh�ng t�m thấy m� booking để x�c nhận thanh to�n.');
       }
 
       const payAmount = order.finalAmount ?? order.FinalAmount ?? order.totalAmount ?? order.TotalAmount ?? totalAmount;
@@ -145,13 +150,13 @@ export default function Invoice() {
       setSuccess(true);
     } catch (err) {
       console.error('[Booking] QR demo confirm failed:', err);
-      setError(err.message || 'Không thể xác nhận thanh toán QR demo.');
+      setError(err.message || 'Kh�ng thể x�c nhận thanh to�n QR demo.');
     } finally {
       setProcessing(false);
     }
   };
 
-  // ─── Submit thanh toán ───────────────────────────────────────────────────────
+  // ─── Submit thanh to�n ───────────────────────────────────────────────────────
   const handleSubmit = async () => {
     setProcessing(true);
     setError('');
@@ -163,23 +168,23 @@ export default function Invoice() {
       const hallId = hall?.hallId ?? hall?.HallId ?? hall?.id ?? hall?.Id;
 
       if (!userId) {
-        setError('Vui lòng đăng nhập lại trước khi đặt vé.');
+        setError('Vui l�ng đăng nhập lại trước khi đặt v�.');
         setProcessing(false);
         return;
       }
 
       if (!stId) {
-        setError('Thiếu thông tin suất chiếu. Vui lòng quay lại chọn suất chiếu.');
+        setError('Thiếu th�ng tin suất chiếu. Vui l�ng quay lại chọn suất chiếu.');
         setProcessing(false);
         return;
       }
       if (!selectedSeats || selectedSeats.length === 0) {
-        setError('Vui lòng chọn ít nhất một ghế.');
+        setError('Vui l�ng chọn �t nhất một ghế.');
         setProcessing(false);
         return;
       }
       if (!cinemaId || !hallId) {
-        setError('Thiếu thông tin rạp hoặc phòng chiếu.');
+        setError('Thiếu th�ng tin rạp hoặc ph�ng chiếu.');
         setProcessing(false);
         return;
       }
@@ -203,7 +208,7 @@ export default function Invoice() {
         showtimeId: stId,
         seats: selectedSeats.map(s => ({
           seatId: s.seatId,
-          price: s.finalPrice || 85000,
+          price: getSeatPrice(s),
         })).filter(s => s.seatId),
         concessions: selectedProducts
           .filter(p => p.product && p.quantity > 0)
@@ -220,7 +225,7 @@ export default function Invoice() {
       const createdOrder = await bookingApi.create(bookingData);
       const bookingId = getBookingId(createdOrder);
       if (!bookingId) {
-        throw new Error('Không nhận được mã booking từ server.');
+        throw new Error('Kh�ng nhận được m� booking từ server.');
       }
 
       let bookingDetail = createdOrder;
@@ -232,7 +237,7 @@ export default function Invoice() {
       console.log('[Booking] Created order:', bookingDetail);
       setOrder(bookingDetail);
 
-      // QR Bank → vào trạng thái chờ webhook
+      // QR Bank → v�o trạng th�i chờ webhook
       if (payMethod === 'qrbank') {
         stopTimer(); // Dừng bộ đếm giữ ghế cũ
         setIsWaiting(true);
@@ -240,7 +245,7 @@ export default function Invoice() {
         return;
       }
 
-      // Các phương thức khác → confirm ngay (demo)
+      // C�c phương thức kh�c → confirm ngay (demo)
       const payMethodId =
         payMethod === 'momo' ? 1 :
           payMethod === 'zalopay' ? 2 :
@@ -266,33 +271,33 @@ export default function Invoice() {
       setSuccess(true);
     } catch (err) {
       console.error('[Booking] Error:', err);
-      setError(err.message || 'Đã có lỗi xảy ra. Vui lòng thử lại.');
+      setError(err.message || 'Đ� c� lỗi xảy ra. Vui l�ng thử lại.');
     } finally {
       setProcessing(false);
     }
   };
 
-  // ─── Màn hình hủy (timeout) ─────────────────────────────────────────────────
+  // ─── M�n h�nh hủy (timeout) ─────────────────────────────────────────────────
   if (cancelled) {
     return (
       <div className="invoice-waiting" id="payment-cancelled">
         <div className="invoice-waiting__card">
           <div className="invoice-waiting__header">
-            <h2 className="invoice-waiting__title" style={{ color: '#e74c3c' }}>⏰ Đơn hàng đã bị hủy</h2>
-            <p className="invoice-waiting__subtitle">Đã hết 5 phút mà chưa nhận được xác nhận thanh toán.</p>
+            <h2 className="invoice-waiting__title" style={{ color: '#e74c3c' }}>⏰ Đơn h�ng đ� bị hủy</h2>
+            <p className="invoice-waiting__subtitle">Đ� hết 5 ph�t m� chưa nhận được x�c nhận thanh to�n.</p>
           </div>
           <div className="invoice-waiting__note">
-            <p>Đơn hàng của bạn đã được hủy tự động. Vui lòng đặt vé lại nếu bạn vẫn muốn xem phim.</p>
+            <p>Đơn h�ng của bạn đ� được hủy tự động. Vui l�ng đặt v� lại nếu bạn vẫn muốn xem phim.</p>
           </div>
           <button className="invoice-waiting__cancel" style={{ color: '#e74c3c', fontWeight: 700 }} onClick={reset}>
-            ← Đặt vé lại
+            ← Đặt v� lại
           </button>
         </div>
       </div>
     );
   }
 
-  // ─── Màn hình chờ thanh toán QR ─────────────────────────────────────────────
+  // ─── M�n h�nh chờ thanh to�n QR ─────────────────────────────────────────────
   if (isWaiting) {
     const qrAmount = order?.finalAmount ?? order?.FinalAmount ?? order?.totalAmount ?? order?.TotalAmount ?? totalAmount;
     const qrCode = order?.bookingCode ?? order?.BookingCode ?? 'BOOKING';
@@ -302,8 +307,8 @@ export default function Invoice() {
       <div className="invoice-waiting" id="payment-waiting">
         <div className="invoice-waiting__card">
           <div className="invoice-waiting__header">
-            <h2 className="invoice-waiting__title">Quét mã để thanh toán</h2>
-            <p className="invoice-waiting__subtitle">Sử dụng ứng dụng Ngân hàng để quét mã QR bên dưới</p>
+            <h2 className="invoice-waiting__title">Qu�t m� để thanh to�n</h2>
+            <p className="invoice-waiting__subtitle">Sử dụng ứng dụng Ng�n h�ng để qu�t m� QR b�n dưới</p>
           </div>
 
           {/* Đồng hồ đếm ngược */}
@@ -318,28 +323,28 @@ export default function Invoice() {
             ⏱ {formatCountdown(paymentTimeLeft)}
           </div>
           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-            Đơn hàng sẽ tự động hủy sau khi hết thời gian
+            Đơn h�ng sẽ tự động hủy sau khi hết thời gian
           </p>
 
           <div className="invoice-waiting__qr-box">
             <img src={qrUrl} alt="VietQR" className="invoice-waiting__qr-img" />
             <div className="invoice-waiting__loader">
               <span className="invoice-waiting__spinner"></span>
-              Đang chờ xác nhận từ ngân hàng...
+              Đang chờ x�c nhận từ ng�n h�ng...
             </div>
           </div>
 
           <div className="invoice-waiting__info">
             <div className="invoice-waiting__info-row">
-              <span>Ngân hàng:</span>
+              <span>Ng�n h�ng:</span>
               <strong>{BANK_ID}</strong>
             </div>
             <div className="invoice-waiting__info-row">
-              <span>Số tài khoản:</span>
+              <span>Số t�i khoản:</span>
               <strong>{ACCOUNT_NO}</strong>
             </div>
             <div className="invoice-waiting__info-row">
-              <span>Chủ tài khoản:</span>
+              <span>Chủ t�i khoản:</span>
               <strong>{ACCOUNT_NAME}</strong>
             </div>
             <div className="invoice-waiting__info-row">
@@ -350,8 +355,8 @@ export default function Invoice() {
               <span>Nội dung:</span>
               <strong className="invoice-waiting__code"
                 style={{ cursor: 'pointer' }}
-                title="Nhấn để sao chép"
-                onClick={() => navigator.clipboard.writeText(qrCode).then(() => alert('Đã sao chép nội dung chuyển khoản!'))}
+                title="Nhấn để sao ch�p"
+                onClick={() => navigator.clipboard.writeText(qrCode).then(() => alert('Đ� sao ch�p nội dung chuyển khoản!'))}
               >
                 {qrCode} 📋
               </strong>
@@ -359,7 +364,7 @@ export default function Invoice() {
           </div>
 
           <div className="invoice-waiting__note">
-            <p>⚠️ <strong>Lưu ý:</strong> Vui lòng giữ nguyên nội dung chuyển khoản để hệ thống tự động xác nhận đơn hàng. Nhấn vào mã để sao chép nhanh.</p>
+            <p>⚠️ <strong>Lưu �:</strong> Vui l�ng giữ nguy�n nội dung chuyển khoản để hệ thống tự động x�c nhận đơn h�ng. Nhấn v�o m� để sao ch�p nhanh.</p>
           </div>
 
           {error && <p className="invoice-total-card__error">{error}</p>}
@@ -370,18 +375,18 @@ export default function Invoice() {
             disabled={processing}
             style={{ marginBottom: '0.75rem' }}
           >
-            {processing ? 'Đang xác nhận...' : 'Tôi đã thanh toán (demo)'}
+            {processing ? 'Đang x�c nhận...' : 'T�i đ� thanh to�n (demo)'}
           </button>
 
           <button className="invoice-waiting__cancel" onClick={handleTimeout}>
-            Hủy đơn hàng
+            Hủy đơn h�ng
           </button>
         </div>
       </div>
     );
   }
 
-  // ─── Màn hình thành công ─────────────────────────────────────────────────────
+  // ─── M�n h�nh th�nh c�ng ─────────────────────────────────────────────────────
   if (success) {
     const qrAmount = order?.finalAmount ?? order?.FinalAmount ?? order?.totalAmount ?? order?.TotalAmount ?? totalAmount;
     const qrCode = order?.bookingCode ?? order?.BookingCode ?? 'BOOKING';
@@ -390,8 +395,8 @@ export default function Invoice() {
       <div className="invoice-success" id="booking-success">
         <div className="invoice-success__card">
           <div className="invoice-success__icon">✅</div>
-          <h2 className="invoice-success__title">Đặt vé thành công!</h2>
-          <p className="invoice-success__subtitle">Cảm ơn bạn đã đặt vé tại CineMiu</p>
+          <h2 className="invoice-success__title">Đặt v� th�nh c�ng!</h2>
+          <p className="invoice-success__subtitle">Cảm ơn bạn đ� đặt v� tại CineMiu</p>
 
           <div className="invoice-success__ticket">
             <div className="invoice-success__ticket-header">
@@ -406,11 +411,11 @@ export default function Invoice() {
               </div>
               <div className="invoice-success__ticket-row">
                 <span className="invoice-success__ticket-label">Rạp</span>
-                <span>{cinema?.name || cinema?.Name || cinema?.cinemaName || cinema?.CinemaName || 'Chưa xác định'} • {hall?.name || hall?.Name || hall?.hallName || hall?.HallName || 'Chưa xác định'}</span>
+                <span>{cinema?.name || cinema?.Name || cinema?.cinemaName || cinema?.CinemaName || 'Chưa x�c định'} � {hall?.name || hall?.Name || hall?.hallName || hall?.HallName || 'Chưa x�c định'}</span>
               </div>
               <div className="invoice-success__ticket-row">
                 <span className="invoice-success__ticket-label">Suất chiếu</span>
-                <span>{getStartTime(showtime)?.split('T')[0]} • {getStartTime(showtime)?.split('T')[1]?.split(':').slice(0, 2).join(':')}</span>
+                <span>{getStartTime(showtime)?.split('T')[0]} � {getStartTime(showtime)?.split('T')[1]?.split(':').slice(0, 2).join(':')}</span>
               </div>
               <div className="invoice-success__ticket-row">
                 <span className="invoice-success__ticket-label">Ghế</span>
@@ -419,7 +424,7 @@ export default function Invoice() {
                 </span>
               </div>
               <div className="invoice-success__ticket-row invoice-success__ticket-total">
-                <span>Tổng thanh toán</span>
+                <span>Tổng thanh to�n</span>
                 <strong>{formatPrice(order?.finalAmount ?? order?.FinalAmount ?? order?.totalAmount ?? order?.TotalAmount ?? totalAmount)}</strong>
               </div>
             </div>
@@ -429,8 +434,8 @@ export default function Invoice() {
                 <div className="invoice-success__qr-container">
                   {tickets.length > 0 ? (
                     <div className="invoice-success__checkin-list">
-                      <h3>Mã QR check-in</h3>
-                      <p>Xuất trình mã QR từng ghế tại quầy soát vé.</p>
+                      <h3>M� QR check-in</h3>
+                      <p>Xuất tr�nh m� QR từng ghế tại quầy so�t v�.</p>
                       {tickets.map(ticket => {
                         const ticketCode = ticket.qrCode ?? ticket.QrCode;
                         const seatCode = ticket.seatCode ?? ticket.SeatCode;
@@ -447,7 +452,7 @@ export default function Invoice() {
                     </div>
                   ) : (
                     <div className="invoice-success__bank-info">
-                      <p><strong>Mã booking:</strong> {qrCode}</p>
+                      <p><strong>M� booking:</strong> {qrCode}</p>
                       <p><strong>Số tiền:</strong> {formatPrice(qrAmount)}</p>
                     </div>
                   )}
@@ -457,17 +462,17 @@ export default function Invoice() {
           </div>
 
           <button className="invoice-success__btn" onClick={reset} id="book-again-btn">
-            Đặt vé mới
+            Đặt v� mới
           </button>
         </div>
       </div>
     );
   }
 
-  // ─── Form chọn phương thức thanh toán ───────────────────────────────────────
+  // ─── Form chọn phương thức thanh to�n ───────────────────────────────────────
   return (
     <div className="invoice" id="invoice-step">
-      <h2 className="section-title">Xác nhận & Thanh toán</h2>
+      <h2 className="section-title">X�c nhận & Thanh to�n</h2>
 
       <div className="invoice__layout">
         <div className="invoice__details">
@@ -475,17 +480,17 @@ export default function Invoice() {
           <div className="invoice-card">
             <div className="invoice-card__header">
               <span className="invoice-card__icon">🎬</span>
-              <h3>Thông tin phim</h3>
+              <h3>Th�ng tin phim</h3>
             </div>
             <div className="invoice-card__body">
               <div className="invoice-card__movie">
                 {movie?.posterUrl && <img src={movie.posterUrl} alt="" className="invoice-card__poster" />}
                 <div>
                   <strong className="invoice-card__movie-title">{movie?.title}</strong>
-                  <p>{movie?.durationMins} phút • {movie?.ageRating || 'P'}</p>
+                  <p>{movie?.durationMins} ph�t � {movie?.ageRating || 'P'}</p>
                   <p>{cinema?.cinemaName || cinema?.CinemaName || cinema?.name || cinema?.Name}</p>
                   <p>{hall?.hallName || hall?.HallName || hall?.name || hall?.Name}</p>
-                  <p>{getStartTime(showtime)?.split('T')[0]} • {getStartTime(showtime)?.split('T')[1]?.split(':').slice(0, 2).join(':')}</p>
+                  <p>{getStartTime(showtime)?.split('T')[0]} � {getStartTime(showtime)?.split('T')[1]?.split(':').slice(0, 2).join(':')}</p>
                 </div>
               </div>
             </div>
@@ -495,22 +500,22 @@ export default function Invoice() {
           <div className="invoice-card">
             <div className="invoice-card__header">
               <span className="invoice-card__icon">💺</span>
-              <h3>Ghế đã chọn ({selectedSeats.length})</h3>
+              <h3>Ghế đ� chọn ({selectedSeats.length})</h3>
             </div>
             <div className="invoice-card__body">
               <table className="invoice-table">
                 <thead>
-                  <tr><th>Ghế</th><th>Giá</th></tr>
+                  <tr><th>Ghế</th><th>Gi�</th></tr>
                 </thead>
                 <tbody>
                   {selectedSeats.map(s => (
                     <tr key={s.seatId ?? s.id}>
                       <td><strong>{s.seatCode}</strong></td>
-                      <td>{formatPrice(s.finalPrice)}</td>
+                      <td>{formatPrice(getSeatPrice(s))}</td>
                     </tr>
                   ))}
                   <tr className="invoice-table__subtotal">
-                    <td>Tạm tính vé</td>
+                    <td>Tạm t�nh v�</td>
                     <td><strong>{formatPrice(subtotalTickets)}</strong></td>
                   </tr>
                 </tbody>
@@ -528,7 +533,7 @@ export default function Invoice() {
               <div className="invoice-card__body">
                 <table className="invoice-table">
                   <thead>
-                    <tr><th>Sản phẩm</th><th>SL</th><th>Thành tiền</th></tr>
+                    <tr><th>Sản phẩm</th><th>SL</th><th>Th�nh tiền</th></tr>
                   </thead>
                   <tbody>
                     {selectedProducts.map(p => (
@@ -539,7 +544,7 @@ export default function Invoice() {
                       </tr>
                     ))}
                     <tr className="invoice-table__subtotal">
-                      <td colSpan="2">Tạm tính đồ ăn</td>
+                      <td colSpan="2">Tạm t�nh đồ ăn</td>
                       <td><strong>{formatPrice(subtotalProducts)}</strong></td>
                     </tr>
                   </tbody>
@@ -552,13 +557,13 @@ export default function Invoice() {
           <div className="invoice-card">
             <div className="invoice-card__header">
               <span className="invoice-card__icon">💳</span>
-              <h3>Phương thức thanh toán</h3>
+              <h3>Phương thức thanh to�n</h3>
             </div>
             <div className="invoice-card__body">
               <div className="invoice-pay-methods">
                 {[
                   { id: 'qrbank', label: 'Bank QR (VietQR)', icon: '🏦', color: '#1a1f71' },
-                  { id: 'momo', label: 'Ví MoMo', icon: '📱', color: '#d82d8b' },
+                  { id: 'momo', label: 'V� MoMo', icon: '📱', color: '#d82d8b' },
                   { id: 'zalopay', label: 'ZaloPay', icon: '💙', color: '#0068ff' },
                   { id: 'vnpay', label: 'VNPay', icon: '🏧', color: '#e21e2c' },
                   { id: 'visa', label: 'Visa / Mastercard', icon: '💳', color: '#1a1f71' },
@@ -578,7 +583,7 @@ export default function Invoice() {
               </div>
               {payMethod === 'qrbank' && (
                 <p style={{ marginTop: '0.75rem', fontSize: '0.82rem', color: 'var(--text-muted)', borderLeft: '3px solid var(--primary)', paddingLeft: '0.75rem' }}>
-                  Sau khi xác nhận, mã QR sẽ hiển thị. Bạn có <strong>5 phút</strong> để hoàn thành chuyển khoản. Đơn hàng sẽ tự động hủy nếu không nhận được thanh toán.
+                  Sau khi x�c nhận, m� QR sẽ hiển thị. Bạn c� <strong>5 ph�t</strong> để ho�n th�nh chuyển khoản. Đơn h�ng sẽ tự động hủy nếu kh�ng nhận được thanh to�n.
                 </p>
               )}
             </div>
@@ -588,11 +593,11 @@ export default function Invoice() {
         {/* Payment Summary */}
         <div className="invoice__sidebar">
           <div className="invoice-total-card">
-            <h3 className="invoice-total-card__title">Hóa đơn thanh toán</h3>
+            <h3 className="invoice-total-card__title">H�a đơn thanh to�n</h3>
 
             <div className="invoice-total-card__lines">
               <div className="invoice-total-card__line">
-                <span>Vé xem phim ({selectedSeats.length})</span>
+                <span>V� xem phim ({selectedSeats.length})</span>
                 <span>{formatPrice(subtotalTickets)}</span>
               </div>
               <div className="invoice-total-card__line">
@@ -601,14 +606,14 @@ export default function Invoice() {
               </div>
               {discountAmount > 0 && (
                 <div className="invoice-total-card__line invoice-total-card__line--discount">
-                  <span>Giảm giá {voucherCode && `(${voucherCode})`}</span>
+                  <span>Giảm gi� {voucherCode && `(${voucherCode})`}</span>
                   <span>-{formatPrice(discountAmount)}</span>
                 </div>
               )}
             </div>
 
             <div className="invoice-total-card__total">
-              <span>Tổng thanh toán</span>
+              <span>Tổng thanh to�n</span>
               <strong>{formatPrice(totalAmount)}</strong>
             </div>
 
@@ -621,14 +626,14 @@ export default function Invoice() {
               id="submit-payment-btn"
             >
               {processing ? (
-                <span className="invoice-total-card__spinner">⏳ Đang xử lý...</span>
+                <span className="invoice-total-card__spinner">⏳ Đang xử l�...</span>
               ) : (
-                `Thanh toán ${formatPrice(totalAmount)}`
+                `Thanh to�n ${formatPrice(totalAmount)}`
               )}
             </button>
 
             <p className="invoice-total-card__note">
-              Bằng việc thanh toán, bạn đồng ý với <a href="#">Điều khoản sử dụng</a> và <a href="#">Chính sách bảo mật</a> của CineVerse.
+              Bằng việc thanh to�n, bạn đồng � với <a href="#">Điều khoản sử dụng</a> v� <a href="#">Ch�nh s�ch bảo mật</a> của CineVerse.
             </p>
           </div>
         </div>

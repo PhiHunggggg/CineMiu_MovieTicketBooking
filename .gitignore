@@ -361,6 +361,7 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+.codex-run/
 
 # Local CLI/package caches used by Codex builds
 .dotnet-home/

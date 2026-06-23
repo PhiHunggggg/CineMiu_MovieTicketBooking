@@ -3,7 +3,7 @@ using Repository;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-  namespace API_Service.Controllers
+namespace API_Service.Controllers
 {
     [Route("api/promotions")]
     [ApiController]
@@ -52,50 +52,52 @@ using Microsoft.EntityFrameworkCore;
         }
 
         [HttpPost("validate")]
-        public async Task<IActionResult> ValidatePromotion([FromBody] ValidatePromotionDto dto)
+        public async Task<IActionResult> ValidateVoucher([FromBody] ValidatePromotionRequest request)
         {
-            var code = dto.PromoCode?.Trim().ToUpperInvariant();
+            if (request == null || string.IsNullOrWhiteSpace(request.PromoCode))
+            {
+                return BadRequest(new { message = "Promotion code is required" });
+            }
+
             var now = DateTime.UtcNow;
-            var promotion = await _context.CinemaPromotions.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.PromoCode.ToUpper() == code);
+            var code = request.PromoCode.Trim().ToUpperInvariant();
+            var promo = await _context.CinemaPromotions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(x => x.PromoCode == code && x.IsActive && x.ValidFrom <= now && x.ValidTo >= now);
 
-            if (promotion == null || !promotion.IsActive || promotion.ValidFrom > now || promotion.ValidTo < now)
+            if (promo == null)
             {
-                return BadRequest(new { message = "Voucher không tồn tại hoặc đã hết hạn." });
+                return BadRequest(new { message = "Voucher does not exist or has expired." });
             }
 
-            if (dto.OrderAmount < promotion.MinOrderAmt)
+            if (request.OrderAmount < promo.MinOrderAmt)
             {
-                return BadRequest(new { message = $"Đơn hàng tối thiểu {promotion.MinOrderAmt:n0}đ để dùng voucher này." });
+                return BadRequest(new { message = $"Minimum order amount is {promo.MinOrderAmt:n0} VND." });
             }
 
-            if (promotion.UsageLimit.HasValue && promotion.TotalUses >= promotion.UsageLimit.Value)
+            var discount = promo.DiscountType == "percent"
+                ? request.OrderAmount * promo.DiscountValue / 100m
+                : promo.DiscountValue;
+
+            if (promo.MaxDiscount.HasValue)
             {
-                return BadRequest(new { message = "Voucher đã hết lượt sử dụng." });
+                discount = Math.Min(discount, promo.MaxDiscount.Value);
             }
 
-            if (dto.UserId > 0)
-            {
-                var userUses = await _context.CinemaPromoUsages.AsNoTracking()
-                    .CountAsync(x => x.PromoId == promotion.PromoId && x.UserId == dto.UserId);
-                if (userUses >= promotion.PerUserLimit)
-                {
-                    return BadRequest(new { message = "Bạn đã sử dụng hết số lượt của voucher này." });
-                }
-            }
-
-            var discount = string.Equals(promotion.DiscountType, "percent", StringComparison.OrdinalIgnoreCase)
-                ? dto.OrderAmount * promotion.DiscountValue / 100m
-                : promotion.DiscountValue;
-            if (promotion.MaxDiscount.HasValue)
-            {
-                discount = Math.Min(discount, promotion.MaxDiscount.Value);
-            }
+            discount = Math.Min(Math.Max(0, discount), request.OrderAmount);
 
             return Ok(new
             {
-                promotion,
-                discountAmount = Math.Clamp(discount, 0, dto.OrderAmount)
+                promotion = new
+                {
+                    promo.PromoId,
+                    id = promo.PromoId,
+                    promo.PromoCode,
+                    promo.Description,
+                    promo.DiscountType,
+                    promo.DiscountValue
+                },
+                discountAmount = discount
             });
         }
 
@@ -220,7 +222,7 @@ using Microsoft.EntityFrameworkCore;
         public bool? IsActive { get; set; }
     }
 
-    public class ValidatePromotionDto
+    public class ValidatePromotionRequest
     {
         public string PromoCode { get; set; } = "";
         public int UserId { get; set; }

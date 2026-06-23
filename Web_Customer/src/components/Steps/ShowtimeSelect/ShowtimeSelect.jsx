@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+﻿import { useState, useEffect, useMemo } from 'react';
 import { showtimeApi } from '../../../services/api';
 import { useBooking } from '../../../context/BookingContext';
 import './ShowtimeSelect.css';
@@ -61,8 +61,8 @@ export default function ShowtimeSelect() {
     setLoading(true);
     setError('');
     showtimeApi
-      .getAll({ movieId, cinemaId, dateFrom: weekStart, dateTo: weekEnd })
-      .then(data => setShowtimes(Array.isArray(data) ? data : []))
+      .getAll({ movieId, cinemaId, dateFrom: weekStart, dateTo: weekEnd, upcomingOnly: true, pageSize: 100 })
+      .then(data => setShowtimes(Array.isArray(data) ? data : (data?.items ?? data?.data ?? [])))
       .catch(err => {
         console.error(err);
         setError(err.message || 'Khong the tai danh sach suat chieu.');
@@ -74,7 +74,7 @@ export default function ShowtimeSelect() {
   const dateGroups = useMemo(() => {
     const groups = {};
     showtimes.forEach(item => {
-      const startTime = item.showtime?.startTime ?? item.showtime?.StartTime;
+      const startTime = item.showtime?.startTime ?? item.showtime?.StartTime ?? item.startTime ?? item.StartTime;
       const dateStr = toLocalDateString(startTime);
       if (!weekDates.includes(dateStr)) return;
       if (!dateStr) return;
@@ -147,7 +147,7 @@ export default function ShowtimeSelect() {
         };
       }
       // Đẩy toàn bộ object showtime vào mảng
-      groups[hallId].showtimes.push(item.showtime);
+      groups[hallId].showtimes.push(item.showtime ?? item);
     });
     return Object.values(groups);
   }, [currentShowtimes]);

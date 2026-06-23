@@ -103,7 +103,7 @@ export default function MainLayout() {
                             <p className="nav-divider">Quản lý rạp</p>
                             <MenuLink to="/admin/showtimes" icon="fa-calendar-days">Lịch chiếu</MenuLink>
                             <MenuLink to="/admin/halls" icon="fa-door-open">Trạng thái phòng</MenuLink>
-                            <MenuLink to="/admin/ticket-prices" icon="fa-tags">Giá vé</MenuLink>
+                            <MenuLink to="/admin/ticket-prices" icon="fa-tags">Giá vé giờ/ngày lễ</MenuLink>
                         </>
                     )}
 

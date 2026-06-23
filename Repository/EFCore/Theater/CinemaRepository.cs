@@ -36,7 +36,7 @@ namespace Repository.EFCore.Theater
             if (!string.IsNullOrWhiteSpace(city))
             {
                 var trimmedCity = city.Trim();
-                query = query.Where(x => x.City.Contains(trimmedCity));
+                query = query.Where(x => x.City == trimmedCity);
             }
 
             if (isActive.HasValue)
@@ -64,7 +64,7 @@ namespace Repository.EFCore.Theater
             var cinema = await context.Cinemas.AsNoTracking().FirstOrDefaultAsync(x => x.CinemaId == cinemaId);
             if (cinema == null)
             {
-                throw new ArgumentException("Cinema not found");
+                throw new KeyNotFoundException("Cinema not found");
             }
 
             var chainName = await context.Chains
@@ -76,7 +76,7 @@ namespace Repository.EFCore.Theater
             return ToResponse(cinema, new Dictionary<int, string> { [cinema.ChainId] = chainName ?? "" });
         }
 
-        public async Task CreateAsync(CinemaDTO.CinemaRequest cinemaRequest)
+        public async Task<CinemaDTO.CinemaResponse> CreateAsync(CinemaDTO.CinemaRequest cinemaRequest)
         {
             var validationError = await ValidateCinemaDto(cinemaRequest);
             if (validationError != null)
@@ -91,21 +91,24 @@ namespace Repository.EFCore.Theater
                 CinemaName = cinemaRequest.CinemaName.Trim(),
                 Address = cinemaRequest.Address.Trim(),
                 City = cinemaRequest.City.Trim(),
-                District = NormalizeOptionalText(cinemaRequest.Ward),
+                District = NormalizeOptionalText(cinemaRequest.District ?? cinemaRequest.Ward),
                 Phone = NormalizeOptionalText(cinemaRequest.Phone),
                 Email = NormalizeOptionalText(cinemaRequest.Email),
+                Latitude = cinemaRequest.Latitude,
+                Longitude = cinemaRequest.Longitude,
                 MapUrl = NormalizeOptionalText(cinemaRequest.MapUrl),
                 ImageUrl = NormalizeOptionalText(cinemaRequest.ImageUrl),
-                IsActive = cinemaRequest.IsActive,
+                IsActive = cinemaRequest.IsActive ?? true,
                 CreatedAt = now,
                 UpdatedAt = now
             };
 
             context.Cinemas.Add(cinema);
             await context.SaveChangesAsync();
+            return await GetCinemaByIdAsync(cinema.CinemaId);
         }
 
-        public async Task UpdateAsync(int cinemaId, CinemaDTO.CinemaRequest cinemaRequest)
+        public async Task<CinemaDTO.CinemaResponse> UpdateAsync(int cinemaId, CinemaDTO.CinemaRequest cinemaRequest)
         {
             var validationError = await ValidateCinemaDto(cinemaRequest);
             if (validationError != null)
@@ -116,22 +119,25 @@ namespace Repository.EFCore.Theater
             var cinema = await context.Cinemas.FirstOrDefaultAsync(x => x.CinemaId == cinemaId);
             if (cinema == null)
             {
-                throw new ArgumentException("Cinema not found");
+                throw new KeyNotFoundException("Cinema not found");
             }
 
             cinema.ChainId = cinemaRequest.ChainId;
             cinema.CinemaName = cinemaRequest.CinemaName.Trim();
             cinema.Address = cinemaRequest.Address.Trim();
             cinema.City = cinemaRequest.City.Trim();
-            cinema.District = NormalizeOptionalText(cinemaRequest.Ward);
+            cinema.District = NormalizeOptionalText(cinemaRequest.District ?? cinemaRequest.Ward);
             cinema.Phone = NormalizeOptionalText(cinemaRequest.Phone);
             cinema.Email = NormalizeOptionalText(cinemaRequest.Email);
+            cinema.Latitude = cinemaRequest.Latitude;
+            cinema.Longitude = cinemaRequest.Longitude;
             cinema.MapUrl = NormalizeOptionalText(cinemaRequest.MapUrl);
             cinema.ImageUrl = NormalizeOptionalText(cinemaRequest.ImageUrl);
-            cinema.IsActive = cinemaRequest.IsActive;
+            cinema.IsActive = cinemaRequest.IsActive ?? cinema.IsActive;
             cinema.UpdatedAt = DateTime.UtcNow;
 
             await context.SaveChangesAsync();
+            return await GetCinemaByIdAsync(cinemaId);
         }
 
         public async Task DeleteAsync(int cinemaId)
@@ -139,16 +145,11 @@ namespace Repository.EFCore.Theater
             var cinema = await context.Cinemas.FirstOrDefaultAsync(x => x.CinemaId == cinemaId);
             if (cinema == null)
             {
-                throw new ArgumentException("Cinema not found");
+                throw new KeyNotFoundException("Cinema not found");
             }
 
-            var hasHalls = await context.Halls.AnyAsync(x => x.CinemaId == cinemaId);
-            if (hasHalls)
-            {
-                throw new ArgumentException("Cannot delete cinema because it has halls");
-            }
-
-            context.Cinemas.Remove(cinema);
+            cinema.IsActive = false;
+            cinema.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
         }
 
@@ -193,8 +194,11 @@ namespace Repository.EFCore.Theater
                 Address = cinema.Address,
                 City = cinema.City,
                 Ward = cinema.District,
+                District = cinema.District,
                 Phone = cinema.Phone,
                 Email = cinema.Email,
+                Latitude = cinema.Latitude,
+                Longitude = cinema.Longitude,
                 MapUrl = cinema.MapUrl,
                 ImageUrl = cinema.ImageUrl,
                 IsActive = cinema.IsActive

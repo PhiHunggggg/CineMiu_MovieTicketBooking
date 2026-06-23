@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Entities
 {
-    [Table("chains")]
+    [Table("cinema_chains")]
     public class Chain
     {
         [Key]

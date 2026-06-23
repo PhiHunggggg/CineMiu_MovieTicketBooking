@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
 import { cinemaLookupApi, movieApi } from '../../services/api';
 
 const createEmptyMovie = () => ({
@@ -26,6 +25,7 @@ const createEmptyMovie = () => ({
 const movieStatusOptions = [
     { value: 'now_showing', label: 'Đang chiếu', badge: 'badge-success' },
     { value: 'coming_soon', label: 'Sắp chiếu', badge: 'badge-primary' },
+    { value: 'early_screening', label: 'Suất chiếu sớm', badge: 'badge-warning' },
     { value: 'ended', label: 'Đã kết thúc', badge: 'badge-secondary' },
 ];
 
@@ -38,6 +38,7 @@ const normalizeStatus = (value) => {
     const key = String(value || '').trim().toLowerCase().replace(/[\s-]/g, '_');
     if (key === 'nowshowing' || key === 'now_showing') return 'now_showing';
     if (key === 'comingsoon' || key === 'coming_soon') return 'coming_soon';
+    if (key === 'earlyscreening' || key === 'early_screening') return 'early_screening';
     if (key === 'ended') return 'ended';
     return 'coming_soon';
 };
@@ -384,7 +385,7 @@ const AdminMovies = () => {
                                                 <th>Khởi chiếu</th>
                                                 <th>Phân loại</th>
                                                 <th>Trạng thái</th>
-                                                <th style={{ width: '145px' }}>Thao tác</th>
+                                                <th style={{ width: '105px' }}>Thao tác</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -411,13 +412,6 @@ const AdminMovies = () => {
                                                         </span>
                                                     </td>
                                                     <td>
-                                                        <Link
-                                                            className="btn btn-sm btn-primary mr-1"
-                                                            to={`/admin/showtimes?create=1&movieId=${getMovieId(movie)}`}
-                                                            title="Tạo lịch chiếu cho phim"
-                                                        >
-                                                            <i className="fas fa-calendar-plus"></i>
-                                                        </Link>
                                                         <button className="btn btn-sm btn-info mr-1" onClick={() => openModal(movie)} title="Sửa phim">
                                                             <i className="fas fa-edit"></i>
                                                         </button>

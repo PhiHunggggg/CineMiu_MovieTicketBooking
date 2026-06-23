@@ -1,5 +1,6 @@
 using DTO.Common;
 using DTO.Theater;
+using Entities;
 
 namespace Services.Theater
 {
@@ -15,7 +16,8 @@ namespace Services.Theater
         Task<object> GetAllAsync(int? movieId, int? cinemaId, DateTime? date, int? seatTypeId, int? dayTypeId, int? hallTypeId);
         Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateUpcomingAsync(int days);
         Task<ShowtimeDTO.ShowtimeResponse?> GetShowtimeDetailsAsync(int id);
-        Task<List<object>> LockSeatsAsync(int id, int userId, string sessionId, List<int> seatIds, int minutes);
+        Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(int id, int? userId, string? sessionId);
+        Task<List<Bookings.SeatLock>> LockSeatsAsync(int id, int userId, string sessionId, List<int> seatIds, int minutes);
         Task UnlockSeatsAsync(int id, int userId, string sessionId);
     }
 }

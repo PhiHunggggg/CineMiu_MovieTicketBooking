@@ -8,13 +8,14 @@ namespace DTO.Theater
     {
         public class GenreResponse
         {
-            public byte GenreId { get; set; }
+            public int GenreId { get; set; }
             public string GenreName { get; set; } = "";
         }
 
         public class MovieResponse
         {
             public int MovieId { get; set; }
+            public List<string>? Genres { get; set; }
             public string Title { get; set; } = "";
             public string? TitleEn { get; set; }
             public int? CountryId { get; set; }
@@ -32,8 +33,7 @@ namespace DTO.Theater
             public string? BannerUrl { get; set; }
             public string? TrailerUrl { get; set; }
             public decimal? ImdbRating { get; set; }
-            public List<byte>? GenreIds { get; set; }
-            public List<string> Genres { get; set; } = new();
+            public List<int>? GenreIds { get; set; }
         }
         public class MovieRequest
         {
@@ -54,7 +54,7 @@ namespace DTO.Theater
             public string? BannerUrl { get; set; }
             public string? TrailerUrl { get; set; }
             public decimal? ImdbRating { get; set; }
-            public List<byte>? GenreIds { get; set; }
+            public List<int>? GenreIds { get; set; }
         }
 
     }

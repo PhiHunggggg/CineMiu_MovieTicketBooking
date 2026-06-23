@@ -4,6 +4,8 @@ import './MovieCard.css';
 
 export default function MovieCard({ movie }) {
   const [showTrailer, setShowTrailer] = useState(false);
+  const genres = Array.isArray(movie.genres ?? movie.Genres) ? (movie.genres ?? movie.Genres) : [];
+  const duration = movie.durationMins ?? movie.DurationMins ?? movie.durationMin ?? movie.DurationMin;
 
   // Hàm lấy ID từ link youtube để tạo link nhúng (embed)
   const getYoutubeEmbedUrl = (url) => {
@@ -20,14 +22,15 @@ export default function MovieCard({ movie }) {
     return new Date(d).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' });
   };
 
-  const movieId = movie.id || movie.movieId;
+  const movieId = movie.movieId ?? movie.MovieId ?? movie.id ?? movie.Id;
+  const title = movie.title ?? movie.Title ?? 'Phim';
 
   return (
     <>
       <div className="movie-card-v2" id={`movie-card-${movieId}`}>
         <div className="movie-card-v2__poster">
           {movie.posterUrl ? (
-            <img src={movie.posterUrl} alt={movie.title} loading="lazy" />
+            <img src={movie.posterUrl} alt={title} loading="lazy" />
           ) : (
             <div className="movie-card-v2__placeholder">🎬</div>
           )}
@@ -57,10 +60,10 @@ export default function MovieCard({ movie }) {
         </div>
 
         <div className="movie-card-v2__info">
-          <Link to={`/movies/${movieId}`} className="movie-card-v2__title">{movie.title}</Link>
-          <h3 className="movie-card-v2__genre">Thể loại : {movie.genres.map((genre) => genre).join(', ')}.</h3>
+          <Link to={`/movies/${movieId}`} className="movie-card-v2__title">{title}</Link>
+          <h3 className="movie-card-v2__genre">Thể loại : {genres.length > 0 ? genres.join(', ') : 'Chưa cập nhật'}.</h3>
           <div className="movie-card-v2__meta">
-            <span>⏱ {movie.durationMins}p</span>
+            <span>⏱ {duration || '-'}p</span>
             {movie.releaseDate && <span>📅 {formatDate(movie.releaseDate)}</span>}
           </div>
         </div>
@@ -74,7 +77,7 @@ export default function MovieCard({ movie }) {
             <div className="trailer-modal__video">
               <iframe
                 src={getYoutubeEmbedUrl(movie.trailerUrl)}
-                title={movie.title}
+                title={title}
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen

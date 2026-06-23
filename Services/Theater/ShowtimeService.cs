@@ -1,8 +1,6 @@
 using DTO.Common;
 using DTO.Theater;
 using Entities;
-using Microsoft.EntityFrameworkCore;
-using Repository;
 using Repository.EFCore.Theater;
 
 namespace Services.Theater
@@ -145,140 +143,40 @@ namespace Services.Theater
             return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
         }
 
-        public async Task<ShowtimeDTO.ShowtimeResponse?> GetShowtimeDetailsAsync(int id)
-        {
-            try
-            {
-                return await GetShowtimeByIdAsync(id);
-            }
-            catch
-            {
-                return null;
-            }
-        }
+    public async Task<ShowtimeDTO.ShowtimeResponse?> GetShowtimeDetailsAsync(int id)
+    {
+        try { return await repository.GetShowtimeByIdAsync(id); }
+        catch (ArgumentException) { return null; }
+    }
 
-        public async Task<List<object>> LockSeatsAsync(int id, int userId, string sessionId, List<int> seatIds, int minutes)
-        {
-            var showtime = await context.ShowTimes.FirstOrDefaultAsync(x => x.ShowtimeId == id);
-            if (showtime == null)
-            {
-                throw new InvalidOperationException("Showtime not found");
-            }
+    public async Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(int id, int? userId, string? sessionId)
+    {
+        var details = await GetShowtimeDetailsAsync(id)
+            ?? throw new KeyNotFoundException("Showtime not found");
+        if (!string.Equals(details.Hall.Status, "active", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("This hall is currently unavailable");
+        if (details.Status is "cancelled" or "completed" or "ended" || details.EndTime <= DateTime.Now)
+            throw new InvalidOperationException("This showtime is no longer available");
+        return await repository.GetSeatsAsync(id, details, userId, sessionId);
+    }
 
-            if (showtime.Status == "cancelled" || showtime.EndTime <= DateTime.Now)
-            {
-                throw new InvalidOperationException("Showtime is not available");
-            }
+    public Task<List<Bookings.SeatLock>> LockSeatsAsync(
+        int id, int userId, string sessionId, List<int> seatIds, int minutes)
+    {
+        ValidateSession(userId, sessionId);
+        if (seatIds.Count == 0) throw new ArgumentException("At least one seat is required");
+        return repository.LockSeatsAsync(id, userId, sessionId.Trim(), seatIds, minutes);
+    }
 
-            if (!await context.Users.AnyAsync(x => x.UserId == userId && x.IsActive))
-            {
-                throw new InvalidOperationException("User not found");
-            }
+    public Task UnlockSeatsAsync(int id, int userId, string sessionId)
+    {
+        ValidateSession(userId, sessionId);
+        return repository.UnlockSeatsAsync(id, userId, sessionId.Trim());
+    }
 
-            var requestedSeatIds = seatIds.Distinct().ToList();
-            var seats = await context.Seats
-                .Where(x => requestedSeatIds.Contains(x.SeatId) && x.HallId == showtime.HallId && x.IsActive)
-                .ToListAsync();
-            if (seats.Count != requestedSeatIds.Count)
-            {
-                throw new InvalidOperationException("Some seats are invalid for this showtime");
-            }
-
-            var now = DateTime.UtcNow;
-            var expiredLocks = await context.SeatLocks
-                .Where(x => x.ExpiresAt <= now)
-                .ToListAsync();
-            context.SeatLocks.RemoveRange(expiredLocks);
-
-            var bookedSeatIds = await context.Tickets
-                .Join(
-                    context.Bookings.Where(x => x.ShowtimeId == id && x.Status != "cancelled"),
-                    ticket => ticket.BookingId,
-                    booking => booking.BookingId,
-                    (ticket, booking) => ticket.SeatId)
-                .Where(x => requestedSeatIds.Contains(x))
-                .Distinct()
-                .ToListAsync();
-            if (bookedSeatIds.Count > 0)
-            {
-                throw new InvalidOperationException("Some seats are already booked");
-            }
-
-            var conflictingLocks = await context.SeatLocks
-                .Where(x => x.ShowtimeId == id &&
-                            requestedSeatIds.Contains(x.SeatId) &&
-                            x.ExpiresAt > now &&
-                            (x.UserId != userId || x.SessionId != sessionId))
-                .Select(x => x.SeatId)
-                .ToListAsync();
-            if (conflictingLocks.Count > 0)
-            {
-                throw new InvalidOperationException("Some seats are being held by another customer");
-            }
-
-            var ownLocks = await context.SeatLocks
-                .Where(x => x.ShowtimeId == id && x.UserId == userId && x.SessionId == sessionId)
-                .ToListAsync();
-            context.SeatLocks.RemoveRange(ownLocks.Where(x => !requestedSeatIds.Contains(x.SeatId)));
-
-            var expiresAt = now.AddMinutes(Math.Clamp(minutes, 1, 15));
-            foreach (var seatId in requestedSeatIds)
-            {
-                var seatLock = ownLocks.FirstOrDefault(x => x.SeatId == seatId);
-                if (seatLock == null)
-                {
-                    seatLock = new Entities.Bookings.SeatLock
-                    {
-                        ShowtimeId = id,
-                        SeatId = seatId,
-                        UserId = userId,
-                        SessionId = sessionId,
-                        LockedAt = now,
-                        ExpiresAt = expiresAt
-                    };
-                    context.SeatLocks.Add(seatLock);
-                }
-                else
-                {
-                    seatLock.LockedAt = now;
-                    seatLock.ExpiresAt = expiresAt;
-                }
-            }
-
-            try
-            {
-                await context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                throw new InvalidOperationException("Some seats are no longer available");
-            }
-
-            return ownLocks
-                .Where(x => requestedSeatIds.Contains(x.SeatId))
-                .Cast<object>()
-                .Concat(context.SeatLocks.Local
-                    .Where(x => x.ShowtimeId == id &&
-                                x.UserId == userId &&
-                                x.SessionId == sessionId &&
-                                requestedSeatIds.Contains(x.SeatId))
-                    .Cast<object>())
-                .Distinct()
-                .ToList();
-        }
-
-        public async Task UnlockSeatsAsync(int id, int userId, string sessionId)
-        {
-            var locks = await context.SeatLocks
-                .Where(x => x.ShowtimeId == id && x.UserId == userId && x.SessionId == sessionId)
-                .ToListAsync();
-            if (locks.Count == 0)
-            {
-                return;
-            }
-
-            context.SeatLocks.RemoveRange(locks);
-            await context.SaveChangesAsync();
-        }
+    private static void ValidateSession(int userId, string? sessionId)
+    {
+        if (userId <= 0 || string.IsNullOrWhiteSpace(sessionId))
+            throw new ArgumentException("UserId and SessionId are required");
     }
 }

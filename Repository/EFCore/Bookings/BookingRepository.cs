@@ -11,6 +11,7 @@ using System.Text;
 using static DTO.Booking.BookingDto;
 using static Entities.Bookings;
 using static Libs.Booking.PromotionValidation;
+using Repository.Pricing;
 namespace Repository.EFCore.Bookings
 {
     public class BookingRepository: Repository<Booking>,IBookingRepository
@@ -346,6 +347,20 @@ namespace Repository.EFCore.Bookings
                     throw new Exception("Showtime not found");
                 }
 
+                if (string.Equals(showtime.Status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(showtime.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                    showtime.EndTime <= DateTime.Now)
+                {
+                    throw new Exception("This showtime is no longer available");
+                }
+
+                var hall = await context.Halls.AsNoTracking()
+                    .FirstOrDefaultAsync(x => x.HallId == showtime.HallId);
+                if (hall == null || !string.Equals(hall.Status, "active", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new Exception("The hall is currently unavailable");
+                }
+
                 if (request.Seats == null || request.Seats.Count == 0)
                 {
                     throw new Exception("At least one seat must be selected");
@@ -357,7 +372,7 @@ namespace Repository.EFCore.Bookings
                 var seats = await _dbset.Seats.Where(s => request.SeatIds.Contains(s.SeatId)).ToListAsync();
                 if (seats.Count != request.SeatIds.Distinct().Count())
                 {
-                    throw new Exception("Some selected seats do not exist");
+                    throw new Exception("Some selected seats do not exist or are inactive");
                 }
 
                 var unavailabeSeats = await _dbset.Tickets
@@ -368,7 +383,51 @@ namespace Repository.EFCore.Bookings
                 {
                     throw new Exception("Some selected seats are not available");
                 }
-                var ticketTotal = request.Seats.Sum(s => s.Price);
+                var seatTypeIds = seats.Select(x => x.SeatTypeId).Distinct().ToList();
+                var seatTypes = await context.SeatTypes.AsNoTracking()
+                    .Where(x => seatTypeIds.Contains(x.SeatTypeId))
+                    .ToDictionaryAsync(x => x.SeatTypeId);
+                var standardSeatTypeId = await context.SeatTypes.AsNoTracking()
+                    .Where(x => x.TypeName.ToLower().Contains("standard"))
+                    .OrderBy(x => x.SeatTypeId)
+                    .Select(x => x.SeatTypeId)
+                    .FirstOrDefaultAsync();
+                if (standardSeatTypeId == 0)
+                {
+                    standardSeatTypeId = await context.SeatTypes.AsNoTracking()
+                        .OrderBy(x => x.SeatTypeId)
+                        .Select(x => x.SeatTypeId)
+                        .FirstOrDefaultAsync();
+                }
+
+                var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
+                var priceSeatTypeIds = seatTypeIds.Append(standardSeatTypeId).Distinct().ToList();
+                var priceRules = await context.TicketPrices.AsNoTracking()
+                    .Where(x =>
+                        x.CinemaId == hall.CinemaId &&
+                        x.HallTypeId == hall.HallTypeId &&
+                        priceSeatTypeIds.Contains(x.SeatTypeId))
+                    .ToListAsync();
+                var calculatedPrices = seats.ToDictionary(
+                    seat => seat.SeatId,
+                    seat => TicketPriceCalculator.ResolvePrice(
+                        showtime,
+                        hall.CinemaId,
+                        hall.HallTypeId,
+                        seat.SeatTypeId,
+                        seatTypes.GetValueOrDefault(seat.SeatTypeId)?.PriceModifier ?? 0,
+                        standardSeatTypeId,
+                        dayTypes,
+                        priceRules));
+
+                if (request.Seats.Any(x =>
+                        !calculatedPrices.TryGetValue(x.SeatId, out var calculatedPrice) ||
+                        x.Price != calculatedPrice))
+                {
+                    throw new Exception("Ticket prices have changed. Please refresh the seat map before booking");
+                }
+
+                var ticketTotal = calculatedPrices.Values.Sum();
                 var itemIds = request.Concessions.Select(c => c.ItemId).Distinct().ToList();
                 var items = await _dbset.ConcessionItems.Where(x => itemIds.Contains(x.ItemId)).ToDictionaryAsync(x => x.ItemId);
                 if (request.Concessions.Any(x => x.Quantity <= 0))
@@ -424,7 +483,7 @@ namespace Repository.EFCore.Bookings
                         BookingId = booking.BookingId,
                         SeatId = seat.SeatId,
                         SeatTypeId = seat.SeatTypeId,
-                        Price = requestedSeat.Price,
+                        Price = calculatedPrices[requestedSeat.SeatId],
                         QrCode = string.IsNullOrWhiteSpace(requestedSeat.QrCode)
                             ? Guid.NewGuid().ToString("N")
                             : requestedSeat.QrCode
