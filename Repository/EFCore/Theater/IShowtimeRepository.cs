@@ -16,6 +16,18 @@ namespace Repository.EFCore.Theater
             int page,
             int pageSize,
             bool upcomingOnly = false);
+        Task<(List<ShowtimeDTO.ShowtimeResponse> Items, int TotalCount)> GetShowtimesAsync(
+            string? keyword,
+            int? movieId,
+            int? cinemaId,
+            int? hallId,
+            DateTime? date,
+            DateTime? dateFrom,
+            DateTime? dateTo,
+            string? status,
+            int? page,
+            int? pageSize,
+            bool upcomingOnly = false);
         Task<ShowtimeDTO.ShowtimeResponse> GetShowtimeByIdAsync(int showtimeId);
         Task<int> CreateAsync(ShowtimeDTO.ShowtimeRequest showtimeRequest);
         Task UpdateAsync(int showtimeId, ShowtimeDTO.ShowtimeRequest showtimeRequest);

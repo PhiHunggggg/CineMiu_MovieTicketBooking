@@ -1,36 +1,45 @@
-using DTO.Authen;
+﻿using DTO.Authen;
 using Entities;
 using Libs.Auth;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.DataProtection.Repositories;
+using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Ocelot.Values;
 using Repository;
 using Services.Authen;
 using System.Security.Claims;
-
+using static DTO.Authen.UserDto;
 namespace AuthServices.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class AuthController : ControllerBase
+    [Microsoft.AspNetCore.Mvc.Route("api/auth")]
+    [Microsoft.AspNetCore.Mvc.ApiController]
+    public class AuthController : Microsoft.AspNetCore.Mvc.ControllerBase
     {
         private readonly IUserService _userService;
+        private readonly IConfiguration _configuration;
         private readonly SqlServerDbContext _context;
         private readonly string _secretKey;
         private const int TokenExpirationMinutes = 480;
-
         public AuthController(IUserService userService, IConfiguration configuration, SqlServerDbContext context)
         {
-            _userService = userService;
-            _context = context;
-            _secretKey = configuration["Jwt:SecretKey"] ?? "YourSecretKeyForAuthenticationShouldBeLongEnough";
-        }
-
+                _userService = userService;
+                _configuration = configuration;
+                _context = context;
+                _secretKey = _configuration["Jwt:SecretKey"] ?? "default_secret_key_12345";
+            }
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginDto.LoginRequest request)
         {
-            var identifier = request?.Username ?? request?.Email;
-            if (request == null || string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(request.Password))
+            if (request == null)
+            {
+                return BadRequest(new { message = "Email and password are required" });
+            }
+
+            var identifier = request.Username ?? request.Email;
+            if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(request.Password))
             {
                 return BadRequest(new { message = "Email and password are required" });
             }
@@ -40,10 +49,24 @@ namespace AuthServices.Controllers
             {
                 return Unauthorized(new { message = "Invalid email or password" });
             }
+            var roleName = await _userService.ResolveRoleName(user.RoleId);
+            var token = TokenHelper.GenerateToken(_secretKey, TokenExpirationMinutes, user.UserId.ToString(), user.Email, roleName, user.CinemaId);
 
-            return Ok(await BuildAuthResponse(user));
+            return Ok(new DTO.Authen.LoginDto.LoginResponse
+            {
+                Token = token,
+                UserId = user.UserId.ToString(),
+                RoleId = user.RoleId,
+                CinemaId = user.CinemaId,
+                FullName = user.FullName,
+                Email = user.Email,
+                Phone = user.Phone,
+                AvatarUrl = user.AvatarUrl,
+                Role = roleName ?? "User",
+                ExpiresIn = TokenExpirationMinutes * 60
+
+            });
         }
-
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterDto.RegisterRequest request)
         {
@@ -64,29 +87,28 @@ namespace AuthServices.Controllers
                 return BadRequest(new { message = "Password must be at least 6 characters" });
             }
 
-            var email = request.Email.Trim();
-            if (await _context.Users.AnyAsync(x => x.Email == email))
+            if (await _context.Users.AnyAsync(x => x.Email == request.Email))
             {
                 return BadRequest(new { message = "Email already exists" });
             }
 
             try
             {
-                var roleId = request.RoleId == 0 ? (byte)1 : request.RoleId;
+                const byte customerRoleId = 1;
                 var user = new Users
                 {
-                    RoleId = roleId,
-                    CinemaId = request.CinemaId,
-                    FullName = request.FullName.Trim(),
-                    Email = email,
-                    Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim(),
+                    RoleId = customerRoleId,
+                    CinemaId = null,
+                    FullName = request.FullName,
+                    Email = request.Email,
+                    Phone = request.Phone,
                     DateOfBirth = request.DateOfBirth,
-                    Gender = string.IsNullOrWhiteSpace(request.Gender) ? null : request.Gender.Trim(),
-                    AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim()
+                    Gender = request.Gender,
+                    AvatarUrl = request.AvatarUrl
                 };
 
-                var createdUser = await _userService.CreateAsync(user, request.Password, roleId);
-                return Ok(await BuildAuthResponse(createdUser, "Registration successful"));
+                var createdUser = await _userService.CreateAsync(user, request.Password, customerRoleId);
+                return Ok(new { message = "Registration successful", userId = createdUser.UserId });
             }
             catch (Exception ex)
             {
@@ -94,22 +116,29 @@ namespace AuthServices.Controllers
             }
         }
 
+
         [Authorize]
         [HttpGet("profile")]
         [HttpGet("me")]
         public async Task<IActionResult> Profile()
         {
-            var user = await GetAuthenticatedUser();
-            if (user == null)
+            try{
+            var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(claimValue, out var userId))
             {
                 return Unauthorized(new { message = "User ID not found in token" });
             }
-
-            return Ok(await BuildUserPayload(user));
+            return Ok(await _userService.GetProfile(userId));
+            }
+            catch
+            {
+                return NotFound("Không tìm thấy User hoặc user ko hợp lệ !");
+            }
         }
 
         [Authorize]
         [HttpPut("profile")]
+<<<<<<< HEAD
         public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
         {
             var user = await GetAuthenticatedUser(trackChanges: true);
@@ -213,17 +242,21 @@ namespace AuthServices.Controllers
         }
 
         private async Task<Users?> GetAuthenticatedUser(bool trackChanges = false)
+=======
+        public async Task<IActionResult> UpdateProfile([FromBody] UserRequest request)
+>>>>>>> origin/develop
         {
             var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(claimValue, out var userId))
             {
-                return null;
+                return Unauthorized(new { message = "User ID not found in token" });
             }
 
-            var query = trackChanges ? _context.Users.AsQueryable() : _context.Users.AsNoTracking();
-            return await query.FirstOrDefaultAsync(x => x.UserId == userId);
+            await _userService.UpdateUserAsync(userId, request);
+            return await Profile();
         }
 
+<<<<<<< HEAD
         public class UpdateProfileRequest
         {
             public string? FullName { get; set; }
@@ -238,5 +271,8 @@ namespace AuthServices.Controllers
             public string CurrentPassword { get; set; } = "";
             public string NewPassword { get; set; } = "";
         }
+=======
+>>>>>>> origin/develop
     }
 }
+

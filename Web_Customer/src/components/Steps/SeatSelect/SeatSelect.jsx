@@ -14,11 +14,9 @@ function getSeatId(seat) {
 }
 
 function getSeatStatus(seat) {
-  const explicitStatus = seat?.status ?? seat?.Status;
-  if (explicitStatus) return explicitStatus.toString().toLowerCase();
   if (seat?.isBooked ?? seat?.IsBooked) return 'booked';
   if (seat?.isLocked ?? seat?.IsLocked) return 'locked';
-  return 'available';
+  return (seat?.status ?? seat?.Status ?? 'available').toString().toLowerCase();
 }
 
 function getStartTime(showtime) {
@@ -51,13 +49,23 @@ export default function SeatSelect() {
 
         try {
             const userId = getUserId(user);
-            const [stData, lookups] = await Promise.all([
+            const [seats, lookups] = await Promise.all([
                 showtimeApi.getSeats(showtimeId, userId ? { userId } : {}),
                 lookupApi.getAll(),
             ]);
 
-            setShowtimeSeats(Array.isArray(stData) ? stData : (stData?.seats || []));
+            const seatList = Array.isArray(seats)
+              ? seats
+              : Array.isArray(seats?.seats)
+                ? seats.seats
+                : Array.isArray(seats?.Seats)
+                  ? seats.Seats
+                  : [];
+            setShowtimeSeats(seatList);
             setSeatTypes(lookups.seatTypes || []);
+            if (seatList.length === 0) {
+              setError('Phòng chiếu này chưa có dữ liệu ghế. Vui lòng cấu hình sơ đồ ghế trước khi mở bán.');
+            }
         } catch (err) {
             console.error(err);
             setError(err.message || 'Không thể tải sơ đồ ghế.');
@@ -73,9 +81,7 @@ export default function SeatSelect() {
         const showtimeId = getShowtimeId(showtime);
         if (!showtimeId) return;
 
-        setTimeout(() => {
-            fetchSeats(showtimeId);
-        }, 0);
+        fetchSeats(showtimeId);
     }, [showtime, hall, user]);
 
     const showtimeId = getShowtimeId(showtime);
@@ -155,9 +161,8 @@ export default function SeatSelect() {
       // Refresh seats to show updated status
       const showtimeId = getShowtimeId(showtime);
       try {
-        const refreshUserId = getUserId(user);
-        const data = showtimeId ? await showtimeApi.getSeats(showtimeId, refreshUserId ? { userId: refreshUserId } : {}) : null;
-        const updatedSeats = Array.isArray(data) ? data : (data?.seats || []);
+        const data = showtimeId ? await showtimeApi.getSeats(showtimeId) : null;
+        const updatedSeats = Array.isArray(data) ? data : [];
         if (updatedSeats.length > 0) {
           setShowtimeSeats(updatedSeats);
         }
@@ -189,8 +194,7 @@ export default function SeatSelect() {
       seatId,
       seatCode: seat.seatCode ?? seat.SeatCode,
       seatTypeId: seat.seatTypeId ?? seat.SeatTypeId,
-      price: finalPrice,
-      finalPrice,
+      finalPrice: seat.finalPrice ?? seat.FinalPrice ?? seat.price ?? seat.Price,
       rowLabel: seat.rowLabel ?? seat.RowLabel,
       colNumber: seat.colNumber ?? seat.ColNumber,
     });
@@ -213,7 +217,15 @@ export default function SeatSelect() {
 
     // Type classes
     const type = seatTypeMap[seat.seatTypeId ?? seat.SeatTypeId];
-    const typeName = (type?.typeName || type?.TypeName || type?.name || type?.Name || '').toLowerCase();
+    const typeName = (
+      seat.seatTypeName ||
+      seat.SeatTypeName ||
+      type?.typeName ||
+      type?.TypeName ||
+      type?.name ||
+      type?.Name ||
+      ''
+    ).toLowerCase();
 
     if (typeName.includes('vip') || typeName.includes('premium') || typeName.includes('sang') || typeName.includes('deluxe')) {
       modifiers.push('seat--vip');
@@ -272,7 +284,7 @@ if (displayError && showtimeSeats.length === 0) {
                     const seatId = getSeatId(seat);
                     const seatCode = seat.seatCode ?? seat.SeatCode;
                     const colNumber = seat.colNumber ?? seat.ColNumber;
-                    const finalPrice = getSeatPrice(seat);
+                    const finalPrice = seat.finalPrice ?? seat.FinalPrice ?? seat.price ?? seat.Price;
                     const status = getSeatStatus(seat);
                     return (
                       <button

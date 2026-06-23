@@ -1,4 +1,4 @@
-﻿import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
+import { createContext, useContext, useReducer, useCallback, useEffect, useRef } from 'react';
 import { showtimeApi, bookingApi } from '../services/api';
 import { useAuth } from './AuthContext';
 import { getUserId } from '../utils/authUser';

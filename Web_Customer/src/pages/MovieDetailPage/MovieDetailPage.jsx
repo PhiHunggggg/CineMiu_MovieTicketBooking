@@ -25,6 +25,11 @@ function formatPrice(value) {
   return new Intl.NumberFormat('vi-VN').format(value || 0) + 'đ';
 }
 
+function toLocalDateString(value) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
 export default function MovieDetailPage() {
   const { movieId } = useParams();
   const [result, setResult] = useState({
@@ -36,10 +41,18 @@ export default function MovieDetailPage() {
 
   useEffect(() => {
     let active = true;
+    const now = new Date();
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(now.getDate() + 7);
 
     Promise.all([
       movieApi.getById(movieId),
-      showtimeApi.getAll({ movieId }).catch(() => []),
+      showtimeApi.getAll({
+        movieId,
+        dateFrom: toLocalDateString(now),
+        dateTo: toLocalDateString(sevenDaysLater),
+        pageSize: 100,
+      }).catch(() => []),
     ])
       .then(([detail, schedule]) => {
         if (!active) return;

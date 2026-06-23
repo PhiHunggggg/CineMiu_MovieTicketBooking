@@ -14,13 +14,18 @@ using Services.Loyalty;
 using Repository.EFCore.Bookings;
 using Repository.EFCore.Administration;
 using Repository.EFCore.Concessions;
+using Repository.EFCore.Loyalty;
 using Repository.EFCore.Pricing;
+using Repository.EFCore.Product;
+using Repository.EFCore.Promotion;
 using Repository.EFCore.Reports;
 using Repository.EFCore.Authen;
 using Services.Authen;
 using Services.Administration;
 using Services.Concessions;
 using Services.Pricing;
+using Services.Product;
+using Services.Promotion;
 using Services.Reports;
 using System.Text;
 
@@ -34,16 +39,27 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, "App_Data", "DataProtectionKeys")));
 
 builder.Services.AddScoped<IMovieService, MovieService>();
+builder.Services.AddScoped<ICategoriesService, CategoriesService>();
 builder.Services.AddScoped<IShowtimeService, ShowtimeService>();
 builder.Services.AddScoped<ICinemaService, CinemaService>();
+builder.Services.AddScoped<ICinemaLookupService, CinemaLookupService>();
 builder.Services.AddScoped<IHallService, HallService>();
 builder.Services.AddScoped<ILoyaltyService, LoyaltyService>();
+builder.Services.AddScoped<ILoyaltyRepository, LoyaltyRepository>();
+builder.Services.AddScoped<IPromotionRepository, PromotionRepository>();
+builder.Services.AddScoped<IPromotionService, PromotionService>();
+builder.Services.AddScoped<IProductRepository, ProductRepository>();
+builder.Services.AddScoped<IProductService, ProductService>();
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
 // Register EFCore theater repositories
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
+builder.Services.AddScoped<ICategoriesRepository, CategoriesRepository>();
 builder.Services.AddScoped<IShowtimeRepository, ShowtimeRepository>();
 builder.Services.AddScoped<ICinemaRepository, CinemaRepository>();
+builder.Services.AddScoped<ICinemaLookupRepository, CinemaLookupRepository>();
 builder.Services.AddScoped<IHallRepository, HallRepository>();
 builder.Services.AddScoped<IConcessionRepository, ConcessionRepository>();
 builder.Services.AddScoped<IConcessionService, ConcessionService>();
@@ -59,6 +75,8 @@ builder.Services.AddScoped<ITicketPriceRepository, TicketPriceRepository>();
 builder.Services.AddScoped<ITicketPriceService, TicketPriceService>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IReportService, ReportService>();
+builder.Services.AddScoped<IRoleRepository, RoleRepository>();
+
 var foodClientPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "BaseCore.Food"));
 
 // Add services to the container
@@ -131,6 +149,7 @@ builder.Services.AddAuthentication(x =>
 var app = builder.Build();
 
 await EnsureCinemaRolesAsync(app.Services);
+await EnsurePaymentMethodsAsync(app.Services);
 await EnsureAdminUserAsync(app.Services);
 await EnsureShowtimesAsync(app.Services);
 
@@ -240,6 +259,46 @@ static async Task EnsureAdminUserAsync(IServiceProvider services)
     catch (Exception ex)
     {
         Console.WriteLine($"Skipping admin seed because database is not ready: {ex.Message}");
+    }
+}
+
+static async Task EnsurePaymentMethodsAsync(IServiceProvider services)
+{
+    using var scope = services.CreateScope();
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<SqlServerDbContext>();
+        var existingMethods = await db.PaymentMethods.ToListAsync();
+        var requiredMethods = new[]
+        {
+            new PaymentMethod { MethodId = 1, MethodName = "MoMo", Provider = "momo", IsActive = true },
+            new PaymentMethod { MethodId = 2, MethodName = "ZaloPay", Provider = "zalopay", IsActive = true },
+            new PaymentMethod { MethodId = 3, MethodName = "VNPay", Provider = "vnpay", IsActive = true },
+            new PaymentMethod { MethodId = 4, MethodName = "Visa / Mastercard", Provider = "card", IsActive = true },
+            new PaymentMethod { MethodId = 5, MethodName = "ATM noi dia", Provider = "atm", IsActive = true },
+            new PaymentMethod { MethodId = 6, MethodName = "VietQR / Bank Transfer", Provider = "vietqr", IsActive = true }
+        };
+
+        foreach (var requiredMethod in requiredMethods)
+        {
+            var existing = existingMethods.FirstOrDefault(x => x.MethodId == requiredMethod.MethodId);
+            if (existing != null)
+            {
+                existing.MethodName = requiredMethod.MethodName;
+                existing.Provider = requiredMethod.Provider;
+                existing.IsActive = true;
+                continue;
+            }
+
+            db.PaymentMethods.Add(requiredMethod);
+            existingMethods.Add(requiredMethod);
+        }
+
+        await db.SaveChangesAsync();
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"Skipping payment method seed because database is not ready: {ex.Message}");
     }
 }
 

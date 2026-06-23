@@ -1,0 +1,14 @@
+flowchart TD
+ A(["POST /api/bookings/{id}/refund"]) --> C["Controller gọi Service.RefundAsync"] --> R1["Repository đọc Booking"]
+ R1 --> DB1[("SQL Server<br/>Bookings, Tickets, Payments")]
+ DB1 --> D1{"Booking tồn tại,<br/>chưa check-in, có tiền hoàn?"}
+ D1 -- Không tồn tại --> N(["404 Not Found"])
+ D1 -- Không hợp lệ --> B(["400 Bad Request"])
+ D1 -- Có --> R2["Tính số tiền đã refund<br/>và remainingRefund"]
+ R2 --> D2{"Có Payment?"}
+ D2 -- Không --> R3["Tạo Payment trạng thái refunded"]
+ D2 -- Có --> R4["Phân bổ refund vào từng Payment<br/>refunded hoặc partial_refund"]
+ R3 --> R5
+ R4 --> R5["Set Booking cancelled<br/>và CancelReason"]
+ R5 --> R6["Đọc Ticket.SeatId<br/>xóa SeatLocks"] --> DB2[("SQL Server<br/>Payments, Bookings, Tickets, SeatLocks")]
+ DB2 --> C2["Controller gọi GetDetailAsync"] --> O(["200 OK<br/>Refund successful + booking detail"])

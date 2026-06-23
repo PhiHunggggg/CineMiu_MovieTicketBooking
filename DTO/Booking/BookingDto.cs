@@ -28,6 +28,7 @@ namespace DTO.Booking
             public DateTime? CancelledAt { get; set; }
             public string? CancelReason { get; set; }
             public string MovieTitle { get; set; } = string.Empty;
+            public string? MoviePosterUrl { get; set; }
             public string CinemaName { get; set; } = string.Empty;
             public string HallName { get; set; } = string.Empty;
             public DateTime StartTime { get; set; }
@@ -46,6 +47,7 @@ namespace DTO.Booking
             public List<TicketResponse> Tickets { get; set; } = new();
             public List<BookingConcessionResponse> Concessions { get; set; } = new();
             public List<PaymentResponse> Payments { get; set; } = new();
+            public List<PointTransactionResponse> PointTransactions { get; set; } = new();
         }
         public class TicketResponse
         {
@@ -74,6 +76,27 @@ namespace DTO.Booking
             public DateTime? PaidAt { get; set; }
             public decimal? RefundAmount { get; set; }
             public DateTime? RefundedAt { get; set; }
+        }
+
+        public class PointTransactionResponse
+        {
+            public int TransactionId { get; set; }
+            public int UserId { get; set; }
+            public int? BookingId { get; set; }
+            public int Points { get; set; }
+            public string TransactionType { get; set; } = "";
+            public string? Description { get; set; }
+            public DateTime CreatedAt { get; set; }
+        }
+        public class PaymentProcessResult
+        {
+            public bool Success { get; set; }
+            public string Message { get; set; } = "";
+            public PaymentResponse? Payment { get; set; }
+            public bool NewlyConfirmed { get; set; }
+            public int UserId { get; set; }
+            public decimal FinalAmount { get; set; }
+            public string BookingCode { get; set; } = "";
         }
         public class BookingCreateRequest
         {

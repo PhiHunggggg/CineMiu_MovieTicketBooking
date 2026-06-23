@@ -1,0 +1,12 @@
+flowchart TD
+ A(["GET /api/bookings<br/>filters + page/pageSize"]) --> C1["Controller clamp page 1..∞<br/>pageSize 1..500"] --> S1["Service.GetAllAsync"]
+ S1 --> R1["Repository join Bookings, Users,<br/>ShowTimes, Movies, Halls, Cinemas"]
+ R1 --> D1{"Có bộ lọc?"}
+ D1 -- keyword --> R2["Lọc BookingCode, FullName,<br/>Email hoặc Phone"]
+ D1 -- status/cinema/date --> R3["Lọc Status, CinemaId,<br/>ShowTime.StartTime"]
+ D1 -- Không --> DB
+ R2 --> DB
+ R3 --> DB
+ DB[("SQL Server<br/>Bookings, Users, ShowTimes, Movies,<br/>Halls, Cinemas, Tickets, Payments")]
+ DB --> R4["Map BookingResponse<br/>đếm ticket, ticket đã dùng và refund"]
+ R4 --> S2["Service tính TotalCount/TotalPages<br/>và Skip/Take"] --> C2(["200 OK<br/>{ total, items }"])

@@ -1,135 +1,44 @@
-using Entities;
-using Microsoft.EntityFrameworkCore;
-using Repository;
+using DTO.Loyalty;
+using Repository.EFCore.Loyalty;
 
 namespace Services.Loyalty
 {
-    public class LoyaltyService(SqlServerDbContext context) : ILoyaltyService
+    public class LoyaltyService(ILoyaltyRepository loyaltyRepository) : ILoyaltyService
     {
-        public async Task<LoyaltyMembershipResponse?> GetByUserAsync(int userId)
+        public Task<LoyaltyDTO.MembershipResponse?> GetByUserAsync(int userId) =>
+            loyaltyRepository.GetByUserAsync(userId);
+
+        public async Task<LoyaltyDTO.MembershipResponse?> GetByEmailAsync(string email)
         {
-            if (!await context.Users.AsNoTracking().AnyAsync(x => x.UserId == userId && x.IsActive))
-            {
-                return null;
-            }
+            if (string.IsNullOrWhiteSpace(email)) return null;
+            var userId = await loyaltyRepository.GetActiveUserIdByEmailAsync(email.Trim());
+            return userId.HasValue ? await loyaltyRepository.GetByUserAsync(userId.Value) : null;
+        }
 
-            var membership = await context.UserMemberships.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.UserId == userId);
-            var points = membership?.TotalPoints ?? 0;
-            var tier = await ResolveTierAsync(points);
+        public Task<List<LoyaltyDTO.PointTransactionResponse>> GetTransactionsAsync(int userId) =>
+            loyaltyRepository.GetTransactionsAsync(userId);
 
-            return new LoyaltyMembershipResponse
+        public async Task<List<LoyaltyDTO.PointTransactionResponse>> GetTransactionsByEmailAsync(string email)
+        {
+            if (string.IsNullOrWhiteSpace(email)) return [];
+            var userId = await loyaltyRepository.GetActiveUserIdByEmailAsync(email.Trim());
+            return userId.HasValue ? await loyaltyRepository.GetTransactionsAsync(userId.Value) : [];
+        }
+
+        public Task AddPointsAsync(
+            int userId,
+            int points,
+            int? bookingId = null,
+            string? description = null)
+        {
+            if (points <= 0) return Task.CompletedTask;
+            return loyaltyRepository.AddPointsAsync(new LoyaltyDTO.AddPointsRequest
             {
                 UserId = userId,
-                TotalPoints = points,
-                TierId = tier?.TierId ?? membership?.TierId ?? 0,
-                TierName = tier?.TierName ?? "Thành viên",
-                DiscountPercent = tier?.DiscountPercent ?? 0,
-                Benefits = tier?.Benefits,
-                UpdatedAt = membership?.UpdatedAt ?? DateTime.UtcNow
-            };
-        }
-
-        public async Task<LoyaltyMembershipResponse?> GetByEmailAsync(string email)
-        {
-            if (string.IsNullOrWhiteSpace(email))
-            {
-                return null;
-            }
-
-            var userId = await context.Users.AsNoTracking()
-                .Where(x => x.Email == email.Trim() && x.IsActive)
-                .Select(x => (int?)x.UserId)
-                .FirstOrDefaultAsync();
-
-            return userId.HasValue ? await GetByUserAsync(userId.Value) : null;
-        }
-
-        public async Task<List<PointTransaction>> GetTransactionsAsync(int userId)
-        {
-            return await context.PointTransactions.AsNoTracking()
-                .Where(x => x.UserId == userId)
-                .OrderByDescending(x => x.CreatedAt)
-                .ThenByDescending(x => x.TransactionId)
-                .ToListAsync();
-        }
-
-        public async Task<List<PointTransaction>> GetTransactionsByEmailAsync(string email)
-        {
-            if (string.IsNullOrWhiteSpace(email))
-            {
-                return [];
-            }
-
-            var userId = await context.Users.AsNoTracking()
-                .Where(x => x.Email == email.Trim() && x.IsActive)
-                .Select(x => (int?)x.UserId)
-                .FirstOrDefaultAsync();
-
-            return userId.HasValue ? await GetTransactionsAsync(userId.Value) : [];
-        }
-
-        public async Task AddPointsAsync(int userId, int points, int? bookingId = null, string? description = null)
-        {
-            if (points <= 0)
-            {
-                return;
-            }
-
-            if (!await context.Users.AnyAsync(x => x.UserId == userId && x.IsActive))
-            {
-                throw new InvalidOperationException("User not found");
-            }
-
-            if (bookingId.HasValue && await context.PointTransactions.AnyAsync(x =>
-                    x.UserId == userId &&
-                    x.BookingId == bookingId &&
-                    x.TransactionType == "earn"))
-            {
-                return;
-            }
-
-            var membership = await context.UserMemberships.FirstOrDefaultAsync(x => x.UserId == userId);
-            if (membership == null)
-            {
-                membership = new UserMembership
-                {
-                    UserId = userId,
-                    TotalPoints = 0,
-                    UpdatedAt = DateTime.UtcNow
-                };
-                context.UserMemberships.Add(membership);
-            }
-
-            membership.TotalPoints += points;
-            membership.UpdatedAt = DateTime.UtcNow;
-
-            var tier = await ResolveTierAsync(membership.TotalPoints);
-            if (tier != null)
-            {
-                membership.TierId = tier.TierId;
-            }
-
-            context.PointTransactions.Add(new PointTransaction
-            {
-                UserId = userId,
-                BookingId = bookingId,
                 Points = points,
-                TransactionType = "earn",
-                Description = description ?? "Điểm thưởng từ đặt vé",
-                CreatedAt = DateTime.UtcNow
+                BookingId = bookingId,
+                Description = description
             });
-
-            await context.SaveChangesAsync();
-        }
-
-        private async Task<MemberTier?> ResolveTierAsync(int points)
-        {
-            return await context.MemberTiers.AsNoTracking()
-                .Where(x => x.MinPoints <= points)
-                .OrderByDescending(x => x.MinPoints)
-                .ThenByDescending(x => x.TierId)
-                .FirstOrDefaultAsync();
         }
     }
 }

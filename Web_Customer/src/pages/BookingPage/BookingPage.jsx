@@ -1,4 +1,4 @@
-﻿import { useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { BookingProvider, useBooking } from '../../context/BookingContext';
 import { useAuth } from '../../context/AuthContext';

@@ -1,7 +1,12 @@
 import { useState, useEffect } from 'react';
-import { cinemaApi, showtimeApi } from '../../../services/api';
+import { cinemaApi } from '../../../services/api';
 import { useBooking } from '../../../context/BookingContext';
 import './CinemaForMovieSelect.css';
+
+function toLocalDateString(value) {
+  const date = new Date(value);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
 
 export default function CinemaForMovieSelect() {
   const { selectCinemaForMovie, cinema: selectedCinema, movie } = useBooking();
@@ -21,50 +26,36 @@ export default function CinemaForMovieSelect() {
     let ignore = false;
     const movieId = movie.movieId ?? movie.MovieId ?? movie.id ?? movie.Id;
     setLoading(true);
-    // Fetch all showtimes for the selected movie, then find which cinemas have them
-    Promise.all([
-      cinemaApi.getAll(),
-      showtimeApi.getAll({ movieId, upcomingOnly: true, pageSize: 100 })
-    ])
-      .then(([allCinemas, showtimeData]) => {
+    const now = new Date();
+    const sevenDaysLater = new Date(now);
+    sevenDaysLater.setDate(now.getDate() + 7);
+
+    cinemaApi
+      .getByMovie(movieId, {
+        dateFrom: toLocalDateString(now),
+        dateTo: toLocalDateString(sevenDaysLater)
+      })
+      .then(data => {
         if (ignore) return;
-
-        const cinemaItems = Array.isArray(allCinemas)
-          ? allCinemas
-          : (allCinemas?.items ?? allCinemas?.data ?? []);
-        const showtimes = Array.isArray(showtimeData)
-          ? showtimeData
-          : (showtimeData?.items ?? showtimeData?.data ?? []);
-        const now = new Date();
-        const sevenDaysLater = new Date(now);
-        sevenDaysLater.setDate(now.getDate() + 7);
-
-        // Filter showtimes within next 7 days
-        const upcomingShowtimes = showtimes.filter(item => {
-          const startTime = item.showtime?.startTime ?? item.startTime;
-          if (!startTime) return false;
-          const st = new Date(startTime);
-          return st >= now && st <= sevenDaysLater;
-        });
-
-        // Count showtimes per cinema
+        const cinemaItems = Array.isArray(data) ? data : [];
         const counts = {};
-        upcomingShowtimes.forEach(item => {
-          const cId = item.cinema?.cinemaId ?? item.cinema?.CinemaId
-            ?? item.hall?.cinemaId ?? item.hall?.CinemaId;
-          if (cId) {
-            counts[cId] = (counts[cId] || 0) + 1;
+        const normalizedCinemas = cinemaItems.map(item => {
+          const cinemaId = item.cinemaId ?? item.CinemaId ?? item.id ?? item.Id;
+          if (cinemaId) {
+            counts[cinemaId] = item.showtimeCount ?? item.ShowtimeCount ?? 0;
           }
+          return {
+            ...item,
+            cinemaId,
+            name: item.name ?? item.cinemaName ?? item.CinemaName,
+            city: item.city ?? item.City,
+            district: item.district ?? item.ward ?? item.Ward,
+            address: item.address ?? item.Address,
+            imageUrl: item.imageUrl ?? item.ImageUrl
+          };
         });
         setCinemaShowtimeCounts(counts);
-
-        // Filter cinemas that have showtimes
-        const cinemaIdsWithShowtimes = new Set(Object.keys(counts).map(Number));
-        const filteredCinemas = cinemaItems.filter(c => {
-          const cinemaId = c.cinemaId ?? c.CinemaId ?? c.id ?? c.Id;
-          return cinemaIdsWithShowtimes.has(Number(cinemaId));
-        });
-        setCinemas(filteredCinemas);
+        setCinemas(normalizedCinemas);
       })
       .catch(console.error)
       .finally(() => {

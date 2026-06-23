@@ -1,6 +1,6 @@
-﻿import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useRef, useState } from 'react';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import { loyaltyApi } from '../../services/api';
 import { getUserEmail, getUserId } from '../../utils/authUser';
 import './Header.css';

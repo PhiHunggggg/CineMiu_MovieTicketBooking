@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth } from '../../context/useAuth';
 import './AuthPages.css';
 
 export default function LoginPage() {
@@ -11,10 +11,15 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const authBridgeUrl = (import.meta.env.VITE_AUTH_BRIDGE_URL || 'http://localhost:5000').replace(/\/$/, '');
 
-  // Redirect if already logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      navigate('/', { replace: true });
+    }
+  }, [isLoggedIn, navigate]);
+
   if (isLoggedIn) {
-    navigate('/', { replace: true });
     return null;
   }
 
@@ -126,14 +131,14 @@ export default function LoginPage() {
           <button
             className="auth-social-btn auth-social-btn--google"
             type="button"
-            onClick={() => window.location.href = 'http://localhost:5000/auth/google'}
+            onClick={() => window.location.href = `${authBridgeUrl}/auth/google`}
           >
             <span>G</span> Google
           </button>
           <button
             className="auth-social-btn auth-social-btn--facebook"
             type="button"
-            onClick={() => window.location.href = 'http://localhost:5000/auth/facebook'}
+            onClick={() => window.location.href = `${authBridgeUrl}/auth/facebook`}
           >
             <span>f</span> Facebook
           </button>

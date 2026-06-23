@@ -1,167 +1,95 @@
-using Entities;
-using Repository;
+using DTO.Theater;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Services.Theater;
 
 namespace API_Service.Controllers
 {
     [Route("api/categories")]
     [ApiController]
-    public class CategoriesController : ControllerBase
+    public class CategoriesController(ICategoriesService categoriesService) : ControllerBase
     {
-        private readonly SqlServerDbContext _context;
-
-        public CategoriesController(SqlServerDbContext context)
-        {
-            _context = context;
-        }
-
         [HttpGet]
         public async Task<IActionResult> GetAll()
         {
-            var categories = await _context.CinemaConcessionCategories.AsNoTracking()
-                .OrderBy(x => x.CatId)
-                .Select(x => ToResponse(x))
-                .ToListAsync();
-
-            return Ok(categories);
+            return Ok(await categoriesService.GetAllAsync());
         }
 
         [HttpGet("{id:int}")]
         public async Task<IActionResult> GetById(int id)
         {
-            if (!TryNormalizeCategoryId(id, out var categoryId, out var error))
+            try
             {
-                return BadRequest(new { message = error });
+                return Ok(await categoriesService.GetByIdAsync(id));
             }
-
-            var category = await _context.CinemaConcessionCategories.AsNoTracking()
-                .FirstOrDefaultAsync(x => x.CatId == categoryId);
-
-            return category == null
-                ? NotFound(new { message = "Category not found" })
-                : Ok(ToResponse(category));
+            catch (ArgumentOutOfRangeException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
+            }
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] CategoryDto dto)
+        public async Task<IActionResult> Create([FromBody] CategoryDTO.CategoryRequest request)
         {
-            if (string.IsNullOrWhiteSpace(dto.Name))
+            try
             {
-                return BadRequest(new { message = "Category name is required" });
+                var category = await categoriesService.CreateAsync(request);
+                return CreatedAtAction(nameof(GetById), new { id = category.Id }, category);
             }
-
-            var name = dto.Name.Trim();
-            if (await _context.CinemaConcessionCategories.AnyAsync(x => x.CatName == name))
+            catch (ArgumentException ex)
             {
-                return BadRequest(new { message = "Category already exists" });
+                return BadRequest(new { message = ex.Message });
             }
-
-            var nextId = await _context.CinemaConcessionCategories.AnyAsync()
-                ? await _context.CinemaConcessionCategories.MaxAsync(x => x.CatId) + 1
-                : 1;
-
-            if (nextId > byte.MaxValue)
+            catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = "Category id limit reached" });
+                return BadRequest(new { message = ex.Message });
             }
-
-            var category = new CinemaConcessionCategory
-            {
-                CatId = (byte)nextId,
-                CatName = name
-            };
-
-            _context.CinemaConcessionCategories.Add(category);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(GetById), new { id = category.CatId }, ToResponse(category));
         }
 
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] CategoryDto dto)
+        public async Task<IActionResult> Update(int id, [FromBody] CategoryDTO.CategoryRequest request)
         {
-            if (!TryNormalizeCategoryId(id, out var categoryId, out var error))
+            try
             {
-                return BadRequest(new { message = error });
+                return Ok(await categoriesService.UpdateAsync(id, request));
             }
-
-            if (string.IsNullOrWhiteSpace(dto.Name))
+            catch (ArgumentException ex)
             {
-                return BadRequest(new { message = "Category name is required" });
+                return BadRequest(new { message = ex.Message });
             }
-
-            var category = await _context.CinemaConcessionCategories.FindAsync(categoryId);
-            if (category == null)
+            catch (KeyNotFoundException ex)
             {
-                return NotFound(new { message = "Category not found" });
+                return NotFound(new { message = ex.Message });
             }
-
-            var name = dto.Name.Trim();
-            if (await _context.CinemaConcessionCategories.AnyAsync(x => x.CatId != categoryId && x.CatName == name))
+            catch (InvalidOperationException ex)
             {
-                return BadRequest(new { message = "Category already exists" });
+                return BadRequest(new { message = ex.Message });
             }
-
-            category.CatName = name;
-            await _context.SaveChangesAsync();
-
-            return Ok(ToResponse(category));
         }
 
         [HttpDelete("{id:int}")]
         public async Task<IActionResult> Delete(int id)
         {
-            if (!TryNormalizeCategoryId(id, out var categoryId, out var error))
+            try
             {
-                return BadRequest(new { message = error });
+                await categoriesService.DeleteAsync(id);
+                return NoContent();
             }
-
-            var category = await _context.CinemaConcessionCategories.FindAsync(categoryId);
-            if (category == null)
+            catch (ArgumentOutOfRangeException ex)
             {
-                return NotFound(new { message = "Category not found" });
+                return BadRequest(new { message = ex.Message });
             }
-
-            if (await _context.CinemaConcessionItems.AnyAsync(x => x.CatId == categoryId))
+            catch (KeyNotFoundException ex)
             {
-                return BadRequest(new { message = "Cannot delete category because it has products" });
+                return NotFound(new { message = ex.Message });
             }
-
-            _context.CinemaConcessionCategories.Remove(category);
-            await _context.SaveChangesAsync();
-
-            return NoContent();
+            catch (InvalidOperationException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
         }
-
-        private static object ToResponse(ConcessionCategory category)
-        {
-            return new
-            {
-                id = category.CatId,
-                name = category.CatName,
-                description = ""
-            };
-        }
-
-        private static bool TryNormalizeCategoryId(int id, out byte categoryId, out string? error)
-        {
-            if (id < byte.MinValue || id > byte.MaxValue)
-            {
-                categoryId = 0;
-                error = "Category id is invalid";
-                return false;
-            }
-
-            categoryId = (byte)id;
-            error = null;
-            return true;
-        }
-    }
-
-    public class CategoryDto
-    {
-        public string Name { get; set; } = "";
-        public string? Description { get; set; }
     }
 }

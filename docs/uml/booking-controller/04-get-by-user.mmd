@@ -1,0 +1,5 @@
+flowchart TD
+ A(["GET /api/bookings/user/{userId}"]) --> C["Controller gọi Service.GetByUserAsync"]
+ C --> S["Service gọi Repository.GetByUser"] --> R["Join dữ liệu, lọc Booking.UserId<br/>OrderBy CreatedAt giảm dần"]
+ R --> DB[("SQL Server<br/>Bookings, Users, ShowTimes, Movies,<br/>Halls, Cinemas, Tickets, Payments")]
+ DB --> M["Map List&lt;BookingResponse&gt;"] --> O(["200 OK<br/>Danh sách booking, có thể rỗng"])

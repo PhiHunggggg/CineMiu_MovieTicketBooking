@@ -27,17 +27,8 @@ namespace Repository.EFCore.Theater
 
         public async Task<List<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, string? status, bool upcomingOnly = false)
         {
-            var result = await GetShowtimesPageAsync(
-                keyword,
-                movieId,
-                cinemaId,
-                hallId,
-                date,
-                status,
-                1,
-                int.MaxValue,
-                upcomingOnly);
-            return result.Items;
+            var (items, _) = await GetShowtimesAsync(keyword, movieId, cinemaId, hallId, date, null, null, status, null, null, upcomingOnly);
+            return items;
         }
 
         public async Task<(List<ShowtimeDTO.ShowtimeResponse> Items, int TotalCount)> GetShowtimesPageAsync(
@@ -49,6 +40,22 @@ namespace Repository.EFCore.Theater
             string? status,
             int page,
             int pageSize,
+            bool upcomingOnly = false)
+        {
+            return await GetShowtimesAsync(keyword, movieId, cinemaId, hallId, date, null, null, status, page, pageSize, upcomingOnly);
+        }
+
+        public async Task<(List<ShowtimeDTO.ShowtimeResponse> Items, int TotalCount)> GetShowtimesAsync(
+            string? keyword,
+            int? movieId,
+            int? cinemaId,
+            int? hallId,
+            DateTime? date,
+            DateTime? dateFrom,
+            DateTime? dateTo,
+            string? status,
+            int? page,
+            int? pageSize,
             bool upcomingOnly = false)
         {
             var query =
@@ -91,6 +98,18 @@ namespace Repository.EFCore.Theater
                 var dayEnd = dayStart.AddDays(1);
                 query = query.Where(x => x.showtime.StartTime >= dayStart && x.showtime.StartTime < dayEnd);
             }
+            else
+            {
+                if (dateFrom.HasValue)
+                {
+                    query = query.Where(x => x.showtime.StartTime >= dateFrom.Value.Date);
+                }
+
+                if (dateTo.HasValue)
+                {
+                    query = query.Where(x => x.showtime.StartTime < dateTo.Value.Date.AddDays(1));
+                }
+            }
 
             if (!string.IsNullOrWhiteSpace(status))
             {
@@ -100,20 +119,20 @@ namespace Repository.EFCore.Theater
                 query = normalizedStatus switch
                 {
                     "upcoming" => query.Where(x =>
-                        x.showtime.Status != "cancelled" &&
-                        x.showtime.Status != "completed" &&
-                        x.showtime.Status != "selling" &&
+                        x.showtime.Status.ToLower() != "cancelled" &&
+                        x.showtime.Status.ToLower() != "completed" &&
+                        x.showtime.Status.ToLower() != "selling" &&
                         x.showtime.StartTime > now),
                     "showing" => query.Where(x =>
-                        x.showtime.Status != "cancelled" &&
-                        x.showtime.Status != "completed" &&
+                        x.showtime.Status.ToLower() != "cancelled" &&
+                        x.showtime.Status.ToLower() != "completed" &&
                         x.showtime.EndTime > now &&
-                        (x.showtime.Status == "selling" || x.showtime.StartTime <= now)),
+                        (x.showtime.Status.ToLower() == "selling" || x.showtime.StartTime <= now)),
                     "ended" => query.Where(x =>
-                        x.showtime.Status != "cancelled" &&
-                        (x.showtime.Status == "completed" || x.showtime.EndTime <= now)),
-                    "cancelled" => query.Where(x => x.showtime.Status == "cancelled"),
-                    _ => query.Where(x => x.showtime.Status == normalizedStatus)
+                        x.showtime.Status.ToLower() != "cancelled" &&
+                        (x.showtime.Status.ToLower() == "completed" || x.showtime.EndTime <= now)),
+                    "cancelled" => query.Where(x => x.showtime.Status.ToLower() == "cancelled"),
+                    _ => query.Where(x => x.showtime.Status.ToLower() == normalizedStatus)
                 };
             }
 
@@ -122,16 +141,19 @@ namespace Repository.EFCore.Theater
                 var now = DateTime.Now;
                 query = query.Where(x =>
                     x.showtime.EndTime > now &&
-                    x.showtime.Status != "cancelled" &&
-                    x.showtime.Status != "completed");
+                    x.showtime.Status.ToLower() != "cancelled" &&
+                    x.showtime.Status.ToLower() != "completed");
             }
 
             var totalCount = await query.CountAsync();
-            var rows = await query
-                .OrderByDescending(x => x.showtime.StartTime)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .ToListAsync();
+            query = query.OrderBy(x => x.showtime.StartTime);
+
+            if (page.HasValue && pageSize.HasValue)
+            {
+                query = query.Skip((page.Value - 1) * pageSize.Value).Take(pageSize.Value);
+            }
+
+            var rows = await query.ToListAsync();
 
             return (await ToResponsesAsync(rows), totalCount);
         }
@@ -274,10 +296,11 @@ namespace Repository.EFCore.Theater
         public async Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateUpcomingAsync(int days)
         {
             var movies = await context.Movies.AsNoTracking()
-                .Where(x => x.Status == "NowShowing" || x.Status == "now_showing" || x.Status == "nowshowing")
+                .Where(x => x.Status != null &&
+                            (x.Status.ToLower() == "nowshowing" || x.Status.ToLower() == "now_showing"))
                 .OrderBy(x => x.MovieId).ToListAsync();
             var halls = await context.Halls.AsNoTracking()
-                .Where(x => x.Status == "active").OrderBy(x => x.HallId).ToListAsync();
+                .Where(x => x.Status.ToLower() == "active").OrderBy(x => x.HallId).ToListAsync();
             if (movies.Count == 0 || halls.Count == 0) return [];
 
             var today = DateTime.Today;
@@ -297,7 +320,8 @@ namespace Repository.EFCore.Theater
                         var start = date.AddHours(slots[slotIndex]);
                         var movie = movies[(dayIndex * halls.Count * slots.Length + hallIndex * slots.Length + slotIndex) % movies.Count];
                         var end = start.AddMinutes(movie.DurationMins);
-                        if (existing.Concat(candidates).Any(x => x.HallId == hall.HallId && x.Status != "cancelled" &&
+                        if (existing.Concat(candidates).Any(x => x.HallId == hall.HallId &&
+                                !string.Equals(x.Status, "cancelled", StringComparison.OrdinalIgnoreCase) &&
                                 x.StartTime < end && start < x.EndTime)) continue;
                         candidates.Add(new ShowTime
                         {
@@ -403,9 +427,11 @@ namespace Repository.EFCore.Theater
         {
             var showtime = await context.ShowTimes.FirstOrDefaultAsync(x => x.ShowtimeId == showtimeId)
                 ?? throw new InvalidOperationException("Showtime not found");
-            if (showtime.Status is "cancelled" or "completed" || showtime.EndTime <= DateTime.Now)
+            if (string.Equals(showtime.Status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(showtime.Status, "completed", StringComparison.OrdinalIgnoreCase) ||
+                showtime.EndTime <= DateTime.Now)
                 throw new InvalidOperationException("Showtime is not available");
-            if (!await context.Halls.AsNoTracking().AnyAsync(x => x.HallId == showtime.HallId && x.Status == "active"))
+            if (!await context.Halls.AsNoTracking().AnyAsync(x => x.HallId == showtime.HallId && x.Status.ToLower() == "active"))
                 throw new InvalidOperationException("The hall is currently unavailable");
             if (!await context.Users.AnyAsync(x => x.UserId == userId && x.IsActive))
                 throw new InvalidOperationException("User not found");
@@ -518,7 +544,7 @@ namespace Repository.EFCore.Theater
                 var hasOverlap = await context.ShowTimes.AnyAsync(x =>
                     x.HallId == dto.HallId &&
                     (!currentShowtimeId.HasValue || x.ShowtimeId != currentShowtimeId.Value) &&
-                    x.Status != "cancelled" &&
+                    x.Status.ToLower() != "cancelled" &&
                     x.StartTime < endTime &&
                     dto.StartTime < x.EndTime);
 
@@ -719,7 +745,7 @@ namespace Repository.EFCore.Theater
                         TotalCols = item.Hall.TotalCols,
                         TotalSeats = item.Hall.TotalSeats,
                         ActiveSeatCount = item.Hall.TotalSeats,
-                        Status = item.Hall.Status
+                        Status = NormalizeStatus(item.Hall.Status)
                     },
                     Cinema = new CinemaDTO.CinemaResponse
                     {

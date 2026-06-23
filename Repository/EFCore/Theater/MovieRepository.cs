@@ -1,10 +1,6 @@
-using Azure;
-using Entities;
 using DTO.Theater;
+using Entities;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Repository.EFCore.Theater
 {
@@ -17,63 +13,52 @@ namespace Repository.EFCore.Theater
                 .OrderBy(x => x.GenreId)
                 .Select(x => new MovieDTO.GenreResponse
                 {
-                    GenreId = x.GenreId,
+                    GenreId = (int)x.GenreId,
                     GenreName = x.GenreName
                 })
                 .ToListAsync();
         }
 
-        public async Task<List<DTO.Theater.MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, string? status, int? cinemaId)
+        public async Task<List<MovieDTO.MovieResponse>> GetAllMoviesAsync(
+            string? keyword,
+            IReadOnlyCollection<string> statusAliases,
+            int? cinemaId)
         {
             var query = context.Movies.AsNoTracking();
 
-            if(!string.IsNullOrEmpty(keyword))
+            if (!string.IsNullOrWhiteSpace(keyword))
             {
+                keyword = keyword.Trim();
                 query = query.Where(m => m.Title.Contains(keyword) || (m.TitleEn != null && m.TitleEn.Contains(keyword)));
             }
 
-            // Accept both API aliases used by the customer web and database values.
-            if (!string.IsNullOrWhiteSpace(status))
+            if (statusAliases.Count > 0)
             {
-                var normalizedStatus = status.Trim().ToLowerInvariant() switch
-                {
-                    "now_showing" => "NowShowing",
-                    "coming_soon" => "ComingSoon",
-                    "ended" => "Ended",
-                    _ => status.Trim()
-                };
-
-                query = query.Where(x => x.Status == normalizedStatus);
+                query = query.Where(x => x.Status != null && statusAliases.Contains(x.Status));
             }
 
-            // Tìm theo id phim
             if (cinemaId.HasValue)
             {
                 var movieIds = context.ShowTimes
-                    .Join(context.Halls, s => s.HallId, h => h.HallId, (s, h) => new { s.MovieId, h.CinemaId })
+                    .Join(context.Halls, showtime => showtime.HallId, hall => hall.HallId,
+                        (showtime, hall) => new { showtime.MovieId, hall.CinemaId })
                     .Where(x => x.CinemaId == cinemaId.Value)
                     .Select(x => x.MovieId)
                     .Distinct();
-
-                query = query.Where(m => movieIds.Contains(m.MovieId));
+                query = query.Where(x => movieIds.Contains(x.MovieId));
             }
-            var movies = await query.ToListAsync();
+            var movies = await query.OrderByDescending(x => x.ReleaseDate).ToListAsync();
             var movieIdsList = movies.Select(m => m.MovieId).ToList();
             var movieGenres = await context.MovieGenres
-                 .AsNoTracking()
-                 .Where(mg => movieIdsList.Contains(mg.MovieId))
-                 .Join(context.Genres,
-                     mg => mg.GenreId,
-                     g => g.GenreId,
-                     (mg, g) => new { mg.MovieId, mg.GenreId, g.GenreName })
-                 .ToListAsync();
-
+                .AsNoTracking()
+                .Where(mg => movieIdsList.Contains(mg.MovieId))
+                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.MovieId, GenreId = (int)g.GenreId, g.GenreName })
+                .ToListAsync();
             var genreIdsLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreId);
-            var genreLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreName);
+            var genreNamesLookup = movieGenres.ToLookup(mg => mg.MovieId, mg => mg.GenreName);
             var items = movies.Select(x => new MovieDTO.MovieResponse
             {
                 MovieId = x.MovieId,
-                Genres = genreLookup[x.MovieId].ToList(),
                 Title = x.Title,
                 TitleEn = x.TitleEn,
                 CountryId = x.CountryId,
@@ -90,26 +75,32 @@ namespace Repository.EFCore.Theater
                 BannerUrl = x.BannerUrl,
                 TrailerUrl = x.TrailerUrl,
                 ImdbRating = x.ImdbRating,
-                Status = x.Status,
+                Status = NormalizeStatusForClient(x.Status),
 
-                GenreIds = genreIdsLookup[x.MovieId].ToList()
+                GenreIds = genreIdsLookup[x.MovieId].ToList(),
+                Genres = genreNamesLookup[x.MovieId].ToList()
             }).ToList();
 
             return items;
         }
-        public async Task<DTO.Theater.MovieDTO.MovieResponse> GetMovieByIdAsync(int movieId)
+        public async Task<MovieDTO.MovieDetailResponse> GetMovieByIdAsync(int movieId)
         {
             var movie = await context.Movies.AsNoTracking().FirstOrDefaultAsync(x => x.MovieId == movieId);
             if (movie == null)
             {
                 throw new ArgumentException("Movie not found");
             }
+            var genreIds = await context.MovieGenres
+                .AsNoTracking()
+                .Where(mg => mg.MovieId == movieId)
+                .Select(mg => (int)mg.GenreId)
+                .ToListAsync();
             var genres = await context.MovieGenres
                 .AsNoTracking()
                 .Where(mg => mg.MovieId == movieId)
-                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (mg, g) => new { mg.GenreId, g.GenreName })
+                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (_, g) => g.GenreName)
                 .ToListAsync();
-            return new MovieDTO.MovieResponse
+            var movieResponse = new MovieDTO.MovieResponse
             {
                 MovieId = movie.MovieId,
                 Title = movie.Title,
@@ -128,12 +119,20 @@ namespace Repository.EFCore.Theater
                 BannerUrl = movie.BannerUrl,
                 TrailerUrl = movie.TrailerUrl,
                 ImdbRating = movie.ImdbRating,
-                Status = movie.Status,
-                GenreIds = genres.Select(g => g.GenreId).ToList(),
-                Genres = genres.Select(g => g.GenreName).ToList()
+                Status = NormalizeStatusForClient(movie.Status),
+                GenreIds = genreIds,
+                Genres = genres
+            };
+
+            return new MovieDTO.MovieDetailResponse
+            {
+                Movie = movieResponse,
+                GenreIds = genreIds,
+                Genres = genres
             };
         }
-        public async Task CreateAsync(MovieDTO.MovieRequest movieRequest)
+
+        public async Task<MovieDTO.MovieResponse> CreateAsync(MovieDTO.MovieRequest movieRequest)
         {
             var validationError = await ValidateMovieDto(movieRequest);
             if (validationError != null)
@@ -172,14 +171,17 @@ namespace Repository.EFCore.Theater
                 var movieGenres = movieRequest.GenreIds.Distinct().Select(genreId => new MovieGenre
                 {
                     MovieId = movie.MovieId,
-                    GenreId = genreId
+                    GenreId = (byte)genreId
                 }).ToList();
 
                 context.MovieGenres.AddRange(movieGenres);
                 await context.SaveChangesAsync();
             }
+
+            return (await GetMovieByIdAsync(movie.MovieId)).Movie;
         }
-        public async Task UpdateAsync(int movieId, MovieDTO.MovieRequest dto)
+
+        public async Task<MovieDTO.MovieResponse> UpdateAsync(int movieId, MovieDTO.MovieRequest dto)
         {
             var validationError = await ValidateMovieDto(dto);
 
@@ -220,11 +222,13 @@ namespace Repository.EFCore.Theater
                 var newMovieGenres = dto.GenreIds.Distinct().Select(genreId => new MovieGenre
                 {
                     MovieId = movieId,
-                    GenreId = genreId
+                    GenreId = (byte)genreId
                 }).ToList();
                 context.MovieGenres.AddRange(newMovieGenres);
             }
             await context.SaveChangesAsync();
+
+            return (await GetMovieByIdAsync(movieId)).Movie;
         }
         public async Task DeleteAsync(int movieId)
         {
@@ -233,8 +237,40 @@ namespace Repository.EFCore.Theater
             {
                 throw new ArgumentException("Movie not found");
             }
+
+            if (await context.ShowTimes.AnyAsync(x => x.MovieId == movieId))
+            {
+                throw new InvalidOperationException("Cannot delete movie because it has showtimes");
+            }
+
+            var movieGenres = await context.MovieGenres.Where(x => x.MovieId == movieId).ToListAsync();
+            context.MovieGenres.RemoveRange(movieGenres);
             context.Movies.Remove(movie);
             await context.SaveChangesAsync();
+        }
+
+        private static string[] GetStatusAliases(string status)
+        {
+            return status.Trim().ToLowerInvariant() switch
+            {
+                "now_showing" or "nowshowing" => ["NowShowing", "now_showing", "nowshowing"],
+                "coming_soon" or "comingsoon" => ["ComingSoon", "coming_soon", "comingsoon"],
+                "ended" => ["Ended", "ended"],
+                _ => [status.Trim()]
+            };
+        }
+
+        private static string? NormalizeStatusForClient(string? status)
+        {
+            if (string.IsNullOrWhiteSpace(status)) return status;
+
+            return status.Trim().ToLowerInvariant() switch
+            {
+                "now_showing" or "nowshowing" => "now_showing",
+                "coming_soon" or "comingsoon" => "coming_soon",
+                "ended" => "ended",
+                _ => status
+            };
         }
         // Thêm, sửa, xóa phim sẽ cần thêm các phương thức tương ứng ở đây, ví dụ:
         private async Task<string?> ValidateMovieDto(MovieDTO.MovieRequest dto)
@@ -262,7 +298,13 @@ namespace Repository.EFCore.Theater
             if (dto.GenreIds?.Count > 0)
             {
                 var genreIds = dto.GenreIds.Distinct().ToList();
-                var existingCount = await context.Genres.CountAsync(x => genreIds.Contains(x.GenreId));
+                if (genreIds.Any(x => x < byte.MinValue || x > byte.MaxValue))
+                {
+                    return "One or more selected genres do not exist";
+                }
+
+                var genreBytes = genreIds.Select(x => (byte)x).ToList();
+                var existingCount = await context.Genres.CountAsync(x => genreBytes.Contains(x.GenreId));
                 if (existingCount != genreIds.Count)
                 {
                     return "One or more selected genres do not exist";

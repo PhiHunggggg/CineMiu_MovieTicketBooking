@@ -9,22 +9,20 @@ export default function LoginSuccess() {
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
+    const token = params.get('token');
     const user = {
       id: params.get('id'),
+      userId: params.get('id'),
       fullName: params.get('name'),
       email: params.get('email'),
       avatarUrl: params.get('avatar'),
     };
 
-    if (user.id) {
-      // Gọi hàm loginSocial để lưu thông tin vào context và localStorage
-      loginSocial(user);
-
-      // Chuyển hướng về trang chủ
+    if (user.id && token) {
+      loginSocial(user, token);
       navigate('/', { replace: true });
     } else {
-      // Nếu không thấy ID, quay lại trang login
-      const error = params.get('error');
+      const error = params.get('error') || 'Dang nhap mang xa hoi that bai';
       navigate('/login', { state: { error }, replace: true });
     }
   }, [location, navigate, loginSocial]);
@@ -39,7 +37,7 @@ export default function LoginSuccess() {
       gap: '15px'
     }}>
       <div className="auth-spinner" style={{ width: '40px', height: '40px', border: '3px solid #fb7185', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
-      <p>Đang xác thực tài khoản ...</p>
+      <p>Dang xac thuc tai khoan ...</p>
       <style>{`
         @keyframes spin { to { transform: rotate(360deg); } }
       `}</style>

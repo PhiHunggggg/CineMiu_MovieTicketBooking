@@ -36,6 +36,16 @@ namespace API_Service.Controllers
             });
         }
 
+        [HttpGet("by-movie/{movieId:int}")]
+        public Task<IActionResult> GetByMovie(
+            int movieId,
+            [FromQuery] DateTime? dateFrom,
+            [FromQuery] DateTime? dateTo)
+        {
+            return ExecuteAsync(async () =>
+                Ok(await _cinemaService.GetByMovieAsync(movieId, dateFrom, dateTo)));
+        }
+
         [HttpGet("{cinemaId:int}/halls")]
         public Task<IActionResult> GetHalls(int cinemaId)
         {
@@ -71,31 +81,22 @@ namespace API_Service.Controllers
         }
 
         [HttpPost("{cinemaId:int}/halls")]
-        public Task<IActionResult> CreateHall(
-            int cinemaId,
-            [FromBody] HallDTO.HallRequest request)
+        public Task<IActionResult> CreateHall(int cinemaId, [FromBody] HallDTO.HallRequest request)
         {
             request.CinemaId = cinemaId;
-            return ExecuteAsync(async () =>
-                Ok(await _hallService.CreateAsync(request)));
+            return ExecuteAsync(async () => Ok(await _hallService.CreateAsync(request)));
         }
 
         [HttpPut("halls/{hallId:int}")]
-        public Task<IActionResult> UpdateHall(
-            int hallId,
-            [FromBody] HallDTO.HallRequest request)
+        public Task<IActionResult> UpdateHall(int hallId, [FromBody] HallDTO.HallRequest request)
         {
-            return ExecuteAsync(async () =>
-                Ok(await _hallService.UpdateAsync(hallId, request)));
+            return ExecuteAsync(async () => Ok(await _hallService.UpdateAsync(hallId, request)));
         }
 
         [HttpPatch("halls/{hallId:int}/status")]
-        public Task<IActionResult> UpdateHallStatus(
-            int hallId,
-            [FromBody] HallDTO.HallStatusRequest request)
+        public Task<IActionResult> UpdateHallStatus(int hallId, [FromBody] HallDTO.HallStatusRequest request)
         {
-            return ExecuteAsync(async () =>
-                Ok(await _hallService.UpdateStatusAsync(hallId, request.Status)));
+            return ExecuteAsync(async () => Ok(await _hallService.UpdateStatusAsync(hallId, request.Status)));
         }
 
         [HttpDelete("halls/{hallId:int}")]
@@ -111,29 +112,22 @@ namespace API_Service.Controllers
         [HttpGet("halls/{hallId:int}/seats")]
         public Task<IActionResult> GetSeats(int hallId)
         {
-            return ExecuteAsync(async () =>
-                Ok(await _hallService.GetSeatsAsync(hallId)));
+            return ExecuteAsync(async () => Ok(await _hallService.GetSeatsAsync(hallId)));
         }
 
         [HttpPost("halls/{hallId:int}/seats")]
-        public Task<IActionResult> CreateSeat(
-            int hallId,
-            [FromBody] HallDTO.SeatLayoutItemRequest request)
+        public Task<IActionResult> CreateSeat(int hallId, [FromBody] HallDTO.SeatLayoutItemRequest request)
         {
-            return ExecuteAsync(async () =>
-                Ok(await _hallService.CreateSeatAsync(hallId, request)));
+            return ExecuteAsync(async () => Ok(await _hallService.CreateSeatAsync(hallId, request)));
         }
 
         [HttpPut("halls/{hallId:int}/seats")]
-        public Task<IActionResult> UpdateSeats(
-            int hallId,
-            [FromBody] List<HallDTO.SeatLayoutItemRequest> requests)
+        public Task<IActionResult> UpdateSeats(int hallId, [FromBody] List<HallDTO.SeatLayoutItemRequest> requests)
         {
-            return ExecuteAsync(async () =>
-                Ok(await _hallService.ReplaceSeatsAsync(hallId, requests)));
+            return ExecuteAsync(async () => Ok(await _hallService.ReplaceSeatsAsync(hallId, requests)));
         }
 
-        private async Task<IActionResult> ExecuteAsync(Func<Task<IActionResult>> action)
+        private static async Task<IActionResult> ExecuteAsync(Func<Task<IActionResult>> action)
         {
             try
             {
@@ -141,15 +135,15 @@ namespace API_Service.Controllers
             }
             catch (KeyNotFoundException exception)
             {
-                return NotFound(new { message = exception.Message });
+                return new NotFoundObjectResult(new { message = exception.Message });
             }
             catch (InvalidOperationException exception)
             {
-                return Conflict(new { message = exception.Message });
+                return new ConflictObjectResult(new { message = exception.Message });
             }
             catch (ArgumentException exception)
             {
-                return BadRequest(new { message = exception.Message });
+                return new BadRequestObjectResult(new { message = exception.Message });
             }
         }
     }

@@ -1,0 +1,17 @@
+flowchart TD
+ A(["POST /api/bookings/{id}/cancel"]) --> C1["Controller lấy userId, role, cinemaId từ claims"]
+ C1 --> S["Service.Cancel"] --> R1["Repository đọc Booking"] --> DB1[("SQL Server<br/>Bookings")]
+ DB1 --> D1{"Booking tồn tại?"}
+ D1 -- Không --> N(["404 Not Found"])
+ D1 -- Có --> D2{"Owner, admin hoặc cinema_manager?"}
+ D2 -- Không --> F(["403 Forbidden"])
+ D2 -- Có --> D3{"Là cinema_manager?"}
+ D3 -- Có --> R2["Join ShowTimes + Halls<br/>kiểm tra đúng Cinema"] --> DB2[("SQL Server<br/>Bookings, ShowTimes, Halls")]
+ DB2 --> D4{"Đúng cinema?"}
+ D4 -- Không --> F
+ D4 -- Có --> D5
+ D3 -- Không --> D5{"Đã cancelled?"}
+ D5 -- Có --> B(["400 Bad Request"])
+ D5 -- Không --> R3["Set cancelled, CancelledAt, reason<br/>đọc Ticket.SeatId và xóa SeatLocks"]
+ R3 --> DB3[("SQL Server<br/>Bookings, Tickets, SeatLocks")]
+ DB3 --> C2["Controller gọi Service.GetByIdAsync"] --> O(["200 OK<br/>BookingResponse"])

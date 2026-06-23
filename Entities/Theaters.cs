@@ -1,4 +1,4 @@
-﻿using Entities.Audit;
+using Entities.Audit;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
@@ -7,7 +7,7 @@ using System.Text;
 
 namespace Entities
 {
-    [Table("cinema_chains")]
+    [Table("Chains")]
     public class Chain
     {
         [Key]

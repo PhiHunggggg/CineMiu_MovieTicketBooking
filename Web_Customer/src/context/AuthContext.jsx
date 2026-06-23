@@ -1,59 +1,17 @@
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authApi } from '../services/api';
+import { STORAGE_KEY, getStoredAuth } from './AuthStorage';
 
-const AuthContext = createContext(null);
-const STORAGE_KEY = 'cineverse_auth';
+export const AuthContext = createContext(null);
 
-function normalizeUser(payload = {}) {
-  return {
-    userId: payload.userId ?? payload.UserId ?? payload.id ?? payload.Id,
-    id: payload.id ?? payload.Id ?? payload.userId ?? payload.UserId,
-    roleId: payload.roleId ?? payload.RoleId,
-    cinemaId: payload.cinemaId ?? payload.CinemaId,
-    role: payload.role ?? payload.Role,
-    fullName: payload.fullName ?? payload.FullName,
-    email: payload.email ?? payload.Email,
-    phone: payload.phone ?? payload.Phone,
-    avatarUrl: payload.avatarUrl ?? payload.AvatarUrl,
-    dateOfBirth: payload.dateOfBirth ?? payload.DateOfBirth,
-    gender: payload.gender ?? payload.Gender,
-  };
-}
+export function useAuth() {
+  const ctx = useContext(AuthContext);
 
-function normalizeAuthResult(result = {}) {
-  const token = result.token ?? result.Token ?? result.accessToken ?? result.AccessToken ?? null;
-  const userPayload = result.user ?? result.User ?? result;
-  return {
-    ...result,
-    token,
-    user: normalizeUser(userPayload),
-  };
-}
-
-function getStoredAuth() {
-  try {
-    const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    if (stored?.token || stored?.Token) {
-      return normalizeAuthResult(stored);
-    }
-  } catch {
-    // Fall back to legacy keys below.
+  if (!ctx) {
+    throw new Error('useAuth must be used within AuthProvider');
   }
 
-  const legacyToken = localStorage.getItem('token');
-  const legacyUser = localStorage.getItem('user');
-  if (!legacyToken || !legacyUser) return null;
-
-  try {
-    return normalizeAuthResult({
-      token: legacyToken,
-      user: JSON.parse(legacyUser),
-    });
-  } catch {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    return null;
-  }
+  return ctx;
 }
 
 function storeAuth(auth) {
@@ -73,10 +31,31 @@ export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => getStoredAuth()?.token || null);
   const [loading, setLoading] = useState(true);
 
+  const normalizeAuthResult = useCallback((result) => {
+    const tokenValue = result?.token ?? result?.Token ?? null;
+    const userValue = result?.user ?? {
+      userId: result?.userId ?? result?.UserId,
+      roleId: result?.roleId ?? result?.RoleId,
+      cinemaId: result?.cinemaId ?? result?.CinemaId,
+      fullName: result?.fullName ?? result?.FullName,
+      email: result?.email ?? result?.Email,
+      phone: result?.phone ?? result?.Phone,
+      avatarUrl: result?.avatarUrl ?? result?.AvatarUrl,
+      role: result?.role ?? result?.Role,
+    };
+
+    return {
+      ...result,
+      token: tokenValue,
+      user: userValue,
+    };
+  }, []);
+
+  // Validate token on mount
   useEffect(() => {
     if (!token) {
-      setLoading(false);
-      return;
+        setLoading(false);
+        return;
     }
 
     authApi.getProfile()
@@ -95,20 +74,18 @@ export function AuthProvider({ children }) {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const login = useCallback(async (email, password) => {
-    const auth = normalizeAuthResult(await authApi.login({ email, password }));
-    storeAuth(auth);
+    const result = await authApi.login({ email, password });
+    const auth = normalizeAuthResult(result);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
     setToken(auth.token);
     setUser(auth.user);
     return auth;
-  }, []);
+  }, [normalizeAuthResult]);
 
   const register = useCallback(async (data) => {
-    const auth = normalizeAuthResult(await authApi.register(data));
-    storeAuth(auth);
-    setToken(auth.token);
-    setUser(auth.user);
-    return auth;
-  }, []);
+    await authApi.register(data);
+    return login(data.email, data.password);
+  }, [login]);
 
   const logout = useCallback(() => {
     clearStoredAuth();
@@ -146,10 +123,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
 }

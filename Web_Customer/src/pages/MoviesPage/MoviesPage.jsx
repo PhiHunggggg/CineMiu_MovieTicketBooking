@@ -123,7 +123,7 @@ export default function MoviesPage() {
 
               <div className="movie-modal__layout">
                 {selectedMovie.posterUrl && (
-                  <img src={selectedMovie.posterUrl} alt="" className="movie-modal__poster" />
+                  <img src={selectedMovie.posterUrl} alt="" className="movie-modal__poster" onError={event => { event.currentTarget.style.display = 'none'; }} />
                 )}
                 <div className="movie-modal__info">
                   <h2 className="movie-modal__title">{selectedMovie.title}</h2>

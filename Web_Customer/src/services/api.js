@@ -59,10 +59,18 @@ async function request(endpoint, options = {}) {
   return data;
 }
 
+function getItems(response) {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.Items)) return response.Items;
+  if (Array.isArray(response?.data)) return response.data;
+  return [];
+}
+
 export const authApi = {
   register: (data) => request('/auth/register', { method: 'POST', body: JSON.stringify(data) }),
   login: (data) => request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
-  getProfile: () => request('/auth/me'),
+  getProfile: () => request('/auth/profile'),
   updateProfile: (data) => request('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
 };
 
@@ -72,6 +80,12 @@ export const cinemaApi = {
       return request(`/cinemas${buildQuery({ city: params })}`);
     }
     return request(`/cinemas${buildQuery(params)}`);
+  },
+  getByMovie: (movieId, params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params.dateTo) qs.set('dateTo', params.dateTo);
+    return request(`/cinemas/by-movie/${movieId}?${qs.toString()}`);
   },
   getById: (id) => request(`/cinemas/${id}`),
   getSeats: (hallId) => request(`/cinemas/halls/${hallId}/seats`),
@@ -83,9 +97,28 @@ export const movieApi = {
 };
 
 export const showtimeApi = {
-  getAll: (params = {}) => request(`/showtimes${buildQuery(params)}`),
+  getAll: (params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.movieId) qs.set('movieId', params.movieId);
+    if (params.cinemaId) qs.set('cinemaId', params.cinemaId);
+    if (params.hallId) qs.set('hallId', params.hallId);
+    if (params.status) qs.set('status', params.status);
+    if (params.date) qs.set('date', params.date);
+    if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params.dateTo) qs.set('dateTo', params.dateTo);
+    if (params.upcomingOnly) qs.set('upcomingOnly', params.upcomingOnly);
+    if (params.page) qs.set('page', params.page);
+    qs.set('pageSize', params.pageSize || 100);
+    return request(`/showtimes?${qs.toString()}`).then(getItems);
+  },
   getById: (id) => request(`/showtimes/${id}`),
-  getSeats: (id, params = {}) => request(`/showtimes/${id}/seats${buildQuery(params)}`),
+  getSeats: (id, params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.userId) qs.set('userId', params.userId);
+    if (params.sessionId) qs.set('sessionId', params.sessionId);
+    const query = qs.toString();
+    return request(`/showtimes/${id}/seats${query ? `?${query}` : ''}`);
+  },
   lockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/locks`, { method: 'POST', body: JSON.stringify(data) }),
   unlockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/unlocks`, { method: 'POST', body: JSON.stringify(data) }),
 };
@@ -125,3 +158,4 @@ export const loyaltyApi = {
   getTransactions: (userId) => request(`/loyalty/users/${userId}/transactions`),
   getTransactionsByEmail: (email) => request(`/loyalty/by-email/transactions${buildQuery({ email })}`),
 };
+

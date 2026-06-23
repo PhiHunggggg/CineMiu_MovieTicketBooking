@@ -1,0 +1,22 @@
+flowchart TD
+ A(["POST /api/bookings/{id}/check-in<br/>Authorize CheckInRoles"]) --> D0{"Có userId hợp lệ trong claims?"}
+ D0 -- Không --> U(["401 Unauthorized"])
+ D0 -- Có --> S1["Service.CheckInAsync"] --> R1["Repository đọc Booking, User,<br/>Tickets theo TicketId/QR nếu có"]
+ R1 --> DB1[("SQL Server<br/>Bookings, Users, Tickets")]
+ DB1 --> D1{"Booking tồn tại?"}
+ D1 -- Không --> N(["404 Booking not found"])
+ D1 -- Có --> D2{"User active và RoleId 2/3/4?"}
+ D2 -- Không --> F(["403 Forbidden"])
+ D2 -- Có --> D3{"Booking cancelled hoặc chưa paid?"}
+ D3 -- Có --> B(["400 Bad Request"])
+ D3 -- Không --> D4{"Có ticket phù hợp?"}
+ D4 -- Không --> E(["404 ticket hoặc 409 tất cả đã check-in"])
+ D4 -- Có --> D5{"Ticket cụ thể đã dùng?"}
+ D5 -- Có --> E2(["409 Ticket already checked in"])
+ D5 -- Không --> S2["Set IsUsed, UsedAt, CheckedBy"]
+ S2 --> R2["Repository kiểm tra còn ticket chưa dùng"] --> DB2[("SQL Server<br/>Tickets")]
+ DB2 --> D6{"Còn ticket chưa dùng?"}
+ D6 -- Không --> S3["Booking.Status = completed"]
+ D6 -- Có --> R3["SaveChangesAsync"]
+ S3 --> R3 --> DB3[("SQL Server<br/>Tickets, Bookings")]
+ DB3 --> O(["200 OK<br/>Check-in result + tickets"])

@@ -1,4 +1,4 @@
-﻿import './PointHistory.css';
+import './PointHistory.css';
 
 export default function PointHistory({ transactions = [] }) {
   return (

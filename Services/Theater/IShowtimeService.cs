@@ -6,7 +6,7 @@ namespace Services.Theater
 {
     public interface IShowtimeService
     {
-        Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, string? status, int page = 1, int pageSize = 12, bool upcomingOnly = false);
+        Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, DateTime? dateFrom, DateTime? dateTo, string? status, int page = 1, int pageSize = 12, bool upcomingOnly = false);
         Task<ShowtimeDTO.ShowtimeResponse> GetShowtimeByIdAsync(int showtimeId);
         Task CreateAsync(ShowtimeDTO.ShowtimeRequest showtimeRequest);
         Task UpdateAsync(int showtimeId, ShowtimeDTO.ShowtimeRequest showtimeRequest);

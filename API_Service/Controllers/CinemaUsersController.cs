@@ -1,42 +1,23 @@
-using Common;
-using Entities;
-using Repository;
+using DTO.Authen;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
+using Services.Authen;
 
-  namespace API_Service.Controllers
+namespace API_Service.Controllers
 {
     [Route("api/cinema-users")]
     [ApiController]
-    public class CinemaUsersController : ControllerBase
+    public class CinemaUsersController(ICinemaUserService cinemaUserService) : ControllerBase
     {
-        private readonly SqlServerDbContext _context;
-
-        public CinemaUsersController(SqlServerDbContext context)
-        {
-            _context = context;
-        }
-
         [HttpGet]
-        public async Task<IActionResult> GetAll([FromQuery] string? keyword)
-        {
-            var query = _context.CinemaUsers.AsNoTracking();
-            if (!string.IsNullOrWhiteSpace(keyword))
-            {
-                query = query.Where(x => x.FullName.Contains(keyword) || x.Email.Contains(keyword) || (x.Phone != null && x.Phone.Contains(keyword)));
-            }
-
-            return Ok(await query.OrderByDescending(x => x.CreatedAt).ToListAsync());
-        }
+        public Task<IActionResult> GetAll([FromQuery] string? keyword) =>
+            ExecuteAsync(() => cinemaUserService.GetAllAsync(keyword), Ok);
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetById(int id)
-        {
-            var user = await _context.CinemaUsers.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == id);
-            return user == null ? NotFound(new { message = "User not found" }) : Ok(user);
-        }
+        public Task<IActionResult> GetById(int id) =>
+            ExecuteAsync(() => cinemaUserService.GetByIdAsync(id), Ok);
 
         [HttpPost]
+<<<<<<< HEAD
         public async Task<IActionResult> Create([FromBody] CinemaUserDto dto)
         {
             if (string.IsNullOrWhiteSpace(dto.FullName) || string.IsNullOrWhiteSpace(dto.Email))
@@ -119,23 +100,38 @@ using Microsoft.EntityFrameworkCore;
             await _context.SaveChangesAsync();
             return Ok(user);
         }
+=======
+        public Task<IActionResult> Create([FromBody] CinemaUserDTO.UserRequest request) =>
+            ExecuteAsync(
+                () => cinemaUserService.CreateAsync(request),
+                user => CreatedAtAction(nameof(GetById), new { id = user.UserId }, user));
+
+        [HttpPut("{id:int}")]
+        public Task<IActionResult> Update(int id, [FromBody] CinemaUserDTO.UserRequest request) =>
+            ExecuteAsync(() => cinemaUserService.UpdateAsync(id, request), Ok);
+>>>>>>> origin/develop
 
         [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
+        public Task<IActionResult> Delete(int id) =>
+            ExecuteAsync(() => cinemaUserService.DeactivateAsync(id), Ok);
+
+        private async Task<IActionResult> ExecuteAsync<T>(Func<Task<T>> action, Func<T, IActionResult> onSuccess)
         {
-            var user = await _context.CinemaUsers.FindAsync(id);
-            if (user == null)
+            try
             {
-                return NotFound(new { message = "User not found" });
+                return onSuccess(await action());
             }
-
-            user.IsActive = false;
-            user.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(new { message = "User deactivated" });
+            catch (KeyNotFoundException exception)
+            {
+                return NotFound(new { message = exception.Message });
+            }
+            catch (ArgumentException exception)
+            {
+                return BadRequest(new { message = exception.Message });
+            }
         }
     }
+<<<<<<< HEAD
 
     public class CinemaUserDto
     {
@@ -151,4 +147,6 @@ using Microsoft.EntityFrameworkCore;
         public string? Gender { get; set; }
         public bool? IsActive { get; set; }
     }
+=======
+>>>>>>> origin/develop
 }

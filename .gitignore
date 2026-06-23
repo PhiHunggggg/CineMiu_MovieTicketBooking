@@ -366,3 +366,6 @@ FodyWeavers.xsd
 # Local CLI/package caches used by Codex builds
 .dotnet-home/
 .nuget-packages/
+
+FodyWeavers.xsd.codex-run/
+.codex-run/

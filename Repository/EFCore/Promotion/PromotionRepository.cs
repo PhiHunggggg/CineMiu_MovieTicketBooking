@@ -38,6 +38,19 @@ namespace Repository.EFCore.Promotion
             return promotions.Select(x => ToResponse(x, now)).ToList();
         }
 
+        public async Task<List<PromotionDto.PromotionResponse>> GetForApiAsync(bool activeOnly)
+        {
+            var query = context.Promotions.AsNoTracking();
+            var now = DateTime.UtcNow;
+            if (activeOnly)
+            {
+                query = query.Where(x => x.IsActive && x.ValidFrom <= now && x.ValidTo >= now);
+            }
+
+            var promotions = await query.OrderByDescending(x => x.ValidFrom).ToListAsync();
+            return promotions.Select(x => ToResponse(x, now)).ToList();
+        }
+
         public async Task<List<PromotionDto.PromotionResponse>> GetActiveAsync(int limit)
         {
             limit = Math.Clamp(limit, 1, 100);
@@ -66,7 +79,18 @@ namespace Repository.EFCore.Promotion
             return promotion == null ? null : ToResponse(promotion, DateTime.UtcNow);
         }
 
-        public async Task CreateAsync(PromotionDto.PromotionRequest request)
+        public async Task<PromotionDto.PromotionResponse?> GetByCodeAsync(string promoCode)
+        {
+            var code = NormalizePromoCode(promoCode);
+            var promotion = await context.Promotions.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.PromoCode.ToUpper() == code);
+            return promotion == null ? null : ToResponse(promotion, DateTime.UtcNow);
+        }
+
+        public Task<int> CountUserUsesAsync(int promoId, int userId) => context.PromoUsages.AsNoTracking()
+            .CountAsync(x => x.PromoId == promoId && x.UserId == userId);
+
+        public async Task<PromotionDto.PromotionResponse> CreateAsync(PromotionDto.PromotionRequest request)
         {
             var validationError = await ValidatePromotionDto(request);
             if (validationError != null)
@@ -88,21 +112,22 @@ namespace Repository.EFCore.Promotion
                 PerUserLimit = request.PerUserLimit,
                 ValidFrom = request.ValidFrom,
                 ValidTo = request.ValidTo,
-                IsActive = request.IsActive,
+                IsActive = request.IsActive ?? true,
                 CreatedAt = now,
                 UpdatedAt = now
             };
 
             context.Promotions.Add(promotion);
             await context.SaveChangesAsync();
+            return ToResponse(promotion, DateTime.UtcNow);
         }
 
-        public async Task UpdateAsync(int promoId, PromotionDto.PromotionRequest request)
+        public async Task<PromotionDto.PromotionResponse> UpdateAsync(int promoId, PromotionDto.PromotionRequest request)
         {
             var promotion = await context.Promotions.FirstOrDefaultAsync(x => x.PromoId == promoId);
             if (promotion == null)
             {
-                throw new ArgumentException("Voucher not found");
+                throw new KeyNotFoundException("Promotion not found");
             }
 
             var validationError = await ValidatePromotionDto(request, promoId, promotion.TotalUses);
@@ -121,10 +146,11 @@ namespace Repository.EFCore.Promotion
             promotion.PerUserLimit = request.PerUserLimit;
             promotion.ValidFrom = request.ValidFrom;
             promotion.ValidTo = request.ValidTo;
-            promotion.IsActive = request.IsActive;
+            promotion.IsActive = request.IsActive ?? promotion.IsActive;
             promotion.UpdatedAt = DateTime.UtcNow;
 
             await context.SaveChangesAsync();
+            return ToResponse(promotion, DateTime.UtcNow);
         }
 
         public async Task DeleteAsync(int promoId)
@@ -132,21 +158,11 @@ namespace Repository.EFCore.Promotion
             var promotion = await context.Promotions.FirstOrDefaultAsync(x => x.PromoId == promoId);
             if (promotion == null)
             {
-                throw new ArgumentException("Voucher not found");
+                throw new KeyNotFoundException("Promotion not found");
             }
 
-            var hasUsages = promotion.TotalUses > 0 ||
-                await context.PromoUsages.AnyAsync(x => x.PromoId == promoId);
-
-            if (hasUsages)
-            {
-                promotion.IsActive = false;
-                promotion.UpdatedAt = DateTime.UtcNow;
-            }
-            else
-            {
-                context.Promotions.Remove(promotion);
-            }
+            promotion.IsActive = false;
+            promotion.UpdatedAt = DateTime.UtcNow;
 
             await context.SaveChangesAsync();
         }
@@ -159,16 +175,6 @@ namespace Repository.EFCore.Promotion
                 return "Voucher code is required";
             }
 
-            if (promoCode.Length < 3 || promoCode.Length > 64)
-            {
-                return "Voucher code must be between 3 and 64 characters";
-            }
-
-            if (promoCode.Any(x => !IsAllowedCodeCharacter(x)))
-            {
-                return "Voucher code can only contain letters, numbers, hyphen, and underscore";
-            }
-
             var codeExists = await context.Promotions.AnyAsync(x =>
                 x.PromoCode == promoCode &&
                 (!currentPromoId.HasValue || x.PromoId != currentPromoId.Value));
@@ -178,54 +184,24 @@ namespace Repository.EFCore.Promotion
             }
 
             var discountType = NormalizeDiscountType(dto.DiscountType);
-            if (discountType != "percent" && discountType != "fixed")
+            if (discountType != "percent" && discountType != "fixed" && discountType != "free_combo")
             {
-                return "Discount type must be percent or fixed";
+                return "Discount type is invalid";
             }
 
-            if (dto.DiscountValue <= 0)
+            if (dto.DiscountValue < 0)
             {
-                return "Discount value must be greater than zero";
-            }
-
-            if (discountType == "percent" && dto.DiscountValue > 100)
-            {
-                return "Percent discount cannot exceed 100";
+                return "Discount and minimum order must be greater than or equal to 0";
             }
 
             if (dto.MinOrderAmt < 0)
             {
-                return "Minimum order amount cannot be negative";
+                return "Discount and minimum order must be greater than or equal to 0";
             }
 
-            if (dto.MaxDiscount.HasValue && dto.MaxDiscount.Value <= 0)
+            if (dto.ValidTo < dto.ValidFrom)
             {
-                return "Maximum discount must be greater than zero";
-            }
-
-            if (dto.UsageLimit.HasValue && dto.UsageLimit.Value <= 0)
-            {
-                return "Usage limit must be greater than zero";
-            }
-
-            if (dto.UsageLimit.HasValue && dto.UsageLimit.Value < currentTotalUses)
-            {
-                return "Usage limit cannot be less than total uses";
-            }
-
-            if (dto.PerUserLimit <= 0)
-            {
-                return "Per-user limit must be greater than zero";
-            }
-
-            if (dto.ValidFrom == default || dto.ValidTo == default)
-            {
-                return "Voucher validity period is required";
-            }
-
-            if (dto.ValidTo <= dto.ValidFrom)
-            {
-                return "Voucher end date must be after start date";
+                return "Valid to must be after valid from";
             }
 
             return null;
@@ -272,9 +248,7 @@ namespace Repository.EFCore.Promotion
 
         private static decimal? NormalizeMaxDiscount(PromotionDto.PromotionRequest request)
         {
-            return NormalizeDiscountType(request.DiscountType) == "percent"
-                ? request.MaxDiscount
-                : null;
+            return request.MaxDiscount;
         }
 
         private static string? OptionalText(string? value)
@@ -283,12 +257,5 @@ namespace Repository.EFCore.Promotion
             return string.IsNullOrWhiteSpace(trimmed) ? null : trimmed;
         }
 
-        private static bool IsAllowedCodeCharacter(char value)
-        {
-            return (value >= 'A' && value <= 'Z') ||
-                (value >= '0' && value <= '9') ||
-                value == '-' ||
-                value == '_';
-        }
     }
 }

@@ -25,5 +25,6 @@ namespace Services.Authen
         Task UpdateAsync(Users user, string? password);
         Task DeleteAsync(int id);
         Task<string?> ResolveRoleName(byte roleId);
+        Task<object> GetProfile(int userId);
     }
 }

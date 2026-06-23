@@ -1,4 +1,4 @@
-﻿import './LoyaltyCard.css';
+import './LoyaltyCard.css';
 
 export default function LoyaltyCard({ membership }) {
   if (!membership) return null;
