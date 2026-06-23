@@ -71,10 +71,7 @@ export default function SeatSelect() {
         const showtimeId = getShowtimeId(showtime);
         if (!showtimeId) return;
 
-        setTimeout(() => {
-            fetchSeats(showtimeId);
-        }, 0);
-    }, [showtime, hall, user]);
+        fetchSeats(showtimeId);
     }, [showtime, hall, user]);
 
     const showtimeId = getShowtimeId(showtime);

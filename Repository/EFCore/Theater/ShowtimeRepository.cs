@@ -25,7 +25,38 @@ namespace Repository.EFCore.Theater
             "original"
         };
 
-        public async Task<List<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, DateTime? dateFrom, DateTime? dateTo, string? status)
+        public async Task<List<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, string? status, bool upcomingOnly = false)
+        {
+            var (items, _) = await GetShowtimesAsync(keyword, movieId, cinemaId, hallId, date, null, null, status, null, null, upcomingOnly);
+            return items;
+        }
+
+        public async Task<(List<ShowtimeDTO.ShowtimeResponse> Items, int TotalCount)> GetShowtimesPageAsync(
+            string? keyword,
+            int? movieId,
+            int? cinemaId,
+            int? hallId,
+            DateTime? date,
+            string? status,
+            int page,
+            int pageSize,
+            bool upcomingOnly = false)
+        {
+            return await GetShowtimesAsync(keyword, movieId, cinemaId, hallId, date, null, null, status, page, pageSize, upcomingOnly);
+        }
+
+        public async Task<(List<ShowtimeDTO.ShowtimeResponse> Items, int TotalCount)> GetShowtimesAsync(
+            string? keyword,
+            int? movieId,
+            int? cinemaId,
+            int? hallId,
+            DateTime? date,
+            DateTime? dateFrom,
+            DateTime? dateTo,
+            string? status,
+            int? page,
+            int? pageSize,
+            bool upcomingOnly = false)
         {
             var query =
                 from showtime in context.ShowTimes.AsNoTracking()
@@ -115,9 +146,14 @@ namespace Repository.EFCore.Theater
             }
 
             var totalCount = await query.CountAsync();
-            var rows = await query
-                .OrderBy(x => x.showtime.StartTime)
-                .ToListAsync();
+            query = query.OrderBy(x => x.showtime.StartTime);
+
+            if (page.HasValue && pageSize.HasValue)
+            {
+                query = query.Skip((page.Value - 1) * pageSize.Value).Take(pageSize.Value);
+            }
+
+            var rows = await query.ToListAsync();
 
             return (await ToResponsesAsync(rows), totalCount);
         }

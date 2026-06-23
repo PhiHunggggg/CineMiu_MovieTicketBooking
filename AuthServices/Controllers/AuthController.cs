@@ -1,5 +1,4 @@
 ﻿using DTO.Authen;
-using DTO.Authen;
 using Entities;
 using Libs.Auth;
 using Microsoft.AspNetCore.Authorization;
@@ -32,7 +31,6 @@ namespace AuthServices.Controllers
                 _secretKey = _configuration["Jwt:SecretKey"] ?? "default_secret_key_12345";
             }
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginDto.LoginRequest request)
         public async Task<IActionResult> Login([FromBody] LoginDto.LoginRequest request)
         {
             if (request == null)
@@ -142,14 +140,13 @@ namespace AuthServices.Controllers
         [HttpPut("profile")]
         public async Task<IActionResult> UpdateProfile([FromBody] UserRequest request)
         {
-            var user = await GetAuthenticatedUser(trackChanges: true);
-            if (user == null)
+            var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (!int.TryParse(claimValue, out var userId))
             {
                 return Unauthorized(new { message = "User ID not found in token" });
             }
 
-            var user = await _userService.GetById(userId);
-            await _userService.UpdateUserAsync(userId,request);
+            await _userService.UpdateUserAsync(userId, request);
             return await Profile();
         }
 

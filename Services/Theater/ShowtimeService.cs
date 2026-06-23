@@ -1,6 +1,8 @@
 using DTO.Common;
 using DTO.Theater;
 using Entities;
+using Microsoft.EntityFrameworkCore;
+using Repository;
 using Repository.EFCore.Theater;
 
 namespace Services.Theater
@@ -9,15 +11,14 @@ namespace Services.Theater
         IShowtimeRepository showtimeRepository,
         SqlServerDbContext context) : IShowtimeService
     {
-        public async Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, DateTime? dateFrom, DateTime? dateTo, string? status, int page = 1, int pageSize = 12)
+        public async Task<Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>> GetAllShowtimesAsync(string? keyword, int? movieId, int? cinemaId, int? hallId, DateTime? date, DateTime? dateFrom, DateTime? dateTo, string? status, int page = 1, int pageSize = 12, bool upcomingOnly = false)
         {
             page = Math.Max(page, 1);
             pageSize = Math.Clamp(pageSize, 1, 100);
 
-            var showtimes = await showtimeRepository.GetAllShowtimesAsync(keyword, movieId, cinemaId, hallId, date, dateFrom, dateTo, status);
-            var totalCount = showtimes.Count;
+            var (items, totalCount) = await showtimeRepository.GetShowtimesAsync(
+                keyword, movieId, cinemaId, hallId, date, dateFrom, dateTo, status, page, pageSize, upcomingOnly);
             var totalPages = (int)Math.Ceiling(totalCount / (double)pageSize);
-            var items = showtimes.Skip((page - 1) * pageSize).Take(pageSize).ToList();
 
             return new Paging.PaginationResponse<ShowtimeDTO.ShowtimeResponse>
             {
@@ -139,13 +140,13 @@ namespace Services.Theater
 
             var createdIds = created.Select(x => x.ShowtimeId).ToHashSet();
             var responses = await showtimeRepository.GetAllShowtimesAsync(
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null);
             return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
         }
 
     public async Task<ShowtimeDTO.ShowtimeResponse?> GetShowtimeDetailsAsync(int id)
     {
-        try { return await repository.GetShowtimeByIdAsync(id); }
+        try { return await showtimeRepository.GetShowtimeByIdAsync(id); }
         catch (ArgumentException) { return null; }
     }
 
@@ -157,7 +158,7 @@ namespace Services.Theater
             throw new InvalidOperationException("This hall is currently unavailable");
         if (details.Status is "cancelled" or "completed" or "ended" || details.EndTime <= DateTime.Now)
             throw new InvalidOperationException("This showtime is no longer available");
-        return await repository.GetSeatsAsync(id, details, userId, sessionId);
+        return await showtimeRepository.GetSeatsAsync(id, details, userId, sessionId);
     }
 
     public Task<List<Bookings.SeatLock>> LockSeatsAsync(
@@ -165,13 +166,13 @@ namespace Services.Theater
     {
         ValidateSession(userId, sessionId);
         if (seatIds.Count == 0) throw new ArgumentException("At least one seat is required");
-        return repository.LockSeatsAsync(id, userId, sessionId.Trim(), seatIds, minutes);
+        return showtimeRepository.LockSeatsAsync(id, userId, sessionId.Trim(), seatIds, minutes);
     }
 
     public Task UnlockSeatsAsync(int id, int userId, string sessionId)
     {
         ValidateSession(userId, sessionId);
-        return repository.UnlockSeatsAsync(id, userId, sessionId.Trim());
+        return showtimeRepository.UnlockSeatsAsync(id, userId, sessionId.Trim());
     }
 
     private static void ValidateSession(int userId, string? sessionId)
@@ -179,4 +180,5 @@ namespace Services.Theater
         if (userId <= 0 || string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("UserId and SessionId are required");
     }
+}
 }

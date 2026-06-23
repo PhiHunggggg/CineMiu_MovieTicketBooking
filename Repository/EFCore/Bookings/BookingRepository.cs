@@ -354,7 +354,7 @@ namespace Repository.EFCore.Bookings
                     throw new Exception("This showtime is no longer available");
                 }
 
-                var hall = await context.Halls.AsNoTracking()
+                var hall = await _dbset.Halls.AsNoTracking()
                     .FirstOrDefaultAsync(x => x.HallId == showtime.HallId);
                 if (hall == null || !string.Equals(hall.Status, "active", StringComparison.OrdinalIgnoreCase))
                 {
@@ -384,25 +384,25 @@ namespace Repository.EFCore.Bookings
                     throw new Exception("Some selected seats are not available");
                 }
                 var seatTypeIds = seats.Select(x => x.SeatTypeId).Distinct().ToList();
-                var seatTypes = await context.SeatTypes.AsNoTracking()
+                var seatTypes = await _dbset.SeatTypes.AsNoTracking()
                     .Where(x => seatTypeIds.Contains(x.SeatTypeId))
                     .ToDictionaryAsync(x => x.SeatTypeId);
-                var standardSeatTypeId = await context.SeatTypes.AsNoTracking()
+                var standardSeatTypeId = await _dbset.SeatTypes.AsNoTracking()
                     .Where(x => x.TypeName.ToLower().Contains("standard"))
                     .OrderBy(x => x.SeatTypeId)
                     .Select(x => x.SeatTypeId)
                     .FirstOrDefaultAsync();
                 if (standardSeatTypeId == 0)
                 {
-                    standardSeatTypeId = await context.SeatTypes.AsNoTracking()
+                    standardSeatTypeId = await _dbset.SeatTypes.AsNoTracking()
                         .OrderBy(x => x.SeatTypeId)
                         .Select(x => x.SeatTypeId)
                         .FirstOrDefaultAsync();
                 }
 
-                var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
+                var dayTypes = await _dbset.DayTypes.AsNoTracking().ToListAsync();
                 var priceSeatTypeIds = seatTypeIds.Append(standardSeatTypeId).Distinct().ToList();
-                var priceRules = await context.TicketPrices.AsNoTracking()
+                var priceRules = await _dbset.TicketPrices.AsNoTracking()
                     .Where(x =>
                         x.CinemaId == hall.CinemaId &&
                         x.HallTypeId == hall.HallTypeId &&

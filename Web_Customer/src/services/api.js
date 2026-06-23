@@ -151,6 +151,4 @@ export const loyaltyApi = {
   getTransactions: (userId) => request(`/loyalty/users/${userId}/transactions`),
   getTransactionsByEmail: (email) => request(`/loyalty/by-email/transactions${buildQuery({ email })}`),
 };
-  getTransactionsByEmail: (email) => request(`/loyalty/transactions-by-email?email=${encodeURIComponent(email)}`),
-};
 

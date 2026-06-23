@@ -15,12 +15,14 @@ public class ShowtimesController(IShowtimeService service) : ApiControllerBase
         [FromQuery] int? cinemaId,
         [FromQuery] int? hallId,
         [FromQuery] DateTime? date,
+        [FromQuery] DateTime? dateFrom,
+        [FromQuery] DateTime? dateTo,
         [FromQuery] string? status,
         [FromQuery] int page = 1,
         [FromQuery] int pageSize = 12,
         [FromQuery] bool upcomingOnly = false) =>
         Ok(await service.GetAllShowtimesAsync(
-            keyword, movieId, cinemaId, hallId, date, status, page, pageSize, upcomingOnly));
+            keyword, movieId, cinemaId, hallId, date, dateFrom, dateTo, status, page, pageSize, upcomingOnly));
 
     [HttpPost("generate")]
     public async Task<IActionResult> Generate([FromQuery] int days = 5) =>
