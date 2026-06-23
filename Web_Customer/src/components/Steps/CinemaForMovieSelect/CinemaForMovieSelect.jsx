@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { cinemaApi, showtimeApi } from '../../../services/api';
+import { cinemaApi } from '../../../services/api';
 import { useBooking } from '../../../context/BookingContext';
 import './CinemaForMovieSelect.css';
 

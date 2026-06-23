@@ -1,10 +1,6 @@
-using Azure;
-using Entities;
 using DTO.Theater;
+using Entities;
 using Microsoft.EntityFrameworkCore;
-using System;
-using System.Collections.Generic;
-using System.Text;
 
 namespace Repository.EFCore.Theater
 {
@@ -23,7 +19,10 @@ namespace Repository.EFCore.Theater
                 .ToListAsync();
         }
 
-        public async Task<List<DTO.Theater.MovieDTO.MovieResponse>> GetAllMoviesAsync(string? keyword, string? status, int? cinemaId)
+        public async Task<List<MovieDTO.MovieResponse>> GetAllMoviesAsync(
+            string? keyword,
+            IReadOnlyCollection<string> statusAliases,
+            int? cinemaId)
         {
             var query = context.Movies.AsNoTracking();
 
@@ -39,16 +38,15 @@ namespace Repository.EFCore.Theater
                 query = query.Where(x => x.Status != null && statusAliases.Contains(x.Status));
             }
 
-            // Tìm theo id phim
             if (cinemaId.HasValue)
             {
                 var movieIds = context.ShowTimes
-                    .Join(context.Halls, s => s.HallId, h => h.HallId, (s, h) => new { s.MovieId, h.CinemaId })
+                    .Join(context.Halls, showtime => showtime.HallId, hall => hall.HallId,
+                        (showtime, hall) => new { showtime.MovieId, hall.CinemaId })
                     .Where(x => x.CinemaId == cinemaId.Value)
                     .Select(x => x.MovieId)
                     .Distinct();
-
-                query = query.Where(m => movieIds.Contains(m.MovieId));
+                query = query.Where(x => movieIds.Contains(x.MovieId));
             }
             var movies = await query.OrderByDescending(x => x.ReleaseDate).ToListAsync();
             var movieIdsList = movies.Select(m => m.MovieId).ToList();
@@ -69,6 +67,7 @@ namespace Repository.EFCore.Theater
                 ReleaseDate = x.ReleaseDate,
                 EndDate = x.EndDate,
                 AgeRating = x.AgeRating,
+                Status = x.Status,
                 Synopsis = x.Synopsis,
                 Director = x.Director,
                 CastMembers = x.CastMembers,

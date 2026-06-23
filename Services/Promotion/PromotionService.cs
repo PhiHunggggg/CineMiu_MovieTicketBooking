@@ -26,6 +26,9 @@ namespace Services.Promotion
             };
         }
 
+        public Task<List<PromotionDto.PromotionResponse>> GetForApiAsync(bool activeOnly) =>
+            promotionRepository.GetForApiAsync(activeOnly);
+
         public async Task<List<PromotionDto.PromotionResponse>> GetActiveAsync(int limit = 8)
         {
             return await promotionRepository.GetActiveAsync(limit);
@@ -36,21 +39,64 @@ namespace Services.Promotion
             var promotion = await promotionRepository.GetByIdAsync(promoId);
             if (promotion == null)
             {
-                throw new ArgumentException("Voucher not found");
+                throw new KeyNotFoundException("Promotion not found");
             }
 
             return promotion;
         }
 
-        public async Task CreateAsync(PromotionDto.PromotionRequest request)
+        public async Task<PromotionDto.PromotionResponse> GetByCodeAsync(string promoCode)
         {
-            await promotionRepository.CreateAsync(request);
+            var promotion = await promotionRepository.GetByCodeAsync(promoCode);
+            return promotion ?? throw new KeyNotFoundException("Promotion not found");
         }
 
-        public async Task UpdateAsync(int promoId, PromotionDto.PromotionRequest request)
+        public async Task<PromotionDto.ValidatePromotionResponse> ValidateAsync(
+            PromotionDto.ValidatePromotionRequest request)
         {
-            await promotionRepository.UpdateAsync(promoId, request);
+            var promotion = await promotionRepository.GetByCodeAsync(request.PromoCode);
+            var now = DateTime.UtcNow;
+            if (promotion == null || !promotion.IsActive || promotion.ValidFrom > now || promotion.ValidTo < now)
+            {
+                throw new ArgumentException("Voucher không tồn tại hoặc đã hết hạn.");
+            }
+
+            if (request.OrderAmount < promotion.MinOrderAmt)
+            {
+                throw new ArgumentException($"Đơn hàng tối thiểu {promotion.MinOrderAmt:n0}đ để dùng voucher này.");
+            }
+
+            if (promotion.UsageLimit.HasValue && promotion.TotalUses >= promotion.UsageLimit.Value)
+            {
+                throw new ArgumentException("Voucher đã hết lượt sử dụng.");
+            }
+
+            if (request.UserId > 0 &&
+                await promotionRepository.CountUserUsesAsync(promotion.PromoId, request.UserId) >= promotion.PerUserLimit)
+            {
+                throw new ArgumentException("Bạn đã sử dụng hết số lượt của voucher này.");
+            }
+
+            var discount = string.Equals(promotion.DiscountType, "percent", StringComparison.OrdinalIgnoreCase)
+                ? request.OrderAmount * promotion.DiscountValue / 100m
+                : promotion.DiscountValue;
+            if (promotion.MaxDiscount.HasValue)
+            {
+                discount = Math.Min(discount, promotion.MaxDiscount.Value);
+            }
+
+            return new PromotionDto.ValidatePromotionResponse
+            {
+                Promotion = promotion,
+                DiscountAmount = Math.Clamp(discount, 0, request.OrderAmount)
+            };
         }
+
+        public Task<PromotionDto.PromotionResponse> CreateAsync(PromotionDto.PromotionRequest request) =>
+            promotionRepository.CreateAsync(request);
+
+        public Task<PromotionDto.PromotionResponse> UpdateAsync(int promoId, PromotionDto.PromotionRequest request) =>
+            promotionRepository.UpdateAsync(promoId, request);
 
         public async Task DeleteAsync(int promoId)
         {

@@ -38,7 +38,20 @@ namespace DTO.Promotion
             public byte PerUserLimit { get; set; } = 1;
             public DateTime ValidFrom { get; set; }
             public DateTime ValidTo { get; set; }
-            public bool IsActive { get; set; } = true;
+            public bool? IsActive { get; set; }
+        }
+
+        public class ValidatePromotionRequest
+        {
+            public string PromoCode { get; set; } = "";
+            public int UserId { get; set; }
+            public decimal OrderAmount { get; set; }
+        }
+
+        public class ValidatePromotionResponse
+        {
+            public PromotionResponse Promotion { get; set; } = new();
+            public decimal DiscountAmount { get; set; }
         }
     }
 }

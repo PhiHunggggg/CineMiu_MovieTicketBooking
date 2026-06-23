@@ -1,4 +1,6 @@
+﻿
 ﻿using DTO.Theater;
+
 using Microsoft.AspNetCore.Mvc;
 using Services.Theater;
 
@@ -67,7 +69,10 @@ namespace API_Service.Controllers
         }
 
         [HttpDelete("{id:int}")]
-        public async Task<IActionResult> Delete(int id)
+        public Task<IActionResult> Delete(int id) =>
+            ExecuteAsync(() => movieService.DeleteAsync(id), NoContent);
+
+        private async Task<IActionResult> ExecuteAsync<T>(Func<Task<T>> action, Func<T, IActionResult> onSuccess)
         {
             try
             {

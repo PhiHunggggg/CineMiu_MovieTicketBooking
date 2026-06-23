@@ -81,6 +81,13 @@ export const cinemaApi = {
     }
     return request(`/cinemas${buildQuery(params)}`);
   },
+  getAll: (city) => request(`/cinemas${city ? `?city=${encodeURIComponent(city)}` : ''}`),
+  getByMovie: (movieId, params = {}) => {
+    const qs = new URLSearchParams();
+    if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
+    if (params.dateTo) qs.set('dateTo', params.dateTo);
+    return request(`/cinemas/by-movie/${movieId}?${qs.toString()}`);
+  },
   getById: (id) => request(`/cinemas/${id}`),
   getSeats: (hallId) => request(`/cinemas/halls/${hallId}/seats`),
 };

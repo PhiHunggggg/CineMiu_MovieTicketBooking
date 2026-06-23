@@ -14,6 +14,7 @@ namespace DTO.Theater
 
         public class MovieResponse
         {
+            public int Id => MovieId;
             public int MovieId { get; set; }
             public List<string>? Genres { get; set; }
             public string Title { get; set; } = "";

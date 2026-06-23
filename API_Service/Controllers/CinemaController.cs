@@ -1,12 +1,14 @@
 using DTO.Theater;
+using DTO.Theater;
 using Microsoft.AspNetCore.Mvc;
+using Services.Theater;
 using Services.Theater;
 
 namespace API_Service.Controllers
 {
     [Route("api/cinemas")]
     [ApiController]
-    public class CinemasController : ControllerBase
+    public class CinemasController(ICinemaService cinemaService) : ControllerBase
     {
         private readonly ICinemaService _cinemaService;
         private readonly IHallService _hallService;

@@ -54,6 +54,7 @@ namespace Services.Theater
         public async Task<object> GetAllAsync(int? movieId, int? cinemaId, DateTime? date, int? seatTypeId, int? dayTypeId, int? hallTypeId)
         {
             var results = await GetAllShowtimesAsync(null, movieId, cinemaId, null, date, null, null, null, 1, 1000);
+            var results = await GetAllShowtimesAsync(null, movieId, cinemaId, null, date, null, null, null, 1, 1000);
             return results;
         }
 
@@ -140,7 +141,7 @@ namespace Services.Theater
 
             var createdIds = created.Select(x => x.ShowtimeId).ToHashSet();
             var responses = await showtimeRepository.GetAllShowtimesAsync(
-                null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null);
             return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
         }
 
