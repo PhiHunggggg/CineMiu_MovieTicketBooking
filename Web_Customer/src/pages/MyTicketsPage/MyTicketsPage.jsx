@@ -5,10 +5,25 @@ import { getUserEmail, getUserId } from '../../utils/authUser';
 import './MyTicketsPage.css';
 
 const statusLabels = {
-  pending: 'Chờ thanh to�n',
-  confirmed: 'Đ� thanh to�n',
-  cancelled: 'Đ� hủy',
+  pending: 'Chờ thanh toán',
+  confirmed: 'Đã thanh toán',
+  paid: 'Đã thanh toán',
+  completed: 'Hoàn tất',
+  cancelled: 'Đã hủy',
 };
+
+const methodLabels = {
+  1: 'MoMo',
+  2: 'ZaloPay',
+  3: 'VNPay',
+  4: 'Visa / Mastercard',
+  5: 'ATM nội địa',
+  6: 'VietQR',
+};
+
+function pick(...values) {
+  return values.find(value => value !== undefined && value !== null && value !== '');
+}
 
 function formatPrice(value) {
   return new Intl.NumberFormat('vi-VN').format(value || 0) + 'đ';
@@ -26,16 +41,40 @@ function formatDateTime(value) {
 }
 
 function normalizeTicket(raw) {
-  if (raw?.booking) return raw;
+  if (raw?.booking || raw?.Booking) {
+    const booking = raw.booking ?? raw.Booking;
+    return {
+      booking,
+      movie: {
+        title: pick(raw.movie?.title, raw.Movie?.Title, booking.movieTitle, booking.MovieTitle),
+        posterUrl: pick(raw.movie?.posterUrl, raw.Movie?.PosterUrl, booking.moviePosterUrl, booking.MoviePosterUrl, booking.posterUrl, booking.PosterUrl),
+      },
+      cinema: {
+        cinemaName: pick(raw.cinema?.cinemaName, raw.Cinema?.CinemaName, booking.cinemaName, booking.CinemaName),
+      },
+      hall: {
+        hallName: pick(raw.hall?.hallName, raw.Hall?.HallName, booking.hallName, booking.HallName),
+      },
+      showtime: {
+        startTime: pick(raw.showtime?.startTime, raw.Showtime?.StartTime, booking.startTime, booking.StartTime),
+      },
+      tickets: raw.tickets ?? raw.Tickets ?? booking.tickets ?? booking.Tickets ?? [],
+      concessions: raw.concessions ?? raw.Concessions ?? booking.concessions ?? booking.Concessions ?? [],
+      payments: raw.payments ?? raw.Payments ?? booking.payments ?? booking.Payments ?? [],
+      pointTransactions: raw.pointTransactions ?? raw.PointTransactions ?? booking.pointTransactions ?? booking.PointTransactions ?? [],
+    };
+  }
+
   return {
     booking: raw,
-    movie: { title: raw?.movieTitle ?? raw?.MovieTitle },
-    cinema: { cinemaName: raw?.cinemaName ?? raw?.CinemaName },
-    hall: { hallName: raw?.hallName ?? raw?.HallName },
-    showtime: { startTime: raw?.startTime ?? raw?.StartTime },
+    movie: { title: pick(raw?.movieTitle, raw?.MovieTitle), posterUrl: pick(raw?.moviePosterUrl, raw?.MoviePosterUrl) },
+    cinema: { cinemaName: pick(raw?.cinemaName, raw?.CinemaName) },
+    hall: { hallName: pick(raw?.hallName, raw?.HallName) },
+    showtime: { startTime: pick(raw?.startTime, raw?.StartTime) },
     tickets: raw?.tickets ?? raw?.Tickets ?? [],
     concessions: raw?.concessions ?? raw?.Concessions ?? [],
     payments: raw?.payments ?? raw?.Payments ?? [],
+    pointTransactions: raw?.pointTransactions ?? raw?.PointTransactions ?? [],
   };
 }
 
@@ -61,42 +100,48 @@ export default function MyTicketsPage() {
     const request = userId ? bookingApi.getByUser(userId) : bookingApi.getByEmail(email);
     request
       .then(data => setTickets(Array.isArray(data) ? data.map(normalizeTicket) : []))
-      .catch(err => setError(err.message || 'Kh�ng thể tải danh s�ch v�.'))
+      .catch(err => setError(err.message || 'Không thể tải danh sách vé.'))
       .finally(() => setLoading(false));
   }, [userId, email]);
 
   if (loading) {
-    return <div className="my-tickets-page container">Đang tải v�...</div>;
+    return <div className="my-tickets-page container">Đang tải vé...</div>;
   }
 
   return (
     <div className="my-tickets-page container">
       <div className="my-tickets-page__header">
         <div>
-          <h1>V� của t�i</h1>
-          <p>Theo d�i to�n bộ v�, thanh to�n, ghế v� điểm đ� nhận.</p>
+          <h1>Vé của tôi</h1>
+          <p>Theo dõi toàn bộ vé, thanh toán, ghế và điểm đã nhận.</p>
         </div>
-        <span>{tickets.length} v�</span>
+        <span>{tickets.length} vé</span>
       </div>
 
       {error && <p className="my-tickets-page__error">{error}</p>}
 
       {tickets.length === 0 ? (
         <div className="my-tickets-page__empty">
-          <h2>Chưa c� v� n�o</h2>
-          <p>Những v� bạn đặt th�nh c�ng sẽ xuất hiện tại đ�y.</p>
+          <h2>Chưa có vé nào</h2>
+          <p>Những vé bạn đặt thành công sẽ xuất hiện tại đây.</p>
         </div>
       ) : (
         <div className="my-tickets-page__list">
           {tickets.map(item => {
             const booking = item.booking;
+            const bookingId = pick(booking.bookingId, booking.BookingId);
             const seats = item.tickets || [];
             const concessions = item.concessions || [];
             const payments = item.payments || [];
-            const points = item.pointTransactions?.reduce((sum, tx) => sum + (tx.points || 0), 0) || 0;
+            const latestPayment = payments[0];
+            const methodId = latestPayment?.methodId ?? latestPayment?.MethodId;
+            const points = item.pointTransactions
+              ?.filter(tx => (tx.transactionType ?? tx.TransactionType) === 'earn')
+              .reduce((sum, tx) => sum + (tx.points ?? tx.Points ?? 0), 0) || 0;
+            const status = (booking.status ?? booking.Status ?? '').toLowerCase();
 
             return (
-              <article key={booking.bookingId} className="ticket-card">
+              <article key={bookingId} className="ticket-card">
                 <div className="ticket-card__poster">
                   {item.movie?.posterUrl ? (
                     <img src={item.movie.posterUrl} alt={item.movie.title} />
@@ -108,17 +153,17 @@ export default function MyTicketsPage() {
                 <div className="ticket-card__body">
                   <div className="ticket-card__top">
                     <div>
-                      <h2>{item.movie?.title || 'V� xem phim'}</h2>
-                      <p>{item.cinema?.cinemaName || '-'} � {item.hall?.hallName || '-'}</p>
+                      <h2>{item.movie?.title || 'Vé xem phim'}</h2>
+                      <p>{item.cinema?.cinemaName || '-'} - {item.hall?.hallName || '-'}</p>
                     </div>
-                    <span className={`ticket-card__status ticket-card__status--${(booking.status ?? booking.Status ?? '').toLowerCase()}`}>
-                      {statusLabels[(booking.status ?? booking.Status ?? '').toLowerCase()] || booking.status || booking.Status}
+                    <span className={`ticket-card__status ticket-card__status--${status}`}>
+                      {statusLabels[status] || booking.status || booking.Status}
                     </span>
                   </div>
 
                   <div className="ticket-card__grid">
                     <div>
-                      <span>M� v�</span>
+                      <span>Mã vé</span>
                       <strong>{booking.bookingCode ?? booking.BookingCode}</strong>
                     </div>
                     <div>
@@ -130,7 +175,7 @@ export default function MyTicketsPage() {
                       <strong>{seats.map(x => x.seat?.seatCode ?? x.seatCode ?? x.SeatCode).filter(Boolean).join(', ') || '-'}</strong>
                     </div>
                     <div>
-                      <span>Thanh to�n</span>
+                      <span>Thanh toán</span>
                       <strong>{formatPrice(booking.finalAmount ?? booking.FinalAmount ?? booking.totalAmount ?? booking.TotalAmount)}</strong>
                     </div>
                     <div>
@@ -139,7 +184,7 @@ export default function MyTicketsPage() {
                     </div>
                     <div>
                       <span>Phương thức</span>
-                      <strong>{payments[0]?.methodId || payments[0]?.MethodId ? `#${payments[0]?.methodId ?? payments[0]?.MethodId}` : '-'}</strong>
+                      <strong>{methodLabels[methodId] || (methodId ? `#${methodId}` : '-')}</strong>
                     </div>
                   </div>
 

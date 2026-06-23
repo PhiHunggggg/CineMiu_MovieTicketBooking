@@ -54,7 +54,14 @@ export default function SeatSelect() {
                 lookupApi.getAll(),
             ]);
 
-            setShowtimeSeats(Array.isArray(seats) ? seats : []);
+            const seatList = Array.isArray(seats)
+              ? seats
+              : Array.isArray(seats?.seats)
+                ? seats.seats
+                : Array.isArray(seats?.Seats)
+                  ? seats.Seats
+                  : [];
+            setShowtimeSeats(seatList);
             setSeatTypes(lookups.seatTypes || []);
             if (seatList.length === 0) {
               setError('Phòng chiếu này chưa có dữ liệu ghế. Vui lòng cấu hình sơ đồ ghế trước khi mở bán.');

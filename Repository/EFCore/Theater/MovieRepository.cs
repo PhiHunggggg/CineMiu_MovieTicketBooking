@@ -32,9 +32,8 @@ namespace Repository.EFCore.Theater
                 query = query.Where(m => m.Title.Contains(keyword) || (m.TitleEn != null && m.TitleEn.Contains(keyword)));
             }
 
-            if (!string.IsNullOrWhiteSpace(status))
+            if (statusAliases.Count > 0)
             {
-                var statusAliases = GetStatusAliases(status);
                 query = query.Where(x => x.Status != null && statusAliases.Contains(x.Status));
             }
 
@@ -67,7 +66,6 @@ namespace Repository.EFCore.Theater
                 ReleaseDate = x.ReleaseDate,
                 EndDate = x.EndDate,
                 AgeRating = x.AgeRating,
-                Status = x.Status,
                 Synopsis = x.Synopsis,
                 Director = x.Director,
                 CastMembers = x.CastMembers,
@@ -85,7 +83,7 @@ namespace Repository.EFCore.Theater
 
             return items;
         }
-        public async Task<DTO.Theater.MovieDTO.MovieResponse> GetMovieByIdAsync(int movieId)
+        public async Task<MovieDTO.MovieDetailResponse> GetMovieByIdAsync(int movieId)
         {
             var movie = await context.Movies.AsNoTracking().FirstOrDefaultAsync(x => x.MovieId == movieId);
             if (movie == null)
@@ -102,7 +100,7 @@ namespace Repository.EFCore.Theater
                 .Where(mg => mg.MovieId == movieId)
                 .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (_, g) => g.GenreName)
                 .ToListAsync();
-            return new MovieDTO.MovieResponse
+            var movieResponse = new MovieDTO.MovieResponse
             {
                 MovieId = movie.MovieId,
                 Title = movie.Title,
@@ -125,8 +123,16 @@ namespace Repository.EFCore.Theater
                 GenreIds = genreIds,
                 Genres = genres
             };
+
+            return new MovieDTO.MovieDetailResponse
+            {
+                Movie = movieResponse,
+                GenreIds = genreIds,
+                Genres = genres
+            };
         }
-        public async Task CreateAsync(MovieDTO.MovieRequest movieRequest)
+
+        public async Task<MovieDTO.MovieResponse> CreateAsync(MovieDTO.MovieRequest movieRequest)
         {
             var validationError = await ValidateMovieDto(movieRequest);
             if (validationError != null)
@@ -171,8 +177,11 @@ namespace Repository.EFCore.Theater
                 context.MovieGenres.AddRange(movieGenres);
                 await context.SaveChangesAsync();
             }
+
+            return (await GetMovieByIdAsync(movie.MovieId)).Movie;
         }
-        public async Task UpdateAsync(int movieId, MovieDTO.MovieRequest dto)
+
+        public async Task<MovieDTO.MovieResponse> UpdateAsync(int movieId, MovieDTO.MovieRequest dto)
         {
             var validationError = await ValidateMovieDto(dto);
 
@@ -218,6 +227,8 @@ namespace Repository.EFCore.Theater
                 context.MovieGenres.AddRange(newMovieGenres);
             }
             await context.SaveChangesAsync();
+
+            return (await GetMovieByIdAsync(movieId)).Movie;
         }
         public async Task DeleteAsync(int movieId)
         {

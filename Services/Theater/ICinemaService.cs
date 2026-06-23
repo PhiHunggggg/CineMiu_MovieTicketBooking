@@ -8,7 +8,6 @@ namespace Services.Theater
         Task<List<CinemaDTO.ChainResponse>> GetChainsAsync();
         Task<List<CinemaDTO.CinemaResponse>> GetAllAsync(string? city, bool activeOnly = true);
         Task<Paging.PaginationResponse<CinemaDTO.CinemaResponse>> GetAllCinemasAsync(string? keyword, string? city, bool? isActive, int page = 1, int pageSize = 12);
-        Task<List<CinemaDTO.CinemaResponse>> GetAllAsync(string? city, bool activeOnly);
         Task<List<CinemaDTO.CinemaByMovieResponse>> GetByMovieAsync(int movieId, DateTime? dateFrom, DateTime? dateTo);
         Task<CinemaDTO.CinemaResponse> GetCinemaByIdAsync(int cinemaId);
         Task<CinemaDTO.CinemaDetailResponse> GetDetailAsync(int cinemaId);

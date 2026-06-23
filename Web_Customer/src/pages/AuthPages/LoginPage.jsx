@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/useAuth';
 import './AuthPages.css';
@@ -13,9 +13,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const authBridgeUrl = (import.meta.env.VITE_AUTH_BRIDGE_URL || 'http://localhost:5000').replace(/\/$/, '');
 
-  // Redirect if already logged in
+  useEffect(() => {
+    if (isLoggedIn) {
+      navigate('/', { replace: true });
+    }
+  }, [isLoggedIn, navigate]);
+
   if (isLoggedIn) {
-    navigate('/', { replace: true });
     return null;
   }
 

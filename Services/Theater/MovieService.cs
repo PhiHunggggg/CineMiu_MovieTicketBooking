@@ -17,7 +17,7 @@ namespace Services.Theater
         {
             page = Math.Max(page, 1);
             pageSize = Math.Clamp(pageSize, 1, 100);
-            var movies = await movieRepository.GetAllMoviesAsync(keyword, status, cinemaId);
+            var movies = await movieRepository.GetAllMoviesAsync(keyword, GetStatusAliases(status), cinemaId);
             var totalCount = movies.Count;
             return new Paging.PaginationResponse<MovieDTO.MovieResponse>
             {
@@ -33,6 +33,8 @@ namespace Services.Theater
         {
             var detail = await movieRepository.GetMovieByIdAsync(movieId);
             detail.Movie.Status = NormalizeStatusForClient(detail.Movie.Status);
+            detail.GenreIds = detail.Movie.GenreIds ?? detail.GenreIds;
+            detail.Genres = detail.Movie.Genres ?? detail.Genres;
             return detail;
         }
 

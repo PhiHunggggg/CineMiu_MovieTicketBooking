@@ -1,6 +1,4 @@
-﻿
-﻿using DTO.Theater;
-
+using DTO.Theater;
 using Microsoft.AspNetCore.Mvc;
 using Services.Theater;
 
@@ -18,70 +16,46 @@ namespace API_Service.Controllers
             [FromQuery] int page = 1,
             [FromQuery] int pageSize = 12)
         {
-            var result = await movieService.GetAllMoviesAsync(keyword, status, cinemaId, page, pageSize);
-            return Ok(result);
+            return Ok(await movieService.GetAllMoviesAsync(keyword, status, cinemaId, page, pageSize));
         }
 
         [HttpGet("{id:int}")]
-        public async Task<IActionResult> GetById(int id)
-        {
-            try
-            {
-                var movie = await movieService.GetMovieByIdAsync(id);
-                return Ok(new { movie, genreIds = movie.GenreIds ?? [] });
-            }
-            catch (ArgumentException ex)
-            {
-                return NotFound(new { message = ex.Message });
-            }
-        }
+        public Task<IActionResult> GetById(int id) => ExecuteAsync(
+            () => movieService.GetMovieByIdAsync(id),
+            Ok);
 
         [HttpPost]
-        public async Task<IActionResult> Create([FromBody] MovieDTO.MovieRequest request)
-        {
-            try
-            {
-                await movieService.CreateAsync(request);
-                return NoContent();
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
+        public Task<IActionResult> Create([FromBody] MovieDTO.MovieRequest request) => ExecuteAsync(
+            () => movieService.CreateAsync(request),
+            movie => CreatedAtAction(nameof(GetById), new { id = movie.MovieId }, movie));
 
         [HttpPut("{id:int}")]
-        public async Task<IActionResult> Update(int id, [FromBody] MovieDTO.MovieRequest request)
-        {
-            try
-            {
-                await movieService.UpdateAsync(id, request);
-                return Ok(await movieService.GetMovieByIdAsync(id));
-            }
-            catch (ArgumentException ex) when (ex.Message == "Movie not found")
-            {
-                return NotFound(new { message = ex.Message });
-            }
-            catch (ArgumentException ex)
-            {
-                return BadRequest(new { message = ex.Message });
-            }
-        }
+        public Task<IActionResult> Update(int id, [FromBody] MovieDTO.MovieRequest request) => ExecuteAsync(
+            () => movieService.UpdateAsync(id, request),
+            Ok);
 
         [HttpDelete("{id:int}")]
-        public Task<IActionResult> Delete(int id) =>
-            ExecuteAsync(() => movieService.DeleteAsync(id), NoContent);
+        public Task<IActionResult> Delete(int id) => ExecuteAsync(
+            async () =>
+            {
+                await movieService.DeleteAsync(id);
+                return true;
+            },
+            _ => NoContent());
 
         private async Task<IActionResult> ExecuteAsync<T>(Func<Task<T>> action, Func<T, IActionResult> onSuccess)
         {
             try
             {
-                await movieService.DeleteAsync(id);
-                return NoContent();
+                return onSuccess(await action());
             }
             catch (ArgumentException ex) when (ex.Message == "Movie not found")
             {
                 return NotFound(new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
             }
             catch (InvalidOperationException ex)
             {

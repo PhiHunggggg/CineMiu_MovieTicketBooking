@@ -36,9 +36,6 @@ namespace Services.Theater
             };
         }
 
-        public Task<List<CinemaDTO.CinemaResponse>> GetAllAsync(string? city, bool activeOnly) =>
-            cinemaRepository.GetAllAsync(city, activeOnly);
-
         public Task<List<CinemaDTO.CinemaByMovieResponse>> GetByMovieAsync(
             int movieId, DateTime? dateFrom, DateTime? dateTo)
         {

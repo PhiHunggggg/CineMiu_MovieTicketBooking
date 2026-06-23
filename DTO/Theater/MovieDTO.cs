@@ -36,6 +36,14 @@ namespace DTO.Theater
             public decimal? ImdbRating { get; set; }
             public List<int>? GenreIds { get; set; }
         }
+
+        public class MovieDetailResponse
+        {
+            public MovieResponse Movie { get; set; } = new();
+            public List<int> GenreIds { get; set; } = new();
+            public List<string> Genres { get; set; } = new();
+        }
+
         public class MovieRequest
         {
             public string Title { get; set; } = "";

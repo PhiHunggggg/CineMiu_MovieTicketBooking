@@ -54,8 +54,8 @@ namespace Repository.EFCore.Theater
 
             if (!string.IsNullOrWhiteSpace(status))
             {
-                var trimmedStatus = status.Trim();
-                query = query.Where(x => x.Status == trimmedStatus);
+                var trimmedStatus = status.Trim().ToLowerInvariant();
+                query = query.Where(x => x.Status.ToLower() == trimmedStatus);
             }
 
             if (!string.IsNullOrWhiteSpace(keyword))
@@ -742,7 +742,7 @@ namespace Repository.EFCore.Theater
                     TotalSeats = hall.TotalSeats,
                     ActiveSeatCount = activeSeatCounts.GetValueOrDefault(hall.HallId),
                     UpcomingShowtimeCount = upcomingShowtimeCounts.GetValueOrDefault(hall.HallId),
-                    Status = hall.Status,
+                    Status = NormalizeStatus(hall.Status),
                     CreatedAt = hall.CreatedAt,
                     UpdatedAt = hall.UpdatedAt
                 };

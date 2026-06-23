@@ -81,7 +81,6 @@ export const cinemaApi = {
     }
     return request(`/cinemas${buildQuery(params)}`);
   },
-  getAll: (city) => request(`/cinemas${city ? `?city=${encodeURIComponent(city)}` : ''}`),
   getByMovie: (movieId, params = {}) => {
     const qs = new URLSearchParams();
     if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
@@ -102,14 +101,16 @@ export const showtimeApi = {
     const qs = new URLSearchParams();
     if (params.movieId) qs.set('movieId', params.movieId);
     if (params.cinemaId) qs.set('cinemaId', params.cinemaId);
+    if (params.hallId) qs.set('hallId', params.hallId);
+    if (params.status) qs.set('status', params.status);
     if (params.date) qs.set('date', params.date);
     if (params.dateFrom) qs.set('dateFrom', params.dateFrom);
     if (params.dateTo) qs.set('dateTo', params.dateTo);
+    if (params.upcomingOnly) qs.set('upcomingOnly', params.upcomingOnly);
     if (params.page) qs.set('page', params.page);
     qs.set('pageSize', params.pageSize || 100);
     return request(`/showtimes?${qs.toString()}`).then(getItems);
   },
-  getAll: (params = {}) => request(`/showtimes${buildQuery(params)}`),
   getById: (id) => request(`/showtimes/${id}`),
   getSeats: (id, params = {}) => {
     const qs = new URLSearchParams();
@@ -118,7 +119,6 @@ export const showtimeApi = {
     const query = qs.toString();
     return request(`/showtimes/${id}/seats${query ? `?${query}` : ''}`);
   },
-  getSeats: (id, params = {}) => request(`/showtimes/${id}/seats${buildQuery(params)}`),
   lockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/locks`, { method: 'POST', body: JSON.stringify(data) }),
   unlockSeats: (showtimeId, data) => request(`/showtimes/${showtimeId}/unlocks`, { method: 'POST', body: JSON.stringify(data) }),
 };

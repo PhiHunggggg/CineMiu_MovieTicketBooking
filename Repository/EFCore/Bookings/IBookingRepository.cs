@@ -15,8 +15,8 @@ namespace Repository.EFCore.Bookings
         Task<BookingDto.BookingResponse?> GetByIdAsync(int id);
         Task<BookingDto.BookingDetailResponse?> GetDetailAsync(int id);
         Task<BookingDto.BookingResponse?> GetByBookingCodeAsync(string bookingCode);
-        Task<List<BookingDto.BookingResponse>> GetByUser(int userId);
-        Task<List<BookingDto.BookingResponse>> GetByUserEmail(string email);
+        Task<List<BookingDto.BookingDetailResponse>> GetByUser(int userId);
+        Task<List<BookingDto.BookingDetailResponse>> GetByUserEmail(string email);
         Task<int> Create(BookingDto.BookingCreateRequest request);
         Task Cancel(int bookingId, BookingDto.CancelBookingDto dto, int currentUserId, string currentUserRole, int? currentUserCinemaId);
         Task RefundAsync(int bookingId, BookingDto.RefundBookingDto dto);

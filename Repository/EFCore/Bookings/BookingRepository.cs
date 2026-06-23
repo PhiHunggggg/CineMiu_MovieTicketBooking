@@ -1,4 +1,4 @@
-using BaseCore.Repository.EFCore;
+﻿using BaseCore.Repository.EFCore;
 using DTO.Booking;
 using Entities;
 using Libs.Booking;
@@ -73,6 +73,7 @@ namespace Repository.EFCore.Bookings
                 CancelledAt = x.booking.CancelledAt,
                 CancelReason = x.booking.CancelReason,
                 MovieTitle = x.movie.Title,
+                MoviePosterUrl = x.movie.PosterUrl,
                 CinemaName = x.cinema.CinemaName,
                 HallName = x.hall.HallName,
                 StartTime = x.showtime.StartTime,
@@ -117,6 +118,7 @@ namespace Repository.EFCore.Bookings
                                     CancelledAt = booking.CancelledAt,
                                     CancelReason = booking.CancelReason,
                                     MovieTitle = movie.Title,
+                                    MoviePosterUrl = movie.PosterUrl,
                                     CinemaName = cinema.CinemaName,
                                     HallName = hall.HallName,
                                     StartTime = showtime.StartTime,
@@ -196,12 +198,30 @@ namespace Repository.EFCore.Bookings
                 })
                 .ToListAsync();
 
+            var pointTransactions = await _dbset.PointTransactions
+                .AsNoTracking()
+                .Where(x => x.BookingId == id)
+                .OrderByDescending(x => x.CreatedAt)
+                .ThenByDescending(x => x.TransactionId)
+                .Select(x => new BookingDto.PointTransactionResponse
+                {
+                    TransactionId = x.TransactionId,
+                    UserId = x.UserId,
+                    BookingId = x.BookingId,
+                    Points = x.Points,
+                    TransactionType = x.TransactionType,
+                    Description = x.Description,
+                    CreatedAt = x.CreatedAt
+                })
+                .ToListAsync();
+
             return new BookingDto.BookingDetailResponse
             {
                 Booking = booking,
                 Tickets = tickets,
                 Concessions = concessions,
-                Payments = payments
+                Payments = payments,
+                PointTransactions = pointTransactions
             };
         }
         public async Task<BookingDto.BookingResponse?> GetByBookingCodeAsync(string bookingCode)
@@ -232,6 +252,7 @@ namespace Repository.EFCore.Bookings
                                     CancelledAt = booking.CancelledAt,
                                     CancelReason = booking.CancelReason,
                                     MovieTitle = movie.Title,
+                                    MoviePosterUrl = movie.PosterUrl,
                                     CinemaName = cinema.CinemaName,
                                     HallName = hall.HallName,
                                     StartTime = showtime.StartTime,
@@ -247,91 +268,43 @@ namespace Repository.EFCore.Bookings
                                 }).FirstOrDefaultAsync();
             return result;
         }
-        public async Task<List<BookingDto.BookingResponse>> GetByUser(int userId)
+        public async Task<List<BookingDto.BookingDetailResponse>> GetByUser(int userId)
         {
-            var result = await (from booking in _dbset.Bookings.AsNoTracking()
-                                join user in _dbset.Users.AsNoTracking() on booking.UserId equals user.UserId
-                                join showtime in _dbset.ShowTimes.AsNoTracking() on booking.ShowtimeId equals showtime.ShowtimeId
-                                join movie in _dbset.Movies.AsNoTracking() on showtime.MovieId equals movie.MovieId
-                                join hall in _dbset.Halls.AsNoTracking() on showtime.HallId equals hall.HallId
-                                join cinema in _dbset.Cinemas.AsNoTracking() on hall.CinemaId equals cinema.CinemaId
-                                where booking.UserId == userId
-                                select new BookingDto.BookingResponse
-                                {
-                                    BookingId = booking.BookingId,
-                                    BookingCode = booking.BookingCode,
-                                    UserId = booking.UserId,
-                                    FullName = user.FullName,
-                                    email = user.Email,
-                                    phone = user.Phone,
-                                    ShowtimeId = booking.ShowtimeId,
-                                    TotalAmount = booking.TotalAmount,
-                                    DiscountAmount = booking.DiscountAmount,
-                                    FinalAmount = booking.FinalAmount,
-                                    Status = booking.Status,
-                                    BookingChannel = booking.BookingChannel,
-                                    CreatedAt = booking.CreatedAt,
-                                    ConfirmedAt = booking.ConfirmedAt,
-                                    CancelledAt = booking.CancelledAt,
-                                    CancelReason = booking.CancelReason,
-                                    MovieTitle = movie.Title,
-                                    CinemaName = cinema.CinemaName,
-                                    HallName = hall.HallName,
-                                    StartTime = showtime.StartTime,
-                                    EndTime = showtime.EndTime,
-                                    TicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
-                                    RefundAmount = _dbset.Payments
-                                        .Where(p => p.BookingId == booking.BookingId)
-                                        .Sum(p => p.RefundAmount ?? 0),
-                                    RefundedAt = _dbset.Payments
-                                        .Where(p => p.BookingId == booking.BookingId && p.RefundedAt != null)
-                                        .Max(p => p.RefundedAt)
-                                }).OrderByDescending(x => x.CreatedAt).ToListAsync();
-            return result;
+            var bookingIds = await _dbset.Bookings
+                .AsNoTracking()
+                .Where(x => x.UserId == userId)
+                .OrderByDescending(x => x.CreatedAt)
+                .Select(x => x.BookingId)
+                .ToListAsync();
+
+            return await GetDetailsByIdsAsync(bookingIds);
         }
-        public async Task<List<BookingDto.BookingResponse>> GetByUserEmail(string email)
+
+        public async Task<List<BookingDto.BookingDetailResponse>> GetByUserEmail(string email)
         {
-            var result = await (from booking in _dbset.Bookings.AsNoTracking()
-                                join user in _dbset.Users.AsNoTracking() on booking.UserId equals user.UserId
-                                join showtime in _dbset.ShowTimes.AsNoTracking() on booking.ShowtimeId equals showtime.ShowtimeId
-                                join movie in _dbset.Movies.AsNoTracking() on showtime.MovieId equals movie.MovieId
-                                join hall in _dbset.Halls.AsNoTracking() on showtime.HallId equals hall.HallId
-                                join cinema in _dbset.Cinemas.AsNoTracking() on hall.CinemaId equals cinema.CinemaId
-                                where user.Email == email && user.IsActive
-                                select new BookingDto.BookingResponse
-                                {
-                                    BookingId = booking.BookingId,
-                                    BookingCode = booking.BookingCode,
-                                    UserId = booking.UserId,
-                                    FullName = user.FullName,
-                                    email = user.Email,
-                                    phone = user.Phone,
-                                    ShowtimeId = booking.ShowtimeId,
-                                    TotalAmount = booking.TotalAmount,
-                                    DiscountAmount = booking.DiscountAmount,
-                                    FinalAmount = booking.FinalAmount,
-                                    Status = booking.Status,
-                                    BookingChannel = booking.BookingChannel,
-                                    CreatedAt = booking.CreatedAt,
-                                    ConfirmedAt = booking.ConfirmedAt,
-                                    CancelledAt = booking.CancelledAt,
-                                    CancelReason = booking.CancelReason,
-                                    MovieTitle = movie.Title,
-                                    CinemaName = cinema.CinemaName,
-                                    HallName = hall.HallName,
-                                    StartTime = showtime.StartTime,
-                                    EndTime = showtime.EndTime,
-                                    TicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
-                                    RefundAmount = _dbset.Payments
-                                        .Where(p => p.BookingId == booking.BookingId)
-                                        .Sum(p => p.RefundAmount ?? 0),
-                                    RefundedAt = _dbset.Payments
-                                        .Where(p => p.BookingId == booking.BookingId && p.RefundedAt != null)
-                                        .Max(p => p.RefundedAt)
-                                }).OrderByDescending(x => x.CreatedAt).ToListAsync();
-            return result;
+            var bookingIds = await (from booking in _dbset.Bookings.AsNoTracking()
+                                    join user in _dbset.Users.AsNoTracking() on booking.UserId equals user.UserId
+                                    where user.Email == email && user.IsActive
+                                    orderby booking.CreatedAt descending
+                                    select booking.BookingId)
+                .ToListAsync();
+
+            return await GetDetailsByIdsAsync(bookingIds);
+        }
+
+        private async Task<List<BookingDto.BookingDetailResponse>> GetDetailsByIdsAsync(List<int> bookingIds)
+        {
+            var details = new List<BookingDto.BookingDetailResponse>();
+            foreach (var bookingId in bookingIds)
+            {
+                var detail = await GetDetailAsync(bookingId);
+                if (detail != null)
+                {
+                    details.Add(detail);
+                }
+            }
+
+            return details;
         }
         public async Task<int> Create(BookingDto.BookingCreateRequest request)
         {

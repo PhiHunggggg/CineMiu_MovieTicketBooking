@@ -54,7 +54,6 @@ namespace Services.Theater
         public async Task<object> GetAllAsync(int? movieId, int? cinemaId, DateTime? date, int? seatTypeId, int? dayTypeId, int? hallTypeId)
         {
             var results = await GetAllShowtimesAsync(null, movieId, cinemaId, null, date, null, null, null, 1, 1000);
-            var results = await GetAllShowtimesAsync(null, movieId, cinemaId, null, date, null, null, null, 1, 1000);
             return results;
         }
 
@@ -63,13 +62,13 @@ namespace Services.Theater
             days = Math.Clamp(days, 1, 30);
 
             var movies = await context.Movies.AsNoTracking()
-                .Where(x => x.Status == "NowShowing" ||
-                            x.Status == "now_showing" ||
-                            x.Status == "nowshowing")
+                .Where(x => x.Status != null &&
+                            (x.Status.ToLower() == "nowshowing" ||
+                             x.Status.ToLower() == "now_showing"))
                 .OrderBy(x => x.MovieId)
                 .ToListAsync();
             var halls = await context.Halls.AsNoTracking()
-                .Where(x => x.Status == "active")
+                .Where(x => x.Status.ToLower() == "active")
                 .OrderBy(x => x.HallId)
                 .ToListAsync();
 
@@ -141,7 +140,7 @@ namespace Services.Theater
 
             var createdIds = created.Select(x => x.ShowtimeId).ToHashSet();
             var responses = await showtimeRepository.GetAllShowtimesAsync(
-                null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null);
             return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
         }
 
@@ -157,7 +156,7 @@ namespace Services.Theater
             ?? throw new KeyNotFoundException("Showtime not found");
         if (!string.Equals(details.Hall.Status, "active", StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("This hall is currently unavailable");
-        if (details.Status is "cancelled" or "completed" or "ended" || details.EndTime <= DateTime.Now)
+        if (IsInactiveShowtimeStatus(details.Status) || details.EndTime <= DateTime.Now)
             throw new InvalidOperationException("This showtime is no longer available");
         return await showtimeRepository.GetSeatsAsync(id, details, userId, sessionId);
     }
@@ -180,6 +179,13 @@ namespace Services.Theater
     {
         if (userId <= 0 || string.IsNullOrWhiteSpace(sessionId))
             throw new ArgumentException("UserId and SessionId are required");
+    }
+
+    private static bool IsInactiveShowtimeStatus(string? status)
+    {
+        return string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(status, "completed", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(status, "ended", StringComparison.OrdinalIgnoreCase);
     }
 }
 }

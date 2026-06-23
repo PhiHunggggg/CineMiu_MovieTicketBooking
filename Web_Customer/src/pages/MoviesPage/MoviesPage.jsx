@@ -1,6 +1,6 @@
 ﻿import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { movieApi, lookupApi } from '../../services/api';
+import { movieApi } from '../../services/api';
 import MovieCard from '../../components/MovieCard/MovieCard';
 import './MoviesPage.css';
 
@@ -23,10 +23,6 @@ export default function MoviesPage() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [filter, search, page]);
-
-  useEffect(() => {
-    lookupApi.getAll().then(data => setGenres(data.genres || [])).catch(console.error);
-  }, []);
 
   const formatDate = (d) => {
     if (!d) return '';
@@ -127,7 +123,7 @@ export default function MoviesPage() {
 
               <div className="movie-modal__layout">
                 {selectedMovie.posterUrl && (
-                  <img src={selectedMovie.posterUrl} alt="" className="movie-modal__poster" />
+                  <img src={selectedMovie.posterUrl} alt="" className="movie-modal__poster" onError={event => { event.currentTarget.style.display = 'none'; }} />
                 )}
                 <div className="movie-modal__info">
                   <h2 className="movie-modal__title">{selectedMovie.title}</h2>

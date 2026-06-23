@@ -60,7 +60,7 @@ namespace Repository.EFCore.Theater
              join hall in context.Halls.AsNoTracking() on showtime.HallId equals hall.HallId
              join cinema in context.Cinemas.AsNoTracking() on hall.CinemaId equals cinema.CinemaId
              where showtime.MovieId == movieId && showtime.StartTime >= rangeStart &&
-                   showtime.StartTime < rangeEndExclusive && showtime.Status != "cancelled" && cinema.IsActive
+                   showtime.StartTime < rangeEndExclusive && showtime.Status.ToLower() != "cancelled" && cinema.IsActive
              group showtime by new
              {
                  cinema.CinemaId, cinema.ChainId, cinema.CinemaName, cinema.Address, cinema.City,
@@ -184,7 +184,7 @@ namespace Repository.EFCore.Theater
                 TotalRows = request.TotalRows,
                 TotalCols = request.TotalCols,
                 TotalSeats = request.TotalSeats,
-                Status = Normalize(request.Status) ?? "active",
+                Status = NormalizeStatus(request.Status),
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -209,7 +209,7 @@ namespace Repository.EFCore.Theater
             hall.TotalRows = request.TotalRows;
             hall.TotalCols = request.TotalCols;
             hall.TotalSeats = request.TotalSeats;
-            hall.Status = Normalize(request.Status) ?? hall.Status;
+            hall.Status = NormalizeStatus(request.Status);
             hall.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
             return ToHallResponse(hall);
@@ -252,7 +252,7 @@ namespace Repository.EFCore.Theater
                 SeatTypeId = request.SeatTypeId,
                 RowLabel = request.RowLabel,
                 ColNumber = request.ColNumber,
-                SeatCode = request.SeatCode,
+                SeatCode = ResolveSeatCode(request),
                 IsActive = request.IsActive ?? true,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -271,7 +271,7 @@ namespace Repository.EFCore.Theater
 
             var existingSeats = await context.Seats.Where(x => x.HallId == hallId).ToListAsync();
             var existingByCode = existingSeats.ToDictionary(x => x.SeatCode, StringComparer.OrdinalIgnoreCase);
-            var requestedCodes = requests.Select(x => x.SeatCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var requestedCodes = requests.Select(ResolveSeatCode).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var existingSeatIds = existingSeats.Select(x => x.SeatId).ToList();
             var usedSeatIds = await context.Tickets.Where(x => existingSeatIds.Contains(x.SeatId))
                 .Select(x => x.SeatId).ToListAsync();
@@ -285,7 +285,8 @@ namespace Repository.EFCore.Theater
             var now = DateTime.UtcNow;
             foreach (var request in requests)
             {
-                if (existingByCode.TryGetValue(request.SeatCode, out var seat))
+                var seatCode = ResolveSeatCode(request);
+                if (existingByCode.TryGetValue(seatCode, out var seat))
                 {
                     seat.SeatTypeId = request.SeatTypeId;
                     seat.RowLabel = request.RowLabel;
@@ -298,7 +299,7 @@ namespace Repository.EFCore.Theater
                     context.Seats.Add(new Seat
                     {
                         HallId = hallId, SeatTypeId = request.SeatTypeId, RowLabel = request.RowLabel,
-                        ColNumber = request.ColNumber, SeatCode = request.SeatCode,
+                        ColNumber = request.ColNumber, SeatCode = seatCode,
                         IsActive = request.IsActive ?? true, CreatedAt = now, UpdatedAt = now
                     });
                 }
@@ -370,7 +371,7 @@ namespace Repository.EFCore.Theater
             .Select(x => new CinemaDTO.HallResponse
             {
                 HallId = x.HallId, CinemaId = x.CinemaId, HallTypeId = x.HallTypeId, HallName = x.HallName,
-                TotalRows = x.TotalRows, TotalCols = x.TotalCols, TotalSeats = x.TotalSeats, Status = x.Status
+                TotalRows = x.TotalRows, TotalCols = x.TotalCols, TotalSeats = x.TotalSeats, Status = NormalizeStatus(x.Status)
             }).ToListAsync();
 
         private async Task<List<CinemaDTO.CinemaResponse>> MapCinemasAsync(List<Cinema> cinemas)
@@ -390,7 +391,7 @@ namespace Repository.EFCore.Theater
         private static CinemaDTO.HallResponse ToHallResponse(Hall x) => new()
         {
             HallId = x.HallId, CinemaId = x.CinemaId, HallTypeId = x.HallTypeId, HallName = x.HallName,
-            TotalRows = x.TotalRows, TotalCols = x.TotalCols, TotalSeats = x.TotalSeats, Status = x.Status
+            TotalRows = x.TotalRows, TotalCols = x.TotalCols, TotalSeats = x.TotalSeats, Status = NormalizeStatus(x.Status)
         };
 
         private static CinemaDTO.SeatResponse ToSeatResponse(Seat x) => new()
@@ -400,6 +401,14 @@ namespace Repository.EFCore.Theater
         };
 
         private static string? Normalize(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+        private static string NormalizeStatus(string? value) =>
+            string.IsNullOrWhiteSpace(value) ? "active" : value.Trim().ToLowerInvariant();
+
+        private static string ResolveSeatCode(CinemaDTO.SeatRequest request) =>
+            string.IsNullOrWhiteSpace(request.SeatCode)
+                ? $"{request.RowLabel}{request.ColNumber}".ToUpperInvariant()
+                : request.SeatCode.Trim().ToUpperInvariant();
 
         private static string ToRowLabel(int rowNumber)
         {

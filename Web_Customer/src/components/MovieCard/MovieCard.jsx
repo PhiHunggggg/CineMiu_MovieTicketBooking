@@ -4,6 +4,7 @@ import './MovieCard.css';
 
 export default function MovieCard({ movie }) {
   const [showTrailer, setShowTrailer] = useState(false);
+  const [posterFailed, setPosterFailed] = useState(false);
   const genres = Array.isArray(movie.genres ?? movie.Genres) ? (movie.genres ?? movie.Genres) : [];
   const duration = movie.durationMins ?? movie.DurationMins ?? movie.durationMin ?? movie.DurationMin;
 
@@ -29,8 +30,8 @@ export default function MovieCard({ movie }) {
     <>
       <div className="movie-card-v2" id={`movie-card-${movieId}`}>
         <div className="movie-card-v2__poster">
-          {movie.posterUrl ? (
-            <img src={movie.posterUrl} alt={title} loading="lazy" />
+          {movie.posterUrl && !posterFailed ? (
+            <img src={movie.posterUrl} alt={title} loading="lazy" onError={() => setPosterFailed(true)} />
           ) : (
             <div className="movie-card-v2__placeholder">🎬</div>
           )}

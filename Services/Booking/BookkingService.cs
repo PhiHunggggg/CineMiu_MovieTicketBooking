@@ -1,4 +1,4 @@
-using DTO.Booking;
+﻿using DTO.Booking;
 using DTO.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -28,8 +28,8 @@ namespace Services.Booking
         public Task<BookingResponse?> GetByIdAsync(int id) => bookingRepository.GetByIdAsync(id);
         public Task<BookingDetailResponse?> GetDetailAsync(int id) => bookingRepository.GetDetailAsync(id);
         public Task<BookingResponse?> GetByBookingCodeAsync(string bookingCode) => bookingRepository.GetByBookingCodeAsync(bookingCode);
-        public Task<List<BookingResponse>> GetByUserAsync(int userId) => bookingRepository.GetByUser(userId);
-        public Task<List<BookingResponse>> GetByUserEmailAsync(string email) => bookingRepository.GetByUserEmail(email);
+        public Task<List<BookingDetailResponse>> GetByUserAsync(int userId) => bookingRepository.GetByUser(userId);
+        public Task<List<BookingDetailResponse>> GetByUserEmailAsync(string email) => bookingRepository.GetByUserEmail(email);
         public Task<int> Create(BookingCreateRequest request) => bookingRepository.Create(request);
         public Task Cancel(int bookingId, CancelBookingDto cancel, int currentUserId, string currentUserRole, int? currentUserCinemaId) => bookingRepository.Cancel(bookingId, cancel, currentUserId, currentUserRole, currentUserCinemaId);
         public Task RefundAsync(int bookingId, RefundBookingDto refund) => bookingRepository.RefundAsync(bookingId, refund);
@@ -94,7 +94,7 @@ namespace Services.Booking
                     result.UserId,
                     (int)Math.Floor(result.FinalAmount / 1000m),
                     bookingId,
-                    $"Đặt vé {result.BookingCode}");
+                    $"Dat ve {result.BookingCode}");
             }
             return (result.Success, result.Message, result.Payment);
         }

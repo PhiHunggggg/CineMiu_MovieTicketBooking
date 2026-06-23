@@ -1,4 +1,4 @@
-using DTO.Loyalty;
+﻿using DTO.Loyalty;
 using Entities;
 using Microsoft.EntityFrameworkCore;
 
@@ -23,7 +23,7 @@ namespace Repository.EFCore.Loyalty
                 UserId = userId,
                 TotalPoints = points,
                 TierId = tier?.TierId ?? membership?.TierId ?? 0,
-                TierName = tier?.TierName ?? "Thành viên",
+                TierName = tier?.TierName ?? "Thanh vien",
                 DiscountPercent = tier?.DiscountPercent ?? 0,
                 Benefits = tier?.Benefits,
                 UpdatedAt = membership?.UpdatedAt ?? DateTime.UtcNow
@@ -67,6 +67,7 @@ namespace Repository.EFCore.Loyalty
                 return;
             }
 
+            var createdMembership = false;
             var membership = await context.UserMemberships.FirstOrDefaultAsync(x => x.UserId == request.UserId);
             if (membership == null)
             {
@@ -77,6 +78,7 @@ namespace Repository.EFCore.Loyalty
                     UpdatedAt = DateTime.UtcNow
                 };
                 context.UserMemberships.Add(membership);
+                createdMembership = true;
             }
 
             membership.TotalPoints += request.Points;
@@ -93,10 +95,51 @@ namespace Repository.EFCore.Loyalty
                 BookingId = request.BookingId,
                 Points = request.Points,
                 TransactionType = "earn",
-                Description = request.Description ?? "Điểm thưởng từ đặt vé",
+                Description = request.Description ?? "Diem thuong tu dat ve",
                 CreatedAt = DateTime.UtcNow
             });
-            await context.SaveChangesAsync();
+            await SaveChangesAsync(createdMembership);
+        }
+
+        private async Task SaveChangesAsync(bool createdMembership)
+        {
+            if (!createdMembership || !context.Database.IsSqlServer() || !await UserMembershipUserIdIsIdentityAsync())
+            {
+                await context.SaveChangesAsync();
+                return;
+            }
+
+            var strategy = context.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await context.Database.BeginTransactionAsync();
+                await context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [user_memberships] ON");
+                try
+                {
+                    await context.SaveChangesAsync();
+                    await context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [user_memberships] OFF");
+                    await transaction.CommitAsync();
+                }
+                catch
+                {
+                    await context.Database.ExecuteSqlRawAsync("SET IDENTITY_INSERT [user_memberships] OFF");
+                    throw;
+                }
+            });
+        }
+
+        private async Task<bool> UserMembershipUserIdIsIdentityAsync()
+        {
+            await using var command = context.Database.GetDbConnection().CreateCommand();
+            command.CommandText = "SELECT CONVERT(int, COLUMNPROPERTY(OBJECT_ID('user_memberships'), 'user_id', 'IsIdentity'))";
+
+            if (command.Connection?.State != System.Data.ConnectionState.Open)
+            {
+                await context.Database.OpenConnectionAsync();
+            }
+
+            var result = await command.ExecuteScalarAsync();
+            return result is int value && value == 1;
         }
 
         private Task<MemberTier?> ResolveTierAsync(int points) => context.MemberTiers.AsNoTracking()
