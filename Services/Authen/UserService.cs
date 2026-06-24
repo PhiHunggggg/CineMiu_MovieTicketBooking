@@ -152,7 +152,7 @@ namespace Services.Authen
         {
             return await userRepository.GetByIdAsync(id);
         }
-        public async Task<Users> CreateAsync(Users user, string password,byte roleid)
+        public async Task<Users> CreateAsync(Users user, string password, byte roleid)
         {
             user.RoleId = roleid == 0 ? (byte)1 : roleid;
             user.PasswordHash = TokenHelper.HashPasswordForStorage(password);

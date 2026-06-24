@@ -69,6 +69,8 @@ builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ICinemaUserRepository, CinemaUserRepository>();
+builder.Services.AddScoped<ICinemaUserService, CinemaUserService>();
 builder.Services.AddScoped<IAdminSystemRepository, AdminSystemRepository>();
 builder.Services.AddScoped<IAdminSystemService, AdminSystemService>();
 builder.Services.AddScoped<ITicketPriceRepository, TicketPriceRepository>();

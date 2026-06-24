@@ -41,7 +41,7 @@ namespace Repository.EFCore.Authen
             var now = DateTime.UtcNow;
             var user = new Users
             {
-                RoleId = request.RoleId ?? 1,
+                RoleId = request.RoleId ?? (byte)1,
                 FullName = request.FullName,
                 Email = request.Email,
                 Phone = request.Phone,
