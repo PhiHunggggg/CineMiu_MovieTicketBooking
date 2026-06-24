@@ -17,7 +17,6 @@ namespace API_Service.Controllers
         public async Task<IActionResult> GetAll(
             [FromQuery] string? keyword,
             [FromQuery] string? status,
-            [FromQuery] int? movieId,
             [FromQuery] int? cinemaId,
             [FromQuery] DateTime? date,
             [FromQuery] int page = 1,
@@ -25,93 +24,8 @@ namespace API_Service.Controllers
         {
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 500);
-<<<<<<< HEAD
-
-            var query =
-                from booking in _context.CinemaBookings.AsNoTracking()
-                join user in _context.CinemaUsers.AsNoTracking() on booking.UserId equals user.UserId
-                join showtime in _context.CinemaShowtimes.AsNoTracking() on booking.ShowtimeId equals showtime.ShowtimeId
-                join movie in _context.CinemaMovies.AsNoTracking() on showtime.MovieId equals movie.MovieId
-                join hall in _context.CinemaHalls.AsNoTracking() on showtime.HallId equals hall.HallId
-                join cinema in _context.Cinemas.AsNoTracking() on hall.CinemaId equals cinema.CinemaId
-                select new { booking, user, showtime, movie, hall, cinema };
-
-            if (!string.IsNullOrWhiteSpace(keyword))
-            {
-                var search = keyword.Trim().ToLower();
-                query = query.Where(x =>
-                    x.booking.BookingCode.ToLower().Contains(search) ||
-                    x.user.FullName.ToLower().Contains(search) ||
-                    x.user.Email.ToLower().Contains(search) ||
-                    (x.user.Phone != null && x.user.Phone.Contains(search)));
-            }
-
-            if (!string.IsNullOrWhiteSpace(status))
-            {
-                query = query.Where(x => x.booking.Status == status);
-            }
-
-            if (cinemaId.HasValue)
-            {
-                query = query.Where(x => x.cinema.CinemaId == cinemaId.Value);
-            }
-
-            if (movieId.HasValue)
-            {
-                query = query.Where(x => x.movie.MovieId == movieId.Value);
-            }
-
-            if (date.HasValue)
-            {
-                var day = date.Value.Date;
-                var nextDay = day.AddDays(1);
-                query = query.Where(x => x.booking.CreatedAt >= day && x.booking.CreatedAt < nextDay);
-            }
-
-            var total = await query.CountAsync();
-            var items = await query
-                .OrderByDescending(x => x.booking.CreatedAt)
-                .Skip((page - 1) * pageSize)
-                .Take(pageSize)
-                .Select(x => new
-                {
-                    x.booking.BookingId,
-                    x.booking.BookingCode,
-                    x.booking.UserId,
-                    x.user.FullName,
-                    x.user.Email,
-                    x.user.Phone,
-                    x.booking.ShowtimeId,
-                    x.booking.TotalAmount,
-                    x.booking.DiscountAmount,
-                    x.booking.FinalAmount,
-                    x.booking.Status,
-                    x.booking.BookingChannel,
-                    x.booking.CreatedAt,
-                    x.booking.ConfirmedAt,
-                    x.booking.CancelledAt,
-                    x.booking.CancelReason,
-                    MovieTitle = x.movie.Title,
-                    CinemaName = x.cinema.CinemaName,
-                    HallName = x.hall.HallName,
-                    x.showtime.StartTime,
-                    x.showtime.EndTime,
-                    TicketCount = _context.CinemaTickets.Count(t => t.BookingId == x.booking.BookingId),
-                    UsedTicketCount = _context.CinemaTickets.Count(t => t.BookingId == x.booking.BookingId && t.IsUsed),
-                    RefundAmount = _context.CinemaPayments
-                        .Where(p => p.BookingId == x.booking.BookingId)
-                        .Sum(p => p.RefundAmount ?? 0),
-                    RefundedAt = _context.CinemaPayments
-                        .Where(p => p.BookingId == x.booking.BookingId && p.RefundedAt != null)
-                        .Max(p => p.RefundedAt)
-                })
-                .ToListAsync();
-
-            return Ok(new { total, items });
-=======
             var result = await bookingService.GetAllAsync(keyword, status, cinemaId, date, page, pageSize);
             return Ok(new { total = result.TotalCount, result.Items });
->>>>>>> origin/develop
         }
 
         [HttpGet("code/{code}")]

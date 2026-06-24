@@ -138,113 +138,7 @@ namespace AuthServices.Controllers
 
         [Authorize]
         [HttpPut("profile")]
-<<<<<<< HEAD
-        public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
-        {
-            var user = await GetAuthenticatedUser(trackChanges: true);
-            if (user == null)
-            {
-                return Unauthorized(new { message = "User ID not found in token" });
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.FullName))
-            {
-                user.FullName = request.FullName.Trim();
-            }
-
-            user.Phone = string.IsNullOrWhiteSpace(request.Phone) ? null : request.Phone.Trim();
-            user.AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim();
-            user.DateOfBirth = request.DateOfBirth;
-            user.Gender = string.IsNullOrWhiteSpace(request.Gender) ? null : request.Gender.Trim();
-            user.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(await BuildUserPayload(user));
-        }
-
-        [Authorize]
-        [HttpPut("password")]
-        public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
-        {
-            if (request == null ||
-                string.IsNullOrWhiteSpace(request.CurrentPassword) ||
-                string.IsNullOrWhiteSpace(request.NewPassword))
-            {
-                return BadRequest(new { message = "Current password and new password are required" });
-            }
-
-            if (request.NewPassword.Length < 6)
-            {
-                return BadRequest(new { message = "New password must be at least 6 characters" });
-            }
-
-            var user = await GetAuthenticatedUser(trackChanges: true);
-            if (user == null)
-            {
-                return Unauthorized(new { message = "User ID not found in token" });
-            }
-
-            if (!TokenHelper.IsValidStoredPassword(request.CurrentPassword, user.PasswordHash))
-            {
-                return BadRequest(new { message = "Current password is incorrect" });
-            }
-
-            await _userService.UpdateAsync(user, request.NewPassword);
-            return Ok(new { message = "Password changed successfully" });
-        }
-
-        private async Task<object> BuildAuthResponse(Users user, string? message = null)
-        {
-            var roleName = await _userService.ResolveRoleName(user.RoleId) ?? "customer";
-            var token = TokenHelper.GenerateToken(
-                _secretKey,
-                TokenExpirationMinutes,
-                user.UserId.ToString(),
-                user.Email,
-                roleName,
-                user.CinemaId);
-            var payload = await BuildUserPayload(user, roleName);
-
-            return new
-            {
-                message,
-                token,
-                user = payload,
-                userId = user.UserId.ToString(),
-                roleId = user.RoleId,
-                cinemaId = user.CinemaId,
-                fullName = user.FullName,
-                email = user.Email,
-                phone = user.Phone,
-                avatarUrl = user.AvatarUrl,
-                role = roleName,
-                expiresIn = TokenExpirationMinutes * 60
-            };
-        }
-
-        private async Task<object> BuildUserPayload(Users user, string? roleName = null)
-        {
-            roleName ??= await _userService.ResolveRoleName(user.RoleId) ?? "customer";
-            return new
-            {
-                userId = user.UserId,
-                id = user.UserId,
-                roleId = user.RoleId,
-                cinemaId = user.CinemaId,
-                fullName = user.FullName,
-                email = user.Email,
-                phone = user.Phone,
-                avatarUrl = user.AvatarUrl,
-                dateOfBirth = user.DateOfBirth,
-                gender = user.Gender,
-                role = roleName
-            };
-        }
-
-        private async Task<Users?> GetAuthenticatedUser(bool trackChanges = false)
-=======
         public async Task<IActionResult> UpdateProfile([FromBody] UserRequest request)
->>>>>>> origin/develop
         {
             var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(claimValue, out var userId))
@@ -256,23 +150,6 @@ namespace AuthServices.Controllers
             return await Profile();
         }
 
-<<<<<<< HEAD
-        public class UpdateProfileRequest
-        {
-            public string? FullName { get; set; }
-            public string? Phone { get; set; }
-            public string? AvatarUrl { get; set; }
-            public DateTime? DateOfBirth { get; set; }
-            public string? Gender { get; set; }
-        }
-
-        public class ChangePasswordRequest
-        {
-            public string CurrentPassword { get; set; } = "";
-            public string NewPassword { get; set; } = "";
-        }
-=======
->>>>>>> origin/develop
     }
 }
 
