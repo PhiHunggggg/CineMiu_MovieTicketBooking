@@ -28,6 +28,7 @@ using Services.Product;
 using Services.Promotion;
 using Services.Reports;
 using System.Text;
+using API_Service.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -69,6 +70,8 @@ builder.Services.AddScoped<IReviewRepository, ReviewRepository>();
 builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<ICinemaUserRepository, CinemaUserRepository>();
+builder.Services.AddScoped<ICinemaUserService, CinemaUserService>();
 builder.Services.AddScoped<IAdminSystemRepository, AdminSystemRepository>();
 builder.Services.AddScoped<IAdminSystemService, AdminSystemService>();
 builder.Services.AddScoped<ITicketPriceRepository, TicketPriceRepository>();
@@ -76,7 +79,14 @@ builder.Services.AddScoped<ITicketPriceService, TicketPriceService>();
 builder.Services.AddScoped<IReportRepository, ReportRepository>();
 builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
-
+builder.Services.Configure<NotificationApiOptions>(
+    builder.Configuration.GetSection(NotificationApiOptions.SectionName));
+builder.Services.AddHttpClient<IEmailSender, PhpEmailSender>(client =>
+{
+    // Gmail SMTP can take more than 15 seconds to negotiate TLS and authenticate,
+    // especially on the first connection after the PHP process starts.
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
 var foodClientPath = Path.GetFullPath(Path.Combine(builder.Environment.ContentRootPath, "..", "BaseCore.Food"));
 
 // Add services to the container
@@ -90,8 +100,11 @@ builder.Services.AddControllers()
 builder.Services.AddEndpointsApiExplorer();
 
 // Swagger Configuration
-builder.Services.AddSwaggerGen();
-
+builder.Services.AddSwaggerGen(options =>
+{
+    options.CustomSchemaIds(type =>
+        type.FullName!.Replace("+", "."));
+});
 // CORS
 builder.Services.AddCors(options =>
 {
@@ -148,10 +161,6 @@ builder.Services.AddAuthentication(x =>
 
 var app = builder.Build();
 
-await EnsureCinemaRolesAsync(app.Services);
-await EnsurePaymentMethodsAsync(app.Services);
-await EnsureAdminUserAsync(app.Services);
-await EnsureShowtimesAsync(app.Services);
 
 
 
@@ -176,6 +185,7 @@ if (Directory.Exists(foodClientPath))
 }
 
 app.UseCors("AllowAll");
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
@@ -188,135 +198,6 @@ app.Lifetime.ApplicationStarted.Register(() =>
 
 app.Run();
 
-static async Task EnsureCinemaRolesAsync(IServiceProvider services)
-{
-    using var scope = services.CreateScope();
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<SqlServerDbContext>();
-        var existingRoles = await db.CinemaRoles.ToListAsync();
-        var requiredRoles = new[]
-        {
-            new CinemaRole { RoleId = 1, RoleName = "customer", Description = "Khach hang dat ve truc tuyen" },
-            new CinemaRole { RoleId = 2, RoleName = "ticket_staff", Description = "Nhan vien soat ve tai rap" },
-            new CinemaRole { RoleId = 3, RoleName = "cinema_manager", Description = "Quan ly rap chieu phim" },
-            new CinemaRole { RoleId = 4, RoleName = "admin", Description = "Quan tri vien he thong" }
-        };
-
-        foreach (var requiredRole in requiredRoles)
-        {
-            var existingByName = existingRoles.FirstOrDefault(x =>
-                string.Equals(x.RoleName, requiredRole.RoleName, StringComparison.OrdinalIgnoreCase));
-            if (existingByName != null)
-            {
-                existingByName.Description ??= requiredRole.Description;
-                continue;
-            }
-
-            if (existingRoles.Any(x => x.RoleId == requiredRole.RoleId))
-            {
-                Console.WriteLine($"Skipping role seed for {requiredRole.RoleName}: role id {requiredRole.RoleId} is already used.");
-                continue;
-            }
-
-            db.CinemaRoles.Add(requiredRole);
-            existingRoles.Add(requiredRole);
-        }
-
-        await db.SaveChangesAsync();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Skipping cinema role seed because database is not ready: {ex.Message}");
-    }
-}
-
-static async Task EnsureAdminUserAsync(IServiceProvider services)
-{
-    using var scope = services.CreateScope();
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<SqlServerDbContext>();
-
-        if (!await db.CinemaUsers.AnyAsync(u => u.Email == "admin@basecore.local"))
-        {
-            db.CinemaUsers.Add(new CinemaUser
-            {
-                RoleId = 4,
-                FullName = "Administrator",
-                Email = "admin@basecore.local",
-                Phone = "0123456789",
-                PasswordHash = TokenHelper.HashPasswordForStorage("admin123"),
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow
-            });
-
-            await db.SaveChangesAsync();
-            Console.WriteLine("Admin user created: admin@basecore.local / admin123");
-        }
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Skipping admin seed because database is not ready: {ex.Message}");
-    }
-}
-
-static async Task EnsurePaymentMethodsAsync(IServiceProvider services)
-{
-    using var scope = services.CreateScope();
-    try
-    {
-        var db = scope.ServiceProvider.GetRequiredService<SqlServerDbContext>();
-        var existingMethods = await db.PaymentMethods.ToListAsync();
-        var requiredMethods = new[]
-        {
-            new PaymentMethod { MethodId = 1, MethodName = "MoMo", Provider = "momo", IsActive = true },
-            new PaymentMethod { MethodId = 2, MethodName = "ZaloPay", Provider = "zalopay", IsActive = true },
-            new PaymentMethod { MethodId = 3, MethodName = "VNPay", Provider = "vnpay", IsActive = true },
-            new PaymentMethod { MethodId = 4, MethodName = "Visa / Mastercard", Provider = "card", IsActive = true },
-            new PaymentMethod { MethodId = 5, MethodName = "ATM noi dia", Provider = "atm", IsActive = true },
-            new PaymentMethod { MethodId = 6, MethodName = "VietQR / Bank Transfer", Provider = "vietqr", IsActive = true }
-        };
-
-        foreach (var requiredMethod in requiredMethods)
-        {
-            var existing = existingMethods.FirstOrDefault(x => x.MethodId == requiredMethod.MethodId);
-            if (existing != null)
-            {
-                existing.MethodName = requiredMethod.MethodName;
-                existing.Provider = requiredMethod.Provider;
-                existing.IsActive = true;
-                continue;
-            }
-
-            db.PaymentMethods.Add(requiredMethod);
-            existingMethods.Add(requiredMethod);
-        }
-
-        await db.SaveChangesAsync();
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Skipping payment method seed because database is not ready: {ex.Message}");
-    }
-}
-
-static async Task EnsureShowtimesAsync(IServiceProvider services)
-{
-    using var scope = services.CreateScope();
-    try
-    {
-        var showtimeService = scope.ServiceProvider.GetRequiredService<IShowtimeService>();
-        var result = await showtimeService.GenerateUpcomingAsync(5);
-        var created = (result as System.Collections.ICollection)?.Count ?? 0;
-        Console.WriteLine($"Showtime auto-generation: created {created}, skipped 0 for 5 days.");
-    }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"Skipping showtime auto-generation because database is not ready: {ex.Message}");
-    }
-}
 
 static string BuildSqlServerConnectionString(IConfiguration configuration, string connectionStringName)
 {

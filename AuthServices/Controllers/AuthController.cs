@@ -1,5 +1,6 @@
 ﻿using DTO.Authen;
 using Entities;
+using AuthServices.Infrastructure;
 using Libs.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
@@ -21,13 +22,15 @@ namespace AuthServices.Controllers
         private readonly IUserService _userService;
         private readonly IConfiguration _configuration;
         private readonly SqlServerDbContext _context;
+        private readonly ILogger<AuthController> _logger;
         private readonly string _secretKey;
         private const int TokenExpirationMinutes = 480;
-        public AuthController(IUserService userService, IConfiguration configuration, SqlServerDbContext context)
+        public AuthController(IUserService userService, IConfiguration configuration, SqlServerDbContext context, ILogger<AuthController> logger)
         {
                 _userService = userService;
                 _configuration = configuration;
                 _context = context;
+                _logger = logger;
                 _secretKey = _configuration["Jwt:SecretKey"] ?? "default_secret_key_12345";
             }
         [HttpPost("login")]
@@ -35,22 +38,29 @@ namespace AuthServices.Controllers
         {
             if (request == null)
             {
-                return BadRequest(new { message = "Email and password are required" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Email and password are required");
             }
 
             var identifier = request.Username ?? request.Email;
             if (string.IsNullOrWhiteSpace(identifier) || string.IsNullOrWhiteSpace(request.Password))
             {
-                return BadRequest(new { message = "Email and password are required" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Email and password are required");
             }
 
             var user = await _userService.Authenticate(identifier, request.Password);
             if (user == null)
             {
-                return Unauthorized(new { message = "Invalid email or password" });
+                _logger.LogWarning("LoginFailed identifier={Identifier}", identifier);
+                return ApiErrors.Unauthorized(this, ErrorCodes.LoginFailed, "Invalid email or password");
             }
             var roleName = await _userService.ResolveRoleName(user.RoleId);
             var token = TokenHelper.GenerateToken(_secretKey, TokenExpirationMinutes, user.UserId.ToString(), user.Email, roleName, user.CinemaId);
+            _logger.LogInformation(
+                "LoginSucceeded userId={UserId} email={Email} role={Role} cinemaId={CinemaId}",
+                user.UserId,
+                user.Email,
+                roleName,
+                user.CinemaId);
 
             return Ok(new DTO.Authen.LoginDto.LoginResponse
             {
@@ -72,24 +82,25 @@ namespace AuthServices.Controllers
         {
             if (request == null)
             {
-                return BadRequest(new { message = "Invalid request" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Invalid request");
             }
 
             if (string.IsNullOrWhiteSpace(request.FullName) ||
                 string.IsNullOrWhiteSpace(request.Email) ||
                 string.IsNullOrWhiteSpace(request.Password))
             {
-                return BadRequest(new { message = "Full name, email and password are required" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Full name, email and password are required");
             }
 
             if (request.Password.Length < 6)
             {
-                return BadRequest(new { message = "Password must be at least 6 characters" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Password must be at least 6 characters");
             }
 
             if (await _context.Users.AnyAsync(x => x.Email == request.Email))
             {
-                return BadRequest(new { message = "Email already exists" });
+                _logger.LogWarning("RegisterFailedDuplicateEmail email={Email}", request.Email);
+                return ApiErrors.Conflict(this, ErrorCodes.Conflict, "Email already exists");
             }
 
             try
@@ -108,11 +119,17 @@ namespace AuthServices.Controllers
                 };
 
                 var createdUser = await _userService.CreateAsync(user, request.Password, customerRoleId);
+                _logger.LogInformation(
+                    "UserRegistered userId={UserId} email={Email} roleId={RoleId}",
+                    createdUser.UserId,
+                    createdUser.Email,
+                    createdUser.RoleId);
                 return Ok(new { message = "Registration successful", userId = createdUser.UserId });
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = "Registration failed: " + ex.Message });
+                _logger.LogWarning(ex, "RegisterFailed email={Email}", request.Email);
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Registration failed: " + ex.Message);
             }
         }
 
@@ -122,17 +139,19 @@ namespace AuthServices.Controllers
         [HttpGet("me")]
         public async Task<IActionResult> Profile()
         {
-            try{
-            var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (!int.TryParse(claimValue, out var userId))
+            try
             {
-                return Unauthorized(new { message = "User ID not found in token" });
-            }
-            return Ok(await _userService.GetProfile(userId));
+                var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!int.TryParse(claimValue, out var userId))
+                {
+                    return ApiErrors.Unauthorized(this, ErrorCodes.TokenInvalid, "User ID not found in token");
+                }
+
+                return Ok(await _userService.GetProfile(userId));
             }
             catch
             {
-                return NotFound("Không tìm thấy User hoặc user ko hợp lệ !");
+                return ApiErrors.NotFound(this, ErrorCodes.NotFound, "Khong tim thay User hoac user khong hop le");
             }
         }
 
@@ -143,10 +162,11 @@ namespace AuthServices.Controllers
             var claimValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
             if (!int.TryParse(claimValue, out var userId))
             {
-                return Unauthorized(new { message = "User ID not found in token" });
+                return ApiErrors.Unauthorized(this, ErrorCodes.TokenInvalid, "User ID not found in token");
             }
 
             await _userService.UpdateUserAsync(userId, request);
+            _logger.LogInformation("ProfileUpdated userId={UserId}", userId);
             return await Profile();
         }
 

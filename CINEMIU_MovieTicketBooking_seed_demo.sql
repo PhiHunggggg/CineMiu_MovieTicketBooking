@@ -465,7 +465,7 @@ BEGIN TRY
             ORDER BY ABS(CHECKSUM(CONCAT(@bookingId, '-', @j, '-', s.seat_id)));
 
             INSERT INTO [dbo].[tickets] ([booking_id],[seat_id],[seat_type_id],[price],[qr_code],[is_used],[used_at],[checked_by])
-            SELECT @bookingId, @seatId, seat_type_id, (@final / @ticketCount), CONCAT(N'QR-CINEMIU-',@bookingId,N'-',@j,N'-',@seatId), CASE WHEN @status=N'confirmed' AND @i % 10 = 0 THEN 1 ELSE 0 END, CASE WHEN @status=N'confirmed' AND @i % 10 = 0 THEN DATEADD(HOUR,1,GETDATE()) ELSE NULL END, CASE WHEN @status=N'confirmed' AND @i % 10 = 0 THEN 3 ELSE NULL END
+            SELECT @bookingId, @seatId, seat_type_id, (@final / @ticketCount), CONCAT(N'QR-CINEMIU-',@bookingId,N'-',@j,N'-',@seatId), 0, NULL, NULL
             FROM [dbo].[seats] WHERE seat_id = @seatId;
 
             SET @j += 1;

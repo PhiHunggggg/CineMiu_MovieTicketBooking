@@ -38,6 +38,12 @@ public class NotificationRepository(SqlServerDbContext context) : INotificationR
     public Task<bool> ActiveUserExistsAsync(int userId) =>
         context.Users.AnyAsync(x => x.UserId == userId && x.IsActive);
 
+    public Task<string?> GetActiveUserEmailAsync(int userId) =>
+        context.Users.AsNoTracking()
+            .Where(x => x.UserId == userId && x.IsActive)
+            .Select(x => x.Email)
+            .FirstOrDefaultAsync();
+
     public Task<Notification?> GetByIdAsync(int id) =>
         context.Notifications.FirstOrDefaultAsync(x => x.NotifId == id);
 

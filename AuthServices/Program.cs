@@ -10,6 +10,7 @@ using Microsoft.Data.SqlClient;
 using Microsoft.OpenApi.Models;
 using Libs.Auth;
 using System.Text;
+using AuthServices.Infrastructure;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -126,6 +127,7 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseCors("AllowAll");
+app.UseMiddleware<ExceptionHandlingMiddleware>();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

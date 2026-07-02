@@ -120,7 +120,7 @@ export default function Invoice() {
     }, 3000);
 
     return () => clearInterval(pollingRef.current);
-  }, [isWaiting, order, setOrder]);
+  }, [isWaiting, order, setOrder, setPaymentWaiting]);
 
   // ─── Hủy đơn khi hết thời gian ──────────────────────────────────────────────
   const handleTimeout = async () => {

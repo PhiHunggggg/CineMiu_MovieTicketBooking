@@ -3,12 +3,18 @@ using DTO.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Repository.EFCore.Bookings;
+using Services.Administration;
 using Services.Loyalty;
+using Microsoft.Extensions.Logging;
 using static DTO.Booking.BookingDto;
 
 namespace Services.Booking
 {
-    public class BookkingService(IBookingRepository bookingRepository, ILoyaltyService loyaltyService) : IBookingService
+    public class BookkingService(
+        IBookingRepository bookingRepository,
+        ILoyaltyService loyaltyService,
+        INotificationService notificationService,
+        ILogger<BookkingService> logger) : IBookingService
     {
         public async Task<Paging.PaginationResponse<BookingResponse>> GetAllAsync(string? keyword, string? status, int? cinemaId, DateTime? date, int pageNumber = 1, int pageSize = 10)
         {
@@ -95,6 +101,25 @@ namespace Services.Booking
                     (int)Math.Floor(result.FinalAmount / 1000m),
                     bookingId,
                     $"Dat ve {result.BookingCode}");
+
+                try
+                {
+                    var booking = await bookingRepository.GetDetailAsync(bookingId);
+                    if (booking == null)
+                        throw new InvalidOperationException("Confirmed booking detail was not found");
+
+                    await notificationService.CreatePaymentSuccessAsync(booking);
+                }
+                catch (Exception exception)
+                {
+                    // Payment has already been committed. Email failure must not turn a
+                    // successful payment response into an error for the customer.
+                    logger.LogError(
+                        exception,
+                        "PaymentConfirmationEmailFailed bookingId={BookingId} bookingCode={BookingCode}",
+                        bookingId,
+                        result.BookingCode);
+                }
             }
             return (result.Success, result.Message, result.Payment);
         }

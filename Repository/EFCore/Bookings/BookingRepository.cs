@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Security.Claims;
 using System.Text;
 using static DTO.Booking.BookingDto;
@@ -79,7 +80,11 @@ namespace Repository.EFCore.Bookings
                 StartTime = x.showtime.StartTime,
                 EndTime = x.showtime.EndTime,
                 TicketCount = _dbset.Tickets.Count(t => t.BookingId == x.booking.BookingId),
-                UsedTicketCount = _dbset.Tickets.Count(t => t.BookingId == x.booking.BookingId && t.IsUsed),
+                UsedTicketCount = _dbset.Tickets.Count(t =>
+                    t.BookingId == x.booking.BookingId &&
+                    t.IsUsed &&
+                    t.UsedAt != null &&
+                    t.CheckedBy != null),
                 RefundAmount = _dbset.Payments
                     .Where(p => p.BookingId == x.booking.BookingId)
                     .Sum(p => p.RefundAmount ?? 0),
@@ -124,7 +129,11 @@ namespace Repository.EFCore.Bookings
                                     StartTime = showtime.StartTime,
                                     EndTime = showtime.EndTime,
                                     TicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
+                                    UsedTicketCount = _dbset.Tickets.Count(t =>
+                                        t.BookingId == booking.BookingId &&
+                                        t.IsUsed &&
+                                        t.UsedAt != null &&
+                                        t.CheckedBy != null),
                                     RefundAmount = _dbset.Payments
                                         .Where(p => p.BookingId == booking.BookingId)
                                         .Sum(p => p.RefundAmount ?? 0),
@@ -157,7 +166,7 @@ namespace Repository.EFCore.Bookings
                                      SeatTypeName = seatType.TypeName,
                                      Price = ticket.Price,
                                      QrCode = ticket.QrCode,
-                                     IsUsed = ticket.IsUsed,
+                                     IsUsed = ticket.IsUsed && ticket.UsedAt != null && ticket.CheckedBy != null,
                                      UsedAt = ticket.UsedAt,
                                      CheckedBy = ticket.CheckedBy
                                  }).ToListAsync();
@@ -258,7 +267,11 @@ namespace Repository.EFCore.Bookings
                                     StartTime = showtime.StartTime,
                                     EndTime = showtime.EndTime,
                                     TicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId),
-                                    UsedTicketCount = _dbset.Tickets.Count(t => t.BookingId == booking.BookingId && t.IsUsed),
+                                    UsedTicketCount = _dbset.Tickets.Count(t =>
+                                        t.BookingId == booking.BookingId &&
+                                        t.IsUsed &&
+                                        t.UsedAt != null &&
+                                        t.CheckedBy != null),
                                     RefundAmount = _dbset.Payments
                                         .Where(p => p.BookingId == booking.BookingId)
                                         .Sum(p => p.RefundAmount ?? 0),
@@ -308,8 +321,35 @@ namespace Repository.EFCore.Bookings
         }
         public async Task<int> Create(BookingDto.BookingCreateRequest request)
         {
+            var strategy = _dbset.Database.CreateExecutionStrategy();
+
             try
             {
+                return await strategy.ExecuteAsync(() => CreateInTransactionAsync(request));
+            }
+            catch (DbUpdateException dbEx)
+            {
+                var innerMsg = dbEx.InnerException?.Message ?? dbEx.Message;
+                Console.WriteLine($"[BookingsController] DB Error: {innerMsg}");
+                throw new Exception("Database error occurred");
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new Exception(ex.Message);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[BookingsController] Error: {ex}");
+                throw new Exception(ex.Message);
+            }
+        }
+
+        private async Task<int> CreateInTransactionAsync(BookingDto.BookingCreateRequest request)
+        {
+                await using var transaction = _dbset.Database.IsRelational()
+                    ? await _dbset.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+                    : null;
+
                 if (!await _dbset.Users.AnyAsync(u => u.UserId == request.UserId))
                 {
                     throw new Exception("User not found");
@@ -496,23 +536,12 @@ namespace Repository.EFCore.Bookings
                 }
 
                 await _dbset.SaveChangesAsync();
+                if (transaction != null)
+                {
+                    await transaction.CommitAsync();
+                }
+
                 return booking.BookingId;
-            }
-            catch (DbUpdateException dbEx)
-            {
-                var innerMsg = dbEx.InnerException?.Message ?? dbEx.Message;
-                Console.WriteLine($"[BookingsController] DB Error: {innerMsg}");
-                throw new Exception("Database error occurred");
-            }
-            catch (InvalidOperationException ex)
-            {
-                throw new Exception(ex.Message);
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[BookingsController] Error: {ex}");
-                throw new Exception(ex.Message);
-            }
         }
         public async Task Cancel(int bookingId, BookingDto.CancelBookingDto cancelReason, int currentUserId, string currentUserRole, int? currentUserCinemaId)
         {

@@ -1,9 +1,0 @@
-flowchart TD
- A(["POST /api/bookings/check-in<br/>Authorize CheckInRoles"]) --> D1{"Có TicketId hoặc QrCode?"}
- D1 -- Không --> B(["400 Bad Request"])
- D1 -- Có --> S1["Service.GetBookingIdByTicketAsync"] --> R1["Repository lọc Tickets<br/>theo TicketId/QR"]
- R1 --> DB1[("SQL Server<br/>Tickets")]
- DB1 --> D2{"Tìm thấy BookingId?"}
- D2 -- Không --> N(["404 Ticket not found"])
- D2 -- Có --> C2["Controller chuyển sang CheckIn(bookingId, request)"]
- C2 --> F["Tiếp tục luồng 11-check-in-by-booking"]

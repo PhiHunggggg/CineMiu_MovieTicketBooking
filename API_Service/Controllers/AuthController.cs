@@ -1,5 +1,6 @@
 using Common;
 using Entities;
+using API_Service.Infrastructure;
 using Repository.EFCore.Authen;
 using Services.Authen;
 using Microsoft.AspNetCore.Mvc;
@@ -17,12 +18,18 @@ namespace APIService.Controllers
         private readonly IUserService _userService;
         private readonly IUserRepository _userRepository;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<AuthController> _logger;
 
-        public AuthController(IUserService userService, IUserRepository userRepository, IConfiguration configuration)
+        public AuthController(
+            IUserService userService,
+            IUserRepository userRepository,
+            IConfiguration configuration,
+            ILogger<AuthController> logger)
         {
             _userService = userService;
             _userRepository = userRepository;
             _configuration = configuration;
+            _logger = logger;
         }
 
         [HttpPost("register")]
@@ -30,12 +37,13 @@ namespace APIService.Controllers
         {
             if (string.IsNullOrWhiteSpace(dto.FullName) || string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
             {
-                return BadRequest(new { message = "Full name, email and password are required" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Full name, email and password are required");
             }
 
             if (await _userRepository.EmailExistsAsync(dto.Email))
             {
-                return BadRequest(new { message = "Email already exists" });
+                _logger.LogWarning("RegisterFailedDuplicateEmail email={Email}", dto.Email);
+                return ApiErrors.Conflict(this, ErrorCodes.Conflict, "Email already exists");
             }
 
             var user = new CinemaUser
@@ -50,6 +58,11 @@ namespace APIService.Controllers
             var createdUser = await _userService.CreateAsync(user, dto.Password, 1);
             var roleName = await _userService.ResolveRoleName(createdUser.RoleId) ?? "customer";
             var token = GenerateJwtToken(createdUser, roleName);
+            _logger.LogInformation(
+                "UserRegistered userId={UserId} email={Email} role={Role}",
+                createdUser.UserId,
+                createdUser.Email,
+                roleName);
 
             return Ok(new
             {
@@ -76,17 +89,24 @@ namespace APIService.Controllers
         {
             if (string.IsNullOrWhiteSpace(dto.Email) || string.IsNullOrWhiteSpace(dto.Password))
             {
-                return BadRequest(new { message = "Email and password are required" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Email and password are required");
             }
 
             var user = await _userService.Authenticate(dto.Email, dto.Password);
             if (user == null)
             {
-                return Unauthorized(new { message = "Invalid email or password" });
+                _logger.LogWarning("LoginFailed email={Email}", dto.Email);
+                return ApiErrors.Unauthorized(this, ErrorCodes.LoginFailed, "Invalid email or password");
             }
 
             var roleName = await _userService.ResolveRoleName(user.RoleId) ?? "customer";
             var token = GenerateJwtToken(user, roleName);
+            _logger.LogInformation(
+                "LoginSucceeded userId={UserId} email={Email} role={Role} cinemaId={CinemaId}",
+                user.UserId,
+                user.Email,
+                roleName,
+                user.CinemaId);
 
             return Ok(new
             {
@@ -114,20 +134,20 @@ namespace APIService.Controllers
             var authHeader = Request.Headers["Authorization"].ToString();
             if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
             {
-                return Unauthorized(new { message = "Invalid token" });
+                return ApiErrors.Unauthorized(this, ErrorCodes.Unauthorized, "Invalid token");
             }
 
             var token = authHeader.Substring("Bearer ".Length);
             var userId = ValidateTokenAndGetUserId(token);
             if (userId == null)
             {
-                return Unauthorized(new { message = "Token expired or invalid" });
+                return ApiErrors.Unauthorized(this, ErrorCodes.TokenInvalid, "Token expired or invalid");
             }
 
             var user = await _userService.GetById(userId.Value);
             if (user == null || !user.IsActive)
             {
-                return NotFound(new { message = "User not found" });
+                return ApiErrors.NotFound(this, ErrorCodes.NotFound, "User not found");
             }
 
             return Ok(new
@@ -150,33 +170,35 @@ namespace APIService.Controllers
         {
             if (string.IsNullOrWhiteSpace(dto.CurrentPassword) || string.IsNullOrWhiteSpace(dto.NewPassword))
             {
-                return BadRequest(new { message = "Current password and new password are required" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Current password and new password are required");
             }
 
             if (dto.NewPassword.Length < 6)
             {
-                return BadRequest(new { message = "New password must contain at least 6 characters" });
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "New password must contain at least 6 characters");
             }
 
             var authHeader = Request.Headers["Authorization"].ToString();
             if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
             {
-                return Unauthorized(new { message = "Invalid token" });
+                return ApiErrors.Unauthorized(this, ErrorCodes.Unauthorized, "Invalid token");
             }
 
             var userId = ValidateTokenAndGetUserId(authHeader.Substring("Bearer ".Length));
             var user = userId.HasValue ? await _userService.GetById(userId.Value) : null;
             if (user == null)
             {
-                return Unauthorized(new { message = "Token expired or invalid" });
+                return ApiErrors.Unauthorized(this, ErrorCodes.TokenInvalid, "Token expired or invalid");
             }
 
             if (!TokenHelper.IsValidStoredPassword(dto.CurrentPassword, user.PasswordHash))
             {
-                return BadRequest(new { message = "Current password is incorrect" });
+                _logger.LogWarning("PasswordChangeFailed userId={UserId} reason=InvalidCurrentPassword", user.UserId);
+                return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, "Current password is incorrect");
             }
 
             await _userService.UpdateAsync(user, dto.NewPassword);
+            _logger.LogInformation("PasswordChanged userId={UserId}", user.UserId);
             return Ok(new { message = "Password changed successfully" });
         }
 
@@ -186,20 +208,20 @@ namespace APIService.Controllers
             var authHeader = Request.Headers["Authorization"].ToString();
             if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer "))
             {
-                return Unauthorized(new { message = "Invalid token" });
+                return ApiErrors.Unauthorized(this, ErrorCodes.Unauthorized, "Invalid token");
             }
 
             var token = authHeader.Substring("Bearer ".Length);
             var userId = ValidateTokenAndGetUserId(token);
             if (userId == null)
             {
-                return Unauthorized(new { message = "Token expired or invalid" });
+                return ApiErrors.Unauthorized(this, ErrorCodes.TokenInvalid, "Token expired or invalid");
             }
 
             var user = await _userService.GetById(userId.Value);
             if (user == null)
             {
-                return NotFound(new { message = "User not found" });
+                return ApiErrors.NotFound(this, ErrorCodes.NotFound, "User not found");
             }
 
             user.FullName = dto.FullName ?? user.FullName;
@@ -209,6 +231,7 @@ namespace APIService.Controllers
             user.AvatarUrl = dto.AvatarUrl ?? user.AvatarUrl;
 
             await _userService.UpdateAsync(user, null);
+            _logger.LogInformation("ProfileUpdated userId={UserId}", user.UserId);
 
             return Ok(new
             {

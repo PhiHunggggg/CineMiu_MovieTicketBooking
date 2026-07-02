@@ -1,4 +1,5 @@
 using DTO.Booking;
+using API_Service.Infrastructure;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Services.Booking;
@@ -9,7 +10,7 @@ namespace API_Service.Controllers
 {
     [Route("api/bookings")]
     [ApiController]
-    public class BookingsController(IBookingService bookingService) : ControllerBase
+    public class BookingsController(IBookingService bookingService, ILogger<BookingsController> logger) : ControllerBase
     {
         private const string CheckInRoles = "admin,ticket_staff,staff,cinema_manager,manager";
 
@@ -71,27 +72,63 @@ namespace API_Service.Controllers
         {
             try
             {
+                logger.LogInformation(
+                    "BookingCreateRequested userId={UserId} showtimeId={ShowtimeId} seatIds={SeatIds}",
+                    request.UserId,
+                    request.ShowtimeId,
+                    string.Join(",", request.SeatIds));
+
                 var bookingId = await bookingService.Create(request);
                 var booking = await bookingService.GetDetailAsync(bookingId);
+                logger.LogInformation(
+                    "BookingCreated bookingId={BookingId} bookingCode={BookingCode} userId={UserId} showtimeId={ShowtimeId}",
+                    bookingId,
+                    booking?.Booking.BookingCode,
+                    request.UserId,
+                    request.ShowtimeId);
                 return CreatedAtAction(nameof(GetById), new { id = bookingId }, booking);
             }
             catch (Exception ex)
             {
-                return BadRequest(new { message = ex.Message });
+                logger.LogWarning(
+                    ex,
+                    "BookingCreateFailed userId={UserId} showtimeId={ShowtimeId} seatIds={SeatIds}",
+                    request.UserId,
+                    request.ShowtimeId,
+                    string.Join(",", request.SeatIds));
+                return MapKnownBookingError(ex.Message);
             }
         }
 
         [HttpPost("{id:int}/payments")]
         public async Task<IActionResult> AddPayment(int id, [FromBody] PaymentDto request)
         {
+            logger.LogInformation(
+                "PaymentAddRequested bookingId={BookingId} methodId={MethodId} amount={Amount} transactionRef={TransactionRef}",
+                id,
+                request.MethodId,
+                request.Amount,
+                request.TransactionRef);
+
             var result = await bookingService.AddPaymentAsync(id, request);
             if (!result.Success)
             {
-                return result.Message.Contains("not found", StringComparison.OrdinalIgnoreCase)
-                    ? NotFound(new { message = result.Message })
-                    : BadRequest(new { message = result.Message });
+                logger.LogWarning(
+                    "PaymentAddFailed bookingId={BookingId} methodId={MethodId} amount={Amount} transactionRef={TransactionRef} message={Message}",
+                    id,
+                    request.MethodId,
+                    request.Amount,
+                    request.TransactionRef,
+                    result.Message);
+                return MapKnownBookingError(result.Message);
             }
 
+            logger.LogInformation(
+                "PaymentAdded bookingId={BookingId} paymentId={PaymentId} amount={Amount} transactionRef={TransactionRef}",
+                id,
+                result.Payment?.PaymentId,
+                result.Payment?.Amount,
+                result.Payment?.TransactionRef);
             return Ok(result.Payment);
         }
 
@@ -100,6 +137,13 @@ namespace API_Service.Controllers
         {
             try
             {
+                logger.LogInformation(
+                    "BookingCancelRequested bookingId={BookingId} userId={UserId} role={Role} cinemaId={CinemaId}",
+                    id,
+                    ResolveAuthenticatedUserId(),
+                    User.FindFirstValue(ClaimTypes.Role),
+                    ResolveCinemaId());
+
                 await bookingService.Cancel(
                     id,
                     request,
@@ -107,10 +151,12 @@ namespace API_Service.Controllers
                     User.FindFirstValue(ClaimTypes.Role) ?? string.Empty,
                     ResolveCinemaId());
 
+                logger.LogInformation("BookingCancelled bookingId={BookingId}", id);
                 return Ok(await bookingService.GetByIdAsync(id));
             }
             catch (Exception ex)
             {
+                logger.LogWarning(ex, "BookingCancelFailed bookingId={BookingId}", id);
                 return ErrorResponse(ex);
             }
         }
@@ -120,11 +166,14 @@ namespace API_Service.Controllers
         {
             try
             {
+                logger.LogInformation("BookingRefundRequested bookingId={BookingId} reason={Reason}", id, request.Reason);
                 await bookingService.RefundAsync(id, request);
+                logger.LogInformation("BookingRefunded bookingId={BookingId}", id);
                 return Ok(new { message = "Refund successful", booking = await bookingService.GetDetailAsync(id) });
             }
             catch (Exception ex)
             {
+                logger.LogWarning(ex, "BookingRefundFailed bookingId={BookingId}", id);
                 return ErrorResponse(ex);
             }
         }
@@ -138,8 +187,22 @@ namespace API_Service.Controllers
                 return BadRequest(new { message = "TicketId or QrCode is required" });
             }
 
+            logger.LogInformation(
+                "TicketCheckInLookupRequested staffUserId={StaffUserId} ticketId={TicketId} hasQrCode={HasQrCode}",
+                ResolveAuthenticatedUserId(),
+                request.TicketId,
+                !string.IsNullOrWhiteSpace(request.QrCode));
+
             var bookingId = await bookingService.GetBookingIdByTicketAsync(request.TicketId, request.QrCode);
-            if (!bookingId.HasValue) return NotFound(new { message = "Ticket not found" });
+            if (!bookingId.HasValue)
+            {
+                logger.LogWarning(
+                    "TicketCheckInTicketNotFound staffUserId={StaffUserId} ticketId={TicketId} hasQrCode={HasQrCode}",
+                    ResolveAuthenticatedUserId(),
+                    request.TicketId,
+                    !string.IsNullOrWhiteSpace(request.QrCode));
+                return ApiErrors.NotFound(this, ErrorCodes.TicketNotFound, "Ticket not found");
+            }
 
             return await CheckIn(bookingId.Value, request);
         }
@@ -151,10 +214,20 @@ namespace API_Service.Controllers
             var userId = ResolveAuthenticatedUserId();
             if (!userId.HasValue)
             {
-                return Unauthorized(new { message = "Authenticated staff account is required" });
+                logger.LogWarning("TicketCheckInUnauthorized bookingId={BookingId}", id);
+                return ApiErrors.Unauthorized(this, ErrorCodes.Unauthorized, "Authenticated staff account is required");
             }
 
-            return await bookingService.CheckInAsync(id, request, userId.Value);
+            logger.LogInformation(
+                "TicketCheckInRequested bookingId={BookingId} staffUserId={StaffUserId} ticketId={TicketId} hasQrCode={HasQrCode}",
+                id,
+                userId.Value,
+                request.TicketId,
+                !string.IsNullOrWhiteSpace(request.QrCode));
+
+            var response = await bookingService.CheckInAsync(id, request, userId.Value);
+            logger.LogInformation("TicketCheckInCompleted bookingId={BookingId} staffUserId={StaffUserId}", id, userId.Value);
+            return response;
         }
 
         private int? ResolveAuthenticatedUserId()
@@ -166,7 +239,7 @@ namespace API_Service.Controllers
 
         private int? ResolveCinemaId()
         {
-            var value = User.FindFirstValue("cinemaId") ?? User.FindFirstValue("cinema_id");
+            var value = User.FindFirstValue("cinemaId") ?? User.FindFirstValue("cinema_id") ?? User.FindFirstValue("CinemaId");
             return int.TryParse(value, out var cinemaId) ? cinemaId : null;
         }
 
@@ -174,15 +247,52 @@ namespace API_Service.Controllers
         {
             if (exception.Message.Contains("not found", StringComparison.OrdinalIgnoreCase))
             {
-                return NotFound(new { message = exception.Message });
+                return ApiErrors.NotFound(this, ErrorCodes.BookingNotFound, exception.Message);
             }
 
             if (exception.Message.Contains("authorized", StringComparison.OrdinalIgnoreCase))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, new { message = exception.Message });
+                return ApiErrors.Forbidden(this, ErrorCodes.BookingAccessDenied, exception.Message);
             }
 
-            return BadRequest(new { message = exception.Message });
+            return MapKnownBookingError(exception.Message);
+        }
+
+        private IActionResult MapKnownBookingError(string message)
+        {
+            if (message.Contains("not found", StringComparison.OrdinalIgnoreCase))
+            {
+                var code = message.Contains("payment method", StringComparison.OrdinalIgnoreCase)
+                    ? ErrorCodes.PaymentMethodNotFound
+                    : message.Contains("booking", StringComparison.OrdinalIgnoreCase)
+                        ? ErrorCodes.BookingNotFound
+                        : ErrorCodes.NotFound;
+                return ApiErrors.NotFound(this, code, message);
+            }
+
+            if (message.Contains("transaction reference", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiErrors.Conflict(this, ErrorCodes.PaymentDuplicateTransaction, message);
+            }
+
+            if (message.Contains("seat", StringComparison.OrdinalIgnoreCase) &&
+                (message.Contains("not available", StringComparison.OrdinalIgnoreCase) ||
+                 message.Contains("already", StringComparison.OrdinalIgnoreCase)))
+            {
+                return ApiErrors.Conflict(this, ErrorCodes.SeatAlreadyBooked, message);
+            }
+
+            if (message.Contains("Cannot pay", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiErrors.BadRequest(this, ErrorCodes.BookingNotPayable, message);
+            }
+
+            if (message.Contains("refund", StringComparison.OrdinalIgnoreCase))
+            {
+                return ApiErrors.BadRequest(this, ErrorCodes.RefundNotAllowed, message);
+            }
+
+            return ApiErrors.BadRequest(this, ErrorCodes.ValidationFailed, message);
         }
     }
 }

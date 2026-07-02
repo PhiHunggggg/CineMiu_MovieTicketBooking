@@ -33,6 +33,7 @@ const ageRatingOptions = ['P', 'T13', 'T16', 'T18', 'C'];
 
 const getItems = (data) => data?.items || data?.data || data || [];
 const getMovieId = (movie) => movie?.movieId || movie?.id;
+const getGenreId = (genre) => Number(genre?.genreId ?? genre?.id ?? genre?.GenreId);
 const toDateInput = (value) => (value ? String(value).substring(0, 10) : '');
 const normalizeStatus = (value) => {
     const key = String(value || '').trim().toLowerCase().replace(/[\s-]/g, '_');
@@ -81,6 +82,29 @@ const getGenreNameVi = (genre) => {
 const getGenreText = (movie) => {
     if (!Array.isArray(movie?.genres) || movie.genres.length === 0) return '-';
     return movie.genres.map(getGenreNameVi).join(', ');
+};
+
+const normalizeGenreIds = (genreIds, validGenreIds = null) => {
+    const normalized = (Array.isArray(genreIds) ? genreIds : [])
+        .map(Number)
+        .filter((id) => Number.isInteger(id) && id > 0);
+
+    const uniqueIds = [...new Set(normalized)];
+    return validGenreIds
+        ? uniqueIds.filter((id) => validGenreIds.has(id))
+        : uniqueIds;
+};
+
+const getMovieGenreIds = (detail, fallbackMovie = null) => {
+    const candidates = [
+        detail?.genreIds,
+        detail?.movie?.genreIds,
+        detail?.Movie?.GenreIds,
+        fallbackMovie?.genreIds,
+        fallbackMovie?.GenreIds,
+    ];
+    const genreIds = candidates.find((value) => Array.isArray(value));
+    return normalizeGenreIds(genreIds);
 };
 
 const getMovieStatus = (value) => movieStatusOptions.find((status) => status.value === normalizeStatus(value));
@@ -185,12 +209,12 @@ const AdminMovies = () => {
         }
 
         let sourceMovie = movie;
-        let genreIds = Array.isArray(movie.genreIds) ? movie.genreIds : [];
+        let genreIds = getMovieGenreIds(null, movie);
 
         try {
             const response = await movieApi.getById(getMovieId(movie));
             sourceMovie = response.data?.movie || movie;
-            genreIds = response.data?.genreIds || [];
+            genreIds = getMovieGenreIds(response.data, movie);
         } catch (err) {
             console.error('Failed to load movie details:', err);
             setError('Không tải được chi tiết phim, đang dùng dữ liệu trên danh sách');
@@ -214,7 +238,7 @@ const AdminMovies = () => {
             bannerUrl: sourceMovie.bannerUrl || '',
             trailerUrl: sourceMovie.trailerUrl || '',
             imdbRating: sourceMovie.imdbRating ?? '',
-            genreIds: genreIds.map(Number),
+            genreIds,
         });
         setShowModal(true);
     };
@@ -228,6 +252,8 @@ const AdminMovies = () => {
     };
 
     const handleGenreChange = (genreId, checked) => {
+        if (!Number.isInteger(genreId) || genreId <= 0) return;
+
         setFormData((current) => ({
             ...current,
             genreIds: checked
@@ -264,6 +290,9 @@ const AdminMovies = () => {
             return;
         }
 
+        const validGenreIds = new Set(lookups.genres.map(getGenreId).filter((id) => Number.isInteger(id) && id > 0));
+        const genreIds = normalizeGenreIds(formData.genreIds, validGenreIds);
+
         const payload = {
             title: formData.title.trim(),
             titleEn: cleanText(formData.titleEn),
@@ -282,7 +311,7 @@ const AdminMovies = () => {
             bannerUrl: cleanText(formData.bannerUrl),
             trailerUrl: cleanText(formData.trailerUrl),
             imdbRating,
-            genreIds: formData.genreIds.map(Number),
+            genreIds,
         };
 
         setSaving(true);
@@ -624,17 +653,21 @@ const AdminMovies = () => {
                                             <div className="border rounded p-3 bg-light">
                                                 {lookups.genres.length === 0 ? (
                                                     <span className="text-muted">Chưa có thể loại</span>
-                                                ) : lookups.genres.map((genre) => (
-                                                    <label className="mr-3 mb-2" key={genre.genreId}>
-                                                        <input
-                                                            type="checkbox"
-                                                            className="mr-1"
-                                                            checked={formData.genreIds.includes(Number(genre.genreId))}
-                                                            onChange={(e) => handleGenreChange(Number(genre.genreId), e.target.checked)}
-                                                        />
-                                                       {getGenreNameVi(genre)}
-                                                    </label>
-                                                ))}
+                                                ) : lookups.genres.map((genre) => {
+                                                    const genreId = getGenreId(genre);
+                                                    return (
+                                                        <label className="mr-3 mb-2" key={genreId}>
+                                                            <input
+                                                                type="checkbox"
+                                                                className="mr-1"
+                                                                checked={formData.genreIds.includes(genreId)}
+                                                                onChange={(e) => handleGenreChange(genreId, e.target.checked)}
+                                                                disabled={!Number.isInteger(genreId) || genreId <= 0}
+                                                            />
+                                                            {getGenreNameVi(genre)}
+                                                        </label>
+                                                    );
+                                                })}
                                             </div>
                                         </div>
 

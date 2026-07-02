@@ -105,6 +105,7 @@ export const bookingAdminApi = {
     getAll: (params) => api.get('/bookings', { params }),
     getById: (id) => api.get(`/bookings/${id}`),
     getByCode: (code) => api.get(`/bookings/code/${encodeURIComponent(code)}`),
+    getByUser: (userId) => api.get(`/bookings/user/${userId}`),
     cancel: (id, data) => api.post(`/bookings/${id}/cancel`, data),
     refund: (id, data) => api.post(`/bookings/${id}/refund`, data),
     checkIn: (id, data) => api.post(`/bookings/${id}/check-in`, data),
