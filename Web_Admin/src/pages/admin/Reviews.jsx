@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { movieApi, reviewApi } from '../../services/api';
 
 const getItems = (data) => data?.items || data?.data || data || [];

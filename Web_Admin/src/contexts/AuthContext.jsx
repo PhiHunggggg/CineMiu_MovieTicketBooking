@@ -65,6 +65,7 @@ export const AuthProvider = ({ children }) => {
     const isAdmin = () => getRoleId() === 4 || getRole().includes('admin');
     const isCinemaManager = () => !isAdmin() && (getRoleId() === 3 || getRole().includes('manager'));
     const isTicketStaff = () => getRoleId() === 2 || getRole().includes('staff');
+    const canManageCinemaOperations = () => isAdmin() || isCinemaManager();
     const canCheckInTickets = () => isAdmin() || isCinemaManager() || isTicketStaff();
 
     const value = useMemo(() => ({
@@ -74,6 +75,7 @@ export const AuthProvider = ({ children }) => {
         isAdmin,
         isCinemaManager,
         isTicketStaff,
+        canManageCinemaOperations,
         canCheckInTickets,
         isAuthenticated: Boolean(user),
         loading: false,

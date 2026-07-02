@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { bookingAdminApi, cinemaApi, movieApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -15,7 +15,6 @@ const getItems = (data) => data?.items || data?.data || data || [];
 const getBookingId = (booking) => booking?.bookingId ?? booking?.BookingId ?? booking?.id;
 const formatCurrency = (value) => `${Number(value || 0).toLocaleString('vi-VN')} đ`;
 const formatDateTime = (value) => (value ? new Date(value).toLocaleString('vi-VN') : '-');
-const toDateInput = (value) => (value ? String(value).substring(0, 10) : '');
 
 const getStatusLabel = (status) => {
     const map = {
@@ -296,7 +295,13 @@ const AdminBookings = () => {
         <div className="content-wrapper">
             <div className="content-header">
                 <div className="container-fluid">
-                    <h1 className="m-0">Quản lý đặt vé</h1>
+                    <div className="admin-page-title">
+                        <div>
+                            <p className="admin-eyebrow">Vận hành vé</p>
+                            <h1 className="m-0">Quản lý đặt vé</h1>
+                            <span>Tra cứu đơn, check-in QR, hoàn tiền và theo dõi trạng thái sử dụng vé.</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -311,7 +316,7 @@ const AdminBookings = () => {
                         <div><i className="fas fa-ban"></i><p><span>Đã hủy</span><strong>{cancelledCount.toLocaleString('vi-VN')}</strong></p></div>
                     </div>
 
-                    <div className="card">
+                    <div className="card admin-quick-checkin-card">
                         <div className="card-body">
                             <form className="form-inline align-items-end" onSubmit={quickCheckIn}>
                                 <div className="mr-2 mb-2 flex-grow-1">

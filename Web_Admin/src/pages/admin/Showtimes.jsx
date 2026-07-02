@@ -88,6 +88,60 @@ function padDatePart(value) {
   return String(value).padStart(2, '0')
 }
 
+function isValidDateParts(year, month, day) {
+  const date = new Date(year, month - 1, day)
+  return date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day
+}
+
+function toDisplayFilterDate(value) {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return ''
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch
+    return `${padDatePart(day)}/${padDatePart(month)}/${year}`
+  }
+
+  const displayMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (displayMatch) {
+    const [, day, month, year] = displayMatch
+    return `${padDatePart(day)}/${padDatePart(month)}/${year}`
+  }
+
+  return trimmed
+}
+
+function toApiFilterDate(value) {
+  const trimmed = String(value ?? '').trim()
+  if (!trimmed) return ''
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (isoMatch) {
+    const [, yearValue, monthValue, dayValue] = isoMatch
+    const year = Number(yearValue)
+    const month = Number(monthValue)
+    const day = Number(dayValue)
+    return isValidDateParts(year, month, day)
+      ? `${yearValue}-${padDatePart(month)}-${padDatePart(day)}`
+      : ''
+  }
+
+  const displayMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
+  if (!displayMatch) return ''
+
+  const [, dayValue, monthValue, yearValue] = displayMatch
+  const year = Number(yearValue)
+  const month = Number(monthValue)
+  const day = Number(dayValue)
+
+  return isValidDateParts(year, month, day)
+    ? `${yearValue}-${padDatePart(month)}-${padDatePart(day)}`
+    : ''
+}
+
 function toDateTimeLocal(value) {
   if (!value) return ''
 
@@ -173,6 +227,11 @@ function toDateOnly(value) {
   if (Number.isNaN(date.getTime())) return null
   date.setHours(0, 0, 0, 0)
   return date
+}
+
+function getTodayInputValue() {
+  const today = new Date()
+  return `${today.getFullYear()}-${padDatePart(today.getMonth() + 1)}-${padDatePart(today.getDate())}`
 }
 
 function resolveTimeSlot(value) {
@@ -344,7 +403,8 @@ function Showtimes() {
   const [searchParams] = useSearchParams()
   const isManagerScoped = isCinemaManager()
   const assignedCinemaId = isManagerScoped ? String(user?.cinemaId || '') : ''
-  const initialDate = searchParams.get('date') || ''
+  const todayInputValue = getTodayInputValue()
+  const initialDate = toApiFilterDate(searchParams.get('date')) || todayInputValue
   const initialStatus = searchParams.get('status') || (searchParams.get('upcoming') === '1' ? 'upcoming' : '')
   const queryAppliedRef = useRef(false)
   const autoScheduleGeneratedRef = useRef(false)
@@ -362,7 +422,7 @@ function Showtimes() {
   const [page, setPage] = useState(1)
   const [cinemaInput, setCinemaInput] = useState(assignedCinemaId || searchParams.get('cinemaId') || '')
   const [hallInput, setHallInput] = useState(searchParams.get('hallId') || '')
-  const [dateInput, setDateInput] = useState(initialDate)
+  const [dateInput, setDateInput] = useState(toDisplayFilterDate(initialDate))
   const [cinemaFilter, setCinemaFilter] = useState(assignedCinemaId || searchParams.get('cinemaId') || '')
   const [hallFilter, setHallFilter] = useState(searchParams.get('hallId') || '')
   const [dateFilter, setDateFilter] = useState(initialDate)
@@ -654,9 +714,15 @@ function Showtimes() {
 
   const handleSearch = (event) => {
     event.preventDefault()
+    const nextDateFilter = toApiFilterDate(dateInput)
+    if (dateInput.trim() && !nextDateFilter) {
+      setError('Ngay chieu phai co dinh dang dd/mm/yyyy.')
+      return
+    }
+
     setCinemaFilter(assignedCinemaId || cinemaInput)
     setHallFilter(hallInput)
-    setDateFilter(dateInput)
+    setDateFilter(nextDateFilter)
     setStatus(statusInput)
     setPage(1)
   }
@@ -664,10 +730,10 @@ function Showtimes() {
   const resetFilters = () => {
     setCinemaInput(assignedCinemaId)
     setHallInput('')
-    setDateInput('')
+    setDateInput(toDisplayFilterDate(todayInputValue))
     setCinemaFilter(assignedCinemaId)
     setHallFilter('')
-    setDateFilter('')
+    setDateFilter(todayInputValue)
     setStatusInput('')
     setStatus('')
     setPage(1)

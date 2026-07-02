@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { cinemaApi, cinemaLookupApi, userApi } from '../../services/api';
 import './CinemaManagers.css';
 

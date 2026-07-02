@@ -261,6 +261,85 @@ textarea:focus {
     margin-bottom: 14px;
 }
 
+.admin-redesign-shell .admin-page-title {
+    min-height: 46px;
+}
+
+.admin-redesign-shell .admin-page-title > .btn,
+.admin-redesign-shell .admin-page-title > button {
+    flex: 0 0 auto;
+}
+
+.admin-redesign-shell .card-header .row {
+    width: 100%;
+}
+
+.admin-redesign-shell .form-inline .btn {
+    white-space: nowrap;
+}
+
+.admin-redesign-shell .table-responsive {
+    border: 1px solid #dce5ef;
+    border-radius: 8px;
+}
+
+.admin-redesign-shell .table-responsive .table {
+    margin-bottom: 0;
+}
+
+.admin-redesign-shell .table-responsive .table th:first-child,
+.admin-redesign-shell .table-responsive .table td:first-child {
+    border-left: 0;
+}
+
+.admin-redesign-shell .table-responsive .table th:last-child,
+.admin-redesign-shell .table-responsive .table td:last-child {
+    border-right: 0;
+}
+
+.admin-redesign-shell .table-responsive .table thead tr:first-child th {
+    border-top: 0;
+}
+
+.admin-redesign-shell .table-responsive .table tbody tr:last-child td {
+    border-bottom: 0;
+}
+
+.admin-redesign-shell .btn-sm {
+    width: 34px;
+    padding-right: 0;
+    padding-left: 0;
+}
+
+.admin-redesign-shell .btn-sm i {
+    margin: 0 !important;
+}
+
+.admin-quick-checkin-card {
+    border-left: 4px solid var(--admin-green);
+}
+
+.admin-quick-checkin-card label {
+    color: #0b5f43;
+}
+
+.admin-quick-checkin-card .form-control {
+    min-height: 42px;
+}
+
+.admin-redesign-shell .modal-header {
+    background: #f8fbfe;
+}
+
+.admin-redesign-shell .modal-title {
+    font-size: 18px;
+    font-weight: 850;
+}
+
+.admin-redesign-shell .modal-footer {
+    background: #f8fbfe;
+}
+
 .admin-filter-grid {
     display: grid;
     grid-template-columns: repeat(5, minmax(135px, 1fr));
@@ -298,5 +377,27 @@ textarea:focus {
     .admin-management-brief,
     .admin-filter-grid {
         grid-template-columns: 1fr;
+    }
+
+    .admin-redesign-shell .admin-page-title {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .admin-redesign-shell .admin-page-title > .btn,
+    .admin-redesign-shell .admin-page-title > button {
+        width: 100%;
+    }
+
+    .admin-redesign-shell .form-inline {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .admin-redesign-shell .form-inline > .form-control,
+    .admin-redesign-shell .form-inline > select,
+    .admin-redesign-shell .form-inline > input,
+    .admin-redesign-shell .form-inline .btn {
+        width: 100%;
     }
 }

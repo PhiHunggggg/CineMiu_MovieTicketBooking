@@ -469,17 +469,6 @@ export default function Halls() {
                                             <td>{hall.totalRows} hàng × {hall.totalCols} cột</td>
                                             <td>
                                                 <strong>{Number(hall.activeSeatCount ?? hall.totalSeats ?? 0).toLocaleString('vi-VN')} ghế hoạt động</strong>
-                                                {Number(hall.upcomingShowtimeCount || 0) > 0 ? (
-                                                    <Link
-                                                        className="hall-showtime-link"
-                                                        to={`/admin/showtimes?cinemaId=${hall.cinemaId}&hallId=${getHallId(hall)}&upcoming=1`}
-                                                        title={`Xem lịch chiếu sắp tới của ${hall.hallName || hall.name}`}
-                                                    >
-                                                        {Number(hall.upcomingShowtimeCount).toLocaleString('vi-VN')} lịch chiếu sắp tới
-                                                    </Link>
-                                                ) : (
-                                                    <div className="small text-muted">Chưa có lịch chiếu sắp tới</div>
-                                                )}
                                             </td>
                                             <td>
                                                 <span className={`hall-status status-${getHallDisplayStatus(hall)}`}>

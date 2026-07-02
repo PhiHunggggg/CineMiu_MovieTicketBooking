@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cinemaLookupApi, movieApi } from '../../services/api';
 
 const createEmptyMovie = () => ({
@@ -326,7 +326,16 @@ const AdminMovies = () => {
         <div className="content-wrapper">
             <div className="content-header">
                 <div className="container-fluid">
-                    <h1 className="m-0">Quản lý phim</h1>
+                    <div className="admin-page-title">
+                        <div>
+                            <p className="admin-eyebrow">Kho nội dung</p>
+                            <h1 className="m-0">Quản lý phim</h1>
+                            <span>Cập nhật phim, poster, phân loại tuổi và trạng thái phát hành.</span>
+                        </div>
+                        <button className="btn btn-success" onClick={() => openModal()}>
+                            <i className="fas fa-plus mr-1"></i> Thêm phim
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -370,11 +379,6 @@ const AdminMovies = () => {
                                             <i className="fas fa-sync-alt mr-1"></i> Tải lại
                                         </button>
                                     </form>
-                                </div>
-                                <div className="col-lg-3 text-lg-right">
-                                    <button className="btn btn-success" onClick={() => openModal()}>
-                                        <i className="fas fa-plus mr-1"></i> Thêm phim
-                                    </button>
                                 </div>
                             </div>
                         </div>

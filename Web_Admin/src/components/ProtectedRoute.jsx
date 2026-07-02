@@ -2,7 +2,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 const ProtectedRoute = ({ children, adminOnly = false, managerOnly = false, branchOperator = false, checkInOnly = false }) => {
-    const { isAuthenticated, isAdmin, isCinemaManager, canCheckInTickets, loading } = useAuth();
+    const { isAuthenticated, isAdmin, isCinemaManager, canManageCinemaOperations, canCheckInTickets, loading } = useAuth();
 
     if (loading) {
         return (
@@ -22,7 +22,7 @@ const ProtectedRoute = ({ children, adminOnly = false, managerOnly = false, bran
         return <Navigate to="/" replace />;
     }
 
-    if (managerOnly && !isCinemaManager()) {
+    if (managerOnly && !canManageCinemaOperations()) {
         return <Navigate to="/" replace />;
     }
 

@@ -63,7 +63,7 @@ async function safeData(request, fallback) {
 export default function BranchOverview() {
     const { user } = useAuth();
     const assignedCinemaId = user?.cinemaId ? String(user.cinemaId) : '';
-    const today = useMemo(getTodayValue, []);
+    const today = useMemo(() => getTodayValue(), []);
     const [cinema, setCinema] = useState(null);
     const [halls, setHalls] = useState([]);
     const [showtimes, setShowtimes] = useState([]);

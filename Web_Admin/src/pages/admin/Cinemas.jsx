@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cinemaApi, cinemaLookupApi } from '../../services/api';
 
 const emptyCinema = {
@@ -47,7 +47,7 @@ const AdminCinemas = () => {
         try {
             const response = await cinemaApi.getAll({ city: city || undefined, activeOnly: false });
             setCinemas(getItems(response.data));
-        } catch (err) {
+        } catch {
             setError('Không tải được danh sách chi nhánh rạp');
         } finally {
             setLoading(false);

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { cinemaApi, movieApi, revenueApi } from '../../services/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -95,6 +95,9 @@ const Dashboard = () => {
 
     const totalBookings = useMemo(() => monthly.reduce((sum, row) => sum + Number(read(row, 'totalBookings', 'TotalBookings') || 0), 0), [monthly]);
     const maxMovieRevenue = Math.max(...topMovies.map((movie) => Number(read(movie, 'totalRevenue', 'TotalRevenue') || 0)), 1);
+    const soldTickets = Number(read(statuses.find((item) => read(item, 'status', 'Status') === 'sold'), 'totalTickets', 'TotalTickets') || stats.tickets || 0);
+    const ticketStatusTotal = statuses.reduce((sum, item) => sum + Number(read(item, 'totalTickets', 'TotalTickets') || 0), 0);
+    const soldTicketRatio = ticketStatusTotal ? Math.min(100, (soldTickets / ticketStatusTotal) * 100) : 0;
 
     return (
         <div className="content-wrapper admin-dashboard-page">
@@ -110,7 +113,7 @@ const Dashboard = () => {
                 {loading ? <div className="admin-loading"><div className="spinner-border text-danger"></div></div> : <>
                     <div className="admin-kpi-grid">
                         <KpiCard label="Tổng doanh thu" value={compactCurrency(stats.revenue)} icon="fa-wallet" tone="red" detail={`${formatNumber(totalBookings)} giao dịch thành công`} to={isAdmin() ? '/admin/revenue' : undefined} />
-                        <KpiCard label="Tổng vé đã bán" value={formatNumber(stats.tickets)} icon="fa-ticket-alt" tone="violet" detail={`Trong năm ${year}`} to="/admin/bookings" />
+                        <KpiCard label="Vé bán thành công" value={formatNumber(stats.tickets)} icon="fa-ticket-alt" tone="violet" detail={`Đã thanh toán trong năm ${year}`} to="/admin/bookings" />
                         <KpiCard label="Tổng số phim" value={formatNumber(stats.movies)} icon="fa-film" tone="blue" detail="Đang quản lý trên hệ thống" to={isAdmin() ? '/admin/movies' : undefined} />
                         <KpiCard label="Chi nhánh rạp" value={formatNumber(stats.cinemas)} icon="fa-building" tone="green" detail="Toàn bộ cụm rạp" to={isAdmin() ? '/admin/cinemas' : undefined} />
                     </div>
@@ -123,8 +126,8 @@ const Dashboard = () => {
                         </div>
 
                         <div className="admin-panel admin-status-panel">
-                            <div className="admin-panel-header"><div><p className="admin-eyebrow">Vận hành vé</p><h2>Trạng thái vé</h2><span>Theo kỳ báo cáo hiện tại</span></div></div>
-                            <div className="admin-ticket-ring" style={{ '--sold': `${stats.tickets ? Math.min(100, (Number(read(statuses.find((item) => read(item, 'status', 'Status') === 'sold'), 'totalTickets', 'TotalTickets') || 0) / stats.tickets) * 100) : 0}%` }}><div><strong>{formatNumber(stats.tickets)}</strong><span>Vé đã bán</span></div></div>
+                            <div className="admin-panel-header"><div><p className="admin-eyebrow">Vận hành vé</p><h2>Trạng thái vé</h2><span>Phân loại vé theo trạng thái trong kỳ</span></div></div>
+                            <div className="admin-ticket-ring" style={{ '--sold': `${soldTicketRatio}%` }}><div><strong>{formatNumber(soldTickets)}</strong><span>Vé thành công</span></div></div>
                             <div className="admin-status-list">
                                 {statuses.length ? statuses.map((item, index) => <div key={read(item, 'status', 'Status') || index}><span className={`status-color status-${index}`}></span><p>{read(item, 'label', 'Label')}<strong>{formatNumber(read(item, 'totalTickets', 'TotalTickets'))}</strong></p></div>) : <div className="admin-empty-inline">Chưa có dữ liệu vé trong kỳ.</div>}
                             </div>

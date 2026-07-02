@@ -58,6 +58,7 @@ export default function MainLayout() {
         isAdmin,
         isCinemaManager,
         isTicketStaff,
+        canManageCinemaOperations,
         canCheckInTickets,
     } = useAuth();
 
@@ -130,6 +131,13 @@ export default function MainLayout() {
                                 <MenuLink to="/admin/managers" icon="fa-user-tie">Tài khoản Cinema Manager</MenuLink>
                             </NavGroup>
 
+                            <NavGroup title="Quản lý tại rạp">
+                                <MenuLink to="/admin/halls" icon="fa-door-open">Phòng chiếu</MenuLink>
+                                <MenuLink to="/admin/seats" icon="fa-chair">Ghế ngồi</MenuLink>
+                                <MenuLink to="/admin/showtimes" icon="fa-calendar-days">Lịch chiếu</MenuLink>
+                                <MenuLink to="/admin/ticket-prices" icon="fa-tags">Giá vé</MenuLink>
+                            </NavGroup>
+
                             <NavGroup title="Kinh doanh & khách hàng">
                                 <MenuLink to="/admin/bookings" icon="fa-ticket">Toàn bộ vé</MenuLink>
                                 <MenuLink to="/admin/concessions" icon="fa-burger">Combo bắp nước</MenuLink>
@@ -146,7 +154,7 @@ export default function MainLayout() {
                         </>
                     )}
 
-                    {isCinemaManager() && (
+                    {!isAdmin() && isCinemaManager() && (
                         <>
                             <MenuLink to="/admin/branch" icon="fa-gauge-high" end>Tổng quan chi nhánh</MenuLink>
 
@@ -165,7 +173,7 @@ export default function MainLayout() {
                         </>
                     )}
 
-                    {!isAdmin() && !isCinemaManager() && canCheckInTickets() && (
+                    {!canManageCinemaOperations() && canCheckInTickets() && (
                         <NavGroup title="Soát vé">
                             <MenuLink to="/admin/bookings" icon="fa-qrcode" badge="QR">Check-in vé</MenuLink>
                         </NavGroup>
