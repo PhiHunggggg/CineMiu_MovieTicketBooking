@@ -54,7 +54,10 @@ namespace Repository.EFCore.Bookings
                 var dateOnly = date.Value.Date;
                 query = query.Where(x => x.showtime.StartTime.Date == dateOnly);
             }
-            var result = query.Select(x => new BookingDto.BookingResponse
+            var result = query
+                .OrderByDescending(x => x.booking.CreatedAt)
+                .ThenByDescending(x => x.booking.BookingId)
+                .Select(x => new BookingDto.BookingResponse
             {
                 BookingId = x.booking.BookingId,
                 BookingCode = x.booking.BookingCode,

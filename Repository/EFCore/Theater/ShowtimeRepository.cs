@@ -303,6 +303,9 @@ namespace Repository.EFCore.Theater
                 .Where(x => x.Status.ToLower() == "active").OrderBy(x => x.HallId).ToListAsync();
             if (movies.Count == 0 || halls.Count == 0) return [];
 
+            var cinemaHours = await context.Cinemas.AsNoTracking()
+                .ToDictionaryAsync(x => x.CinemaId, x => new { x.OpeningTime, x.ClosingTime });
+
             var today = DateTime.Today;
             var existing = await context.ShowTimes
                 .Where(x => x.StartTime >= today && x.StartTime < today.AddDays(days)).ToListAsync();
@@ -320,6 +323,9 @@ namespace Repository.EFCore.Theater
                         var start = date.AddHours(slots[slotIndex]);
                         var movie = movies[(dayIndex * halls.Count * slots.Length + hallIndex * slots.Length + slotIndex) % movies.Count];
                         var end = start.AddMinutes(movie.DurationMins);
+                        if (!cinemaHours.TryGetValue(hall.CinemaId, out var hours) ||
+                            start.TimeOfDay < hours.OpeningTime ||
+                            end.TimeOfDay > hours.ClosingTime) continue;
                         if (existing.Concat(candidates).Any(x => x.HallId == hall.HallId &&
                                 !string.Equals(x.Status, "cancelled", StringComparison.OrdinalIgnoreCase) &&
                                 x.StartTime < end && start < x.EndTime)) continue;
@@ -525,6 +531,17 @@ namespace Repository.EFCore.Theater
             if (endTime <= dto.StartTime)
             {
                 return (default, "", "", "End time must be after start time");
+            }
+
+            var cinema = await context.Cinemas.AsNoTracking().FirstOrDefaultAsync(x => x.CinemaId == hall.CinemaId);
+            if (cinema == null)
+            {
+                return (default, "", "", "Selected cinema does not exist");
+            }
+
+            if (dto.StartTime.TimeOfDay < cinema.OpeningTime || endTime.TimeOfDay > cinema.ClosingTime)
+            {
+                return (default, "", "", $"Showtime must be within cinema operating hours {cinema.OpeningTime:hh\\:mm}-{cinema.ClosingTime:hh\\:mm}");
             }
 
             var status = NormalizeStatus(dto.Status);

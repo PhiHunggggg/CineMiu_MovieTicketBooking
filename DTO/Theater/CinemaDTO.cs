@@ -27,6 +27,8 @@ namespace DTO.Theater
             public string? MapUrl { get; set; }
             public string? ImageUrl { get; set; }
             public bool IsActive { get; set; }
+            public TimeSpan OpeningTime { get; set; }
+            public TimeSpan ClosingTime { get; set; }
         }
 
         public class CinemaByMovieResponse : CinemaResponse
@@ -55,6 +57,8 @@ namespace DTO.Theater
             public string? MapUrl { get; set; }
             public string? ImageUrl { get; set; }
             public bool? IsActive { get; set; }
+            public TimeSpan? OpeningTime { get; set; }
+            public TimeSpan? ClosingTime { get; set; }
         }
 
         public class HallResponse

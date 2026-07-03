@@ -166,6 +166,15 @@ const getMonthFromDate = (value) => {
     return Number.isNaN(date.getTime()) ? null : date.getMonth() + 1;
 };
 
+const formatDayLabel = (value) => {
+    if (!value) return '-';
+
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+
+    return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
+};
+
 const createEmptyMonthlyRows = () => monthOptions.map((month) => ({
     month: month.value,
     label: month.label,
@@ -200,26 +209,28 @@ const EmptyChart = ({ label = 'Chưa có dữ liệu' }) => (
 
 const StatCard = ({ title, value, note, icon, color }) => (
     <div className="col-xl-3 col-md-6 col-12">
-        <div className="info-box shadow-sm">
-            <span className="info-box-icon" style={{ backgroundColor: color, color: '#fff' }}>
+        <div className="report-stat-card compact" style={{ '--report-tone': color }}>
+            <div className="report-stat-copy">
+                <span>{title}</span>
+                <strong>{value}</strong>
+                {note && <small>{note}</small>}
+            </div>
+            <span className="report-stat-icon">
                 <i className={`fas ${icon}`}></i>
             </span>
-            <div className="info-box-content">
-                <span className="info-box-text">{title}</span>
-                <span className="info-box-number">{value}</span>
-                {note && <span className="text-muted small">{note}</span>}
-            </div>
         </div>
     </div>
 );
 
 const ChartCard = ({ title, subtitle, children }) => (
-    <div className="card h-100">
-        <div className="card-header border-0 pb-0">
-            <h3 className="mb-0 font-weight-bold" style={{ fontSize: '1.2rem' }}>{title}</h3>
-            {subtitle && <div className="small text-muted mt-1">{subtitle}</div>}
+    <div className="report-chart-card h-100">
+        <div className="report-chart-header">
+            <div>
+                <h3>{title}</h3>
+                {subtitle && <span>{subtitle}</span>}
+            </div>
         </div>
-        <div className="card-body pt-2">{children}</div>
+        <div className="report-chart-body">{children}</div>
     </div>
 );
 
@@ -242,7 +253,7 @@ const VerticalBarChart = ({ data, color = '#2563eb' }) => {
 
     return (
         <div style={{ overflowX: 'auto' }}>
-            <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Biểu đồ doanh thu theo tháng" style={{ minWidth: '620px', width: '100%', height: '300px' }}>
+            <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Biểu đồ doanh thu theo ngày" style={{ minWidth: '620px', width: '100%', height: '300px' }}>
                 {ticks.map((tick) => {
                     const y = top + (1 - tick) * plotHeight;
                     return (
@@ -296,7 +307,7 @@ const HorizontalBarChart = ({ data, color = '#2563eb' }) => {
 
     return (
         <div style={{ overflowX: 'auto' }}>
-            <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Biểu đồ doanh thu phim trong tháng" style={{ minWidth: '620px', width: '100%', height }}>
+            <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Biểu đồ cột ngang doanh thu" style={{ minWidth: '620px', width: '100%', height }}>
                 {rows.map((item, index) => {
                     const value = Number(item.value || 0);
                     const barWidth = (value / maxValue) * plotWidth;
@@ -395,6 +406,7 @@ const RevenueReports = () => {
     const [cinemaId, setCinemaId] = useState(assignedCinemaId);
     const [cinemas, setCinemas] = useState([]);
     const [report, setReport] = useState(null);
+    const [annualReport, setAnnualReport] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
 
@@ -418,15 +430,23 @@ const RevenueReports = () => {
 
         try {
             const scopedCinemaId = managerScoped ? assignedCinemaId || -1 : cinemaId || undefined;
-            const response = await revenueApi.getSystemRevenue({
-                year: selectedYear,
-                month: selectedMonth || undefined,
-                cinemaId: scopedCinemaId,
-            });
+            const [response, annualResponse] = await Promise.all([
+                revenueApi.getSystemRevenue({
+                    year: selectedYear,
+                    month: selectedMonth || undefined,
+                    cinemaId: scopedCinemaId,
+                }),
+                revenueApi.getSystemRevenue({
+                    year: selectedYear,
+                    cinemaId: scopedCinemaId,
+                }),
+            ]);
 
             setReport(response.data);
+            setAnnualReport(annualResponse.data);
         } catch (err) {
             setReport(null);
+            setAnnualReport(null);
             setError(err.response?.data?.message || 'API báo cáo doanh thu chưa sẵn sàng hoặc không tải được dữ liệu');
         } finally {
             setLoading(false);
@@ -449,11 +469,13 @@ const RevenueReports = () => {
     const rawRevenueByMovie = useMemo(() => getItems(readField(report, 'revenueByMovie', 'RevenueByMovie')), [report]);
     const rawTicketStatusSummary = useMemo(() => getItems(readField(report, 'ticketStatusSummary', 'TicketStatusSummary')), [report]);
     const dailyDetails = useMemo(() => getItems(readField(report, 'dailyDetails', 'DailyDetails')), [report]);
-    const rows = useMemo(() => getItems(readField(report, 'items', 'Items')), [report]);
+    const rows = useMemo(() => getItems(readField(report, 'items', 'Items', 'revenueByCinema', 'RevenueByCinema')), [report]);
 
     const totalRevenue = readNumber(report, 'totalRevenue', 'TotalRevenue');
     const totalTickets = readNumber(report, 'totalTickets', 'TotalTickets');
     const totalBookings = readNumber(report, 'totalBookings', 'TotalBookings');
+    const annualTotalRevenue = readNumber(annualReport, 'totalRevenue', 'TotalRevenue');
+    const annualTotalTickets = readNumber(annualReport, 'totalTickets', 'TotalTickets');
 
     const monthlyRevenue = useMemo(() => {
         if (hasPositiveRows(rawMonthlyRevenue, ['totalRevenue', 'TotalRevenue', 'totalTickets', 'TotalTickets'])) {
@@ -578,15 +600,56 @@ const RevenueReports = () => {
     const refundedStatus = ticketStatusSummary.find((item) => readField(item, 'status', 'Status') === 'refunded') || {};
     const refundedTickets = readNumber(refundedStatus, 'totalTickets', 'TotalTickets');
 
-    const monthlyChartData = monthOptions.map((month) => {
-        const isSelectedMonth = month.value === Number(selectedMonth);
-        const value = isSelectedMonth ? selectedMonthDisplayRevenue : 0;
+    const dailyChartData = useMemo(() => {
+        const dailyTotals = new Map();
+
+        dailyDetails.forEach((item) => {
+            const dateValue = readField(item, 'date', 'Date');
+            if (!dateValue) return;
+
+            const key = String(dateValue).slice(0, 10);
+            const current = dailyTotals.get(key) || {
+                date: dateValue,
+                totalBookings: 0,
+                totalTickets: 0,
+                totalRevenue: 0,
+            };
+
+            current.totalBookings += readNumber(item, 'totalBookings', 'TotalBookings');
+            current.totalTickets += readNumber(item, 'totalTickets', 'TotalTickets');
+            current.totalRevenue += readNumber(item, 'totalRevenue', 'TotalRevenue');
+            dailyTotals.set(key, current);
+        });
+
+        if (dailyTotals.size === 0 && totalRevenue > 0) {
+            const monthValue = selectedMonth || currentMonth;
+            const dateValue = `${selectedYear}-${String(monthValue).padStart(2, '0')}-01`;
+            dailyTotals.set(dateValue, {
+                date: dateValue,
+                totalBookings,
+                totalTickets,
+                totalRevenue,
+            });
+        }
+
+        return Array.from(dailyTotals.values())
+            .sort((left, right) => new Date(left.date) - new Date(right.date))
+            .map((item) => ({
+                label: formatDayLabel(item.date),
+                value: item.totalRevenue,
+                tooltip: `${formatDate(item.date)}: ${formatCurrency(item.totalRevenue)}`,
+                color: '#2563eb',
+            }));
+    }, [dailyDetails, selectedMonth, selectedYear, totalBookings, totalRevenue, totalTickets]);
+
+    const cinemaChartData = rows.map((item, index) => {
+        const value = readNumber(item, 'totalRevenue', 'TotalRevenue');
 
         return {
-            label: `T${month.value}`,
+            label: readField(item, 'cinemaName', 'CinemaName') || `Rạp ${index + 1}`,
             value,
-            tooltip: `${month.label}: ${formatCurrency(value)}`,
-            color: isSelectedMonth ? '#1d4ed8' : '#2563eb',
+            color: chartColors[index % chartColors.length],
+            tooltip: `${readField(item, 'cinemaName', 'CinemaName') || `Rạp ${index + 1}`}: ${formatCurrency(value)}`,
         };
     });
 
@@ -629,19 +692,19 @@ const RevenueReports = () => {
                 ['Năm thống kê', selectedYear],
                 ['Tháng thống kê', selectedMonth],
                 ['Rạp', cinemaName],
-                ['Tổng doanh thu năm', formatCurrency(totalRevenue)],
+                ['Tổng doanh thu năm', formatCurrency(annualTotalRevenue)],
                 ['Tổng số đơn', totalBookings.toLocaleString('vi-VN')],
-                ['Tổng số vé', totalTickets.toLocaleString('vi-VN')],
+                ['Tổng số vé', annualTotalTickets.toLocaleString('vi-VN')],
                 [`Doanh thu tháng ${selectedMonth}`, formatCurrency(selectedMonthDisplayRevenue)],
                 [`Số vé tháng ${selectedMonth}`, selectedMonthDisplayTickets.toLocaleString('vi-VN')],
                 ['Vé hủy/hoàn trong tháng', refundedTickets.toLocaleString('vi-VN')],
             ],
             tables: [
                 {
-                    title: 'Doanh thu theo tháng',
-                    headers: ['Tháng', 'Số đơn', 'Số vé', 'Doanh thu'],
-                    rows: monthlyRevenue.map((item) => [
-                        readField(item, 'label', 'Label') || `Tháng ${readField(item, 'month', 'Month') || ''}`,
+                    title: 'Doanh thu theo ngày',
+                    headers: ['Ngày', 'Số đơn', 'Số vé', 'Doanh thu'],
+                    rows: dailyDetails.map((item) => [
+                        formatDate(readField(item, 'date', 'Date')),
                         readNumber(item, 'totalBookings', 'TotalBookings').toLocaleString('vi-VN'),
                         readNumber(item, 'totalTickets', 'TotalTickets').toLocaleString('vi-VN'),
                         formatCurrency(readNumber(item, 'totalRevenue', 'TotalRevenue')),
@@ -737,14 +800,20 @@ const RevenueReports = () => {
     };
 
     return (
-        <div className="content-wrapper">
+        <div className="content-wrapper revenue-report-page">
             <div className="content-header">
                 <div className="container-fluid">
-                    <h1 className="m-0">
-                        {effectiveCinemaId
-                            ? `Thống kê doanh thu - ${selectedCinema?.cinemaName || 'Rạp đã chọn'}`
-                            : 'Thống kê doanh thu'}
-                    </h1>
+                    <div className="report-page-heading">
+                        <div>
+                            <p className="admin-eyebrow">Báo cáo vận hành</p>
+                            <h1 className="m-0">
+                                {effectiveCinemaId
+                                    ? `Thống kê doanh thu - ${selectedCinema?.cinemaName || 'Rạp đã chọn'}`
+                                    : 'Thống kê doanh thu'}
+                            </h1>
+                            <span>Theo dõi doanh thu, cơ cấu vé và hiệu suất từng rạp trong một màn hình.</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -820,14 +889,14 @@ const RevenueReports = () => {
                     <div className="row">
                         <StatCard
                             title={`Doanh thu năm ${selectedYear}`}
-                            value={formatCurrency(totalRevenue)}
+                            value={formatCurrency(annualTotalRevenue)}
                             note={effectiveCinemaId ? 'Theo rạp đã chọn' : 'Tất cả rạp'}
                             icon="fa-money-bill-wave"
                             color="#16a34a"
                         />
                         <StatCard
                             title="Vé bán trong năm"
-                            value={totalTickets.toLocaleString('vi-VN')}
+                            value={annualTotalTickets.toLocaleString('vi-VN')}
                             note="Tính theo đơn đã thanh toán"
                             icon="fa-ticket-alt"
                             color="#2563eb"
@@ -849,13 +918,18 @@ const RevenueReports = () => {
                     </div>
 
                     <div className="row">
-                        <div className="col-xl-8 col-12 mb-3">
-                            <ChartCard title="Doanh thu theo tháng" subtitle={`Đang xem tháng ${selectedMonth} năm ${selectedYear}`}>
-                                <VerticalBarChart data={monthlyChartData} />
+                        <div className="col-12 mb-3">
+                            <ChartCard title="Doanh thu theo ngày" subtitle={`Theo từng ngày trong kỳ thống kê ${selectedMonth ? `tháng ${selectedMonth}/` : ''}${selectedYear}`}>
+                                <VerticalBarChart data={dailyChartData} />
                             </ChartCard>
                         </div>
-                        <div className="col-xl-4 col-12 mb-3">
-                            <ChartCard title="Doanh thu theo loại ghế" subtitle="Tổng tiền vé theo từng loại ghế">
+                        <div className="col-xl-6 col-12 mb-3">
+                            <ChartCard title="Doanh thu theo rạp">
+                                <HorizontalBarChart data={cinemaChartData} color="#16a34a" />
+                            </ChartCard>
+                        </div>
+                        <div className="col-xl-6 col-12 mb-3">
+                            <ChartCard title="Doanh thu theo loại ghế">
                                 <DonutChart
                                     data={seatTypeChartData}
                                     valueFormatter={formatCompactCurrency}
@@ -866,13 +940,13 @@ const RevenueReports = () => {
                     </div>
 
                     <div className="row">
-                        <div className="col-xl-8 col-12 mb-3">
-                            <ChartCard title={`Doanh thu phim trong tháng ${selectedMonth}`} subtitle="Top phim có doanh thu cao nhất">
+                        <div className="col-xl-6 col-12 mb-3">
+                            <ChartCard title="Top phim doanh thu cao nhất">
                                 <HorizontalBarChart data={movieChartData} color="#dc2626" />
                             </ChartCard>
                         </div>
-                        <div className="col-xl-4 col-12 mb-3">
-                            <ChartCard title="Tỷ lệ vé trong tháng" subtitle=" Vé bán thành công, hủy/hoàn và chờ xử lý">
+                        <div className="col-xl-6 col-12 mb-3">
+                            <ChartCard title="Tỷ lệ trạng thái vé">
                                 <DonutChart data={ticketStatusChartData} />
                             </ChartCard>
                         </div>

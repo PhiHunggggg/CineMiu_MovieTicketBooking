@@ -12,7 +12,7 @@ const emptyCinema = {
     mapUrl: '',
     imageUrl: '',
     openingTime: '08:00',
-    closingTime: '23:00',
+    closingTime: '23:30',
     isActive: true,
 };
 
@@ -70,7 +70,7 @@ const AdminCinemas = () => {
                 mapUrl: cinema.mapUrl || '',
                 imageUrl: cinema.imageUrl || '',
                 openingTime: String(cinema.openingTime || '08:00').substring(0, 5),
-                closingTime: String(cinema.closingTime || '23:00').substring(0, 5),
+                closingTime: String(cinema.closingTime || '23:30').substring(0, 5),
                 isActive: cinema.isActive ?? true,
             });
         } else {
@@ -187,7 +187,7 @@ const AdminCinemas = () => {
                                                     <td>{cinema.address}</td>
                                                     <td>{cinema.city}</td>
                                                      <td>{cinema.phone || cinema.email || '-'}</td>
-                                                     <td><i className="far fa-clock text-muted mr-1"></i>{String(cinema.openingTime || '08:00').substring(0, 5)} – {String(cinema.closingTime || '23:00').substring(0, 5)}</td>
+                                                     <td><i className="far fa-clock text-muted mr-1"></i>{String(cinema.openingTime || '08:00').substring(0, 5)} – {String(cinema.closingTime || '23:30').substring(0, 5)}</td>
                                                     <td>
                                                         <span className={`badge ${cinema.isActive ? 'badge-success' : 'badge-secondary'}`}>
                                                             {cinema.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}

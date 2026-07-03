@@ -65,6 +65,13 @@ namespace Entities
 
         [Column("is_active")]
         public bool IsActive { get; set; } = true;
+
+        [Column("opening_time")]
+        public TimeSpan OpeningTime { get; set; } = new(8, 0, 0);
+
+        [Column("closing_time")]
+        public TimeSpan ClosingTime { get; set; } = new(23, 30, 0);
+
         [Column("created_at")]
         public DateTime CreatedAt { get; set; }
         [Column("updated_at")]

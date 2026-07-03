@@ -93,7 +93,7 @@ namespace Repository.EFCore.Theater
             var genreIds = await context.MovieGenres
                 .AsNoTracking()
                 .Where(mg => mg.MovieId == movieId)
-                .Select(mg => mg.GenreId)
+                .Join(context.Genres, mg => mg.GenreId, g => g.GenreId, (_, g) => g.GenreId)
                 .ToListAsync();
             var genres = await context.MovieGenres
                 .AsNoTracking()
@@ -238,12 +238,22 @@ namespace Repository.EFCore.Theater
                 throw new ArgumentException("Movie not found");
             }
 
-            if (await context.ShowTimes.AnyAsync(x => x.MovieId == movieId))
+            var showtimeIds = await context.ShowTimes
+                .Where(x => x.MovieId == movieId)
+                .Select(x => x.ShowtimeId)
+                .ToListAsync();
+
+            if (showtimeIds.Count > 0 && await context.Bookings.AnyAsync(x => showtimeIds.Contains(x.ShowtimeId)))
             {
-                throw new InvalidOperationException("Cannot delete movie because it has showtimes");
+                throw new InvalidOperationException("Không thể xóa phim vì phim đã có đặt vé");
             }
 
             var movieGenres = await context.MovieGenres.Where(x => x.MovieId == movieId).ToListAsync();
+            var seatLocks = await context.SeatLocks.Where(x => showtimeIds.Contains(x.ShowtimeId)).ToListAsync();
+            var showtimes = await context.ShowTimes.Where(x => x.MovieId == movieId).ToListAsync();
+
+            context.SeatLocks.RemoveRange(seatLocks);
+            context.ShowTimes.RemoveRange(showtimes);
             context.MovieGenres.RemoveRange(movieGenres);
             context.Movies.Remove(movie);
             await context.SaveChangesAsync();

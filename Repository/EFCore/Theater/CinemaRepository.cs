@@ -128,6 +128,8 @@ namespace Repository.EFCore.Theater
                 MapUrl = Normalize(request.MapUrl),
                 ImageUrl = Normalize(request.ImageUrl),
                 IsActive = request.IsActive ?? true,
+                OpeningTime = request.OpeningTime ?? new TimeSpan(8, 0, 0),
+                ClosingTime = request.ClosingTime ?? new TimeSpan(23, 30, 0),
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -153,6 +155,8 @@ namespace Repository.EFCore.Theater
             cinema.MapUrl = Normalize(request.MapUrl);
             cinema.ImageUrl = Normalize(request.ImageUrl);
             cinema.IsActive = request.IsActive ?? cinema.IsActive;
+            cinema.OpeningTime = request.OpeningTime ?? cinema.OpeningTime;
+            cinema.ClosingTime = request.ClosingTime ?? cinema.ClosingTime;
             cinema.UpdatedAt = DateTime.UtcNow;
             await context.SaveChangesAsync();
             return await GetCinemaByIdAsync(cinemaId);
@@ -384,7 +388,9 @@ namespace Repository.EFCore.Theater
                 CinemaId = x.CinemaId, ChainId = x.ChainId, ChainName = chains.GetValueOrDefault(x.ChainId),
                 CinemaName = x.CinemaName, Address = x.Address, City = x.City, Ward = x.District,
                 Phone = x.Phone, Email = x.Email, Latitude = x.Latitude, Longitude = x.Longitude,
-                MapUrl = x.MapUrl, ImageUrl = x.ImageUrl, IsActive = x.IsActive
+                MapUrl = x.MapUrl, ImageUrl = x.ImageUrl, IsActive = x.IsActive,
+                OpeningTime = x.OpeningTime,
+                ClosingTime = x.ClosingTime
             }).ToList();
         }
 

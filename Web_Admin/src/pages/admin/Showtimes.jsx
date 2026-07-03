@@ -407,7 +407,6 @@ function Showtimes() {
   const initialDate = toApiFilterDate(searchParams.get('date')) || todayInputValue
   const initialStatus = searchParams.get('status') || (searchParams.get('upcoming') === '1' ? 'upcoming' : '')
   const queryAppliedRef = useRef(false)
-  const autoScheduleGeneratedRef = useRef(false)
   const [showtimes, setShowtimes] = useState([])
   const [movies, setMovies] = useState([])
   const [cinemas, setCinemas] = useState([])
@@ -489,28 +488,11 @@ function Showtimes() {
     }
   }, [assignedCinemaId, isManagerScoped])
 
-  const ensureAutoSchedule = useCallback(async () => {
-    if (autoScheduleGeneratedRef.current) return
-
-    autoScheduleGeneratedRef.current = true
-
-    try {
-      const response = await showtimeApi.generate(5)
-      const createdCount = getItems(response.data).length
-      if (createdCount > 0) {
-        setNotice(`Đã tự động tạo ${createdCount} suất chiếu cho 5 ngày tới.`)
-      }
-    } catch (scheduleError) {
-      setError(getErrorMessage(scheduleError, 'Không tự động tạo được lịch chiếu 5 ngày tới.'))
-    }
-  }, [])
-
   const fetchShowtimes = useCallback(async () => {
     setIsLoading(true)
     setError('')
 
     try {
-      await ensureAutoSchedule()
       const response = await showtimeApi.getAll({
         cinemaId: isManagerScoped ? assignedCinemaId || -1 : cinemaFilter || undefined,
         hallId: hallFilter || undefined,
@@ -534,7 +516,7 @@ function Showtimes() {
     } finally {
       setIsLoading(false)
     }
-  }, [assignedCinemaId, cinemaFilter, dateFilter, ensureAutoSchedule, hallFilter, isManagerScoped, page, status])
+  }, [assignedCinemaId, cinemaFilter, dateFilter, hallFilter, isManagerScoped, page, status])
 
   useEffect(() => {
     fetchLookups()

@@ -30,9 +30,19 @@ public class ReportRepository(SqlServerDbContext context) : IReportRepository
             }).ToListAsync();
 
         var bookingIds = bookingRows.Select(x => x.BookingId).ToList();
-        var ticketRows = await context.Tickets.AsNoTracking()
-            .Where(x => bookingIds.Contains(x.BookingId))
-            .Select(x => new { x.BookingId }).ToListAsync();
+        var ticketRows = await (
+            from ticket in context.Tickets.AsNoTracking()
+            where bookingIds.Contains(ticket.BookingId)
+            join seatType in context.SeatTypes.AsNoTracking() on ticket.SeatTypeId equals seatType.SeatTypeId into seatTypeJoin
+            from seatType in seatTypeJoin.DefaultIfEmpty()
+            select new
+            {
+                ticket.BookingId,
+                ticket.TicketId,
+                ticket.Price,
+                ticket.SeatTypeId,
+                SeatTypeName = seatType != null ? seatType.TypeName : "Khac"
+            }).ToListAsync();
         var concessionRows = await context.BookingConcessions.AsNoTracking()
             .Where(x => bookingIds.Contains(x.BookingId))
             .Select(x => new { x.BookingId, x.Subtotal }).ToListAsync();
@@ -66,6 +76,14 @@ public class ReportRepository(SqlServerDbContext context) : IReportRepository
             totalBookings = group.Count(),
             totalTickets = soldTickets.Count(ticket => group.Any(x => x.BookingId == ticket.BookingId)),
             totalRevenue = group.Sum(x => NetRevenue(x.BookingId, x.FinalAmount))
+        }).OrderByDescending(x => x.totalRevenue).ToList();
+
+        var revenueBySeatType = soldTickets.GroupBy(x => new { x.SeatTypeId, x.SeatTypeName }).Select(group => new
+        {
+            seatTypeId = group.Key.SeatTypeId,
+            seatTypeName = group.Key.SeatTypeName,
+            totalTickets = group.Count(),
+            totalRevenue = group.Sum(x => x.Price)
         }).OrderByDescending(x => x.totalRevenue).ToList();
 
         var dailyDetails = soldBookings.GroupBy(x => new
@@ -132,6 +150,7 @@ public class ReportRepository(SqlServerDbContext context) : IReportRepository
             totalTickets = soldTickets.Count,
             monthlyRevenue,
             revenueByMovie,
+            revenueBySeatType,
             revenueByCinema = items,
             ticketStatusSummary,
             dailyDetails,

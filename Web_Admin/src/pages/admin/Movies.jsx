@@ -122,10 +122,14 @@ const MoviePoster = ({ movie }) => {
 };
 
 const AdminMovies = () => {
+    const pageSize = 10;
     const [movies, setMovies] = useState([]);
     const [lookups, setLookups] = useState({ genres: [], countries: [] });
     const [keyword, setKeyword] = useState('');
     const [status, setStatus] = useState('');
+    const [page, setPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalCount, setTotalCount] = useState(0);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingMovie, setEditingMovie] = useState(null);
@@ -137,8 +141,11 @@ const AdminMovies = () => {
 
     useEffect(() => {
         loadLookups();
-        loadMovies();
     }, []);
+
+    useEffect(() => {
+        loadMovies(page);
+    }, [page]);
 
     const loadLookups = async () => {
         try {
@@ -153,17 +160,21 @@ const AdminMovies = () => {
         }
     };
 
-    const loadMovies = async () => {
+    const loadMovies = async (nextPage = page) => {
         setLoading(true);
         setError('');
         try {
             const response = await movieApi.getAll({
                 keyword: keyword || undefined,
                 status: status || undefined,
-                page: 1,
-                pageSize: 100,
+                page: nextPage,
+                pageSize,
             });
-            setMovies(getItems(response.data));
+            const data = response.data || {};
+            const items = getItems(data);
+            setMovies(items);
+            setTotalPages(Math.max(1, data.totalPages || data.TotalPages || 1));
+            setTotalCount(data.totalCount || data.TotalCount || items.length);
         } catch (err) {
             console.error('Failed to load movies:', err);
             setError(err.response?.data?.message || 'Không tải được danh sách phim');
@@ -264,6 +275,11 @@ const AdminMovies = () => {
             return;
         }
 
+        const validGenreIds = new Set(lookups.genres.map((genre) => Number(genre.genreId)));
+        const selectedGenreIds = formData.genreIds
+            .map(Number)
+            .filter((genreId) => validGenreIds.has(genreId));
+
         const payload = {
             title: formData.title.trim(),
             titleEn: cleanText(formData.titleEn),
@@ -282,7 +298,7 @@ const AdminMovies = () => {
             bannerUrl: cleanText(formData.bannerUrl),
             trailerUrl: cleanText(formData.trailerUrl),
             imdbRating,
-            genreIds: formData.genreIds.map(Number),
+            genreIds: selectedGenreIds,
         };
 
         setSaving(true);
@@ -296,7 +312,7 @@ const AdminMovies = () => {
             }
 
             closeModal();
-            await loadMovies();
+            await loadMovies(page);
         } catch (err) {
             setError(err.response?.data?.message || 'Lưu phim thất bại');
         } finally {
@@ -312,7 +328,11 @@ const AdminMovies = () => {
         try {
             await movieApi.delete(getMovieId(movie));
             setSuccess('Đã xóa phim');
-            await loadMovies();
+            if (movies.length === 1 && page > 1) {
+                setPage(page - 1);
+            } else {
+                await loadMovies(page);
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Xóa phim thất bại');
         }
@@ -342,7 +362,7 @@ const AdminMovies = () => {
             <section className="content">
                 <div className="container-fluid">
                     <div className="admin-management-brief">
-                        <div><i className="fas fa-film"></i><p><span>Tổng số phim</span><strong>{movies.length.toLocaleString('vi-VN')}</strong></p></div>
+                        <div><i className="fas fa-film"></i><p><span>Tổng số phim</span><strong>{totalCount.toLocaleString('vi-VN')}</strong></p></div>
                         <div><i className="fas fa-clapperboard"></i><p><span>Đang chiếu</span><strong>{nowShowingCount.toLocaleString('vi-VN')}</strong></p></div>
                         <div><i className="fas fa-calendar-plus"></i><p><span>Sắp / chiếu sớm</span><strong>{(comingSoonCount + earlyScreeningCount).toLocaleString('vi-VN')}</strong></p></div>
                         <div><i className="fas fa-circle-stop"></i><p><span>Ngừng chiếu</span><strong>{endedCount.toLocaleString('vi-VN')}</strong></p></div>
@@ -355,7 +375,14 @@ const AdminMovies = () => {
                         <div className="card-header">
                             <div className="row align-items-start">
                                 <div className="col-lg-9">
-                                    <form className="form-inline" onSubmit={(e) => { e.preventDefault(); loadMovies(); }}>
+                                    <form className="form-inline" onSubmit={(e) => {
+                                        e.preventDefault();
+                                        if (page === 1) {
+                                            loadMovies(1);
+                                        } else {
+                                            setPage(1);
+                                        }
+                                    }}>
                                         <input
                                             className="form-control mr-2 mb-2"
                                             value={keyword}
@@ -375,7 +402,7 @@ const AdminMovies = () => {
                                         <button className="btn btn-primary mr-2 mb-2" type="submit">
                                             <i className="fas fa-search mr-1"></i> Tìm kiếm
                                         </button>
-                                        <button className="btn btn-outline-secondary mb-2" type="button" onClick={loadMovies}>
+                                        <button className="btn btn-outline-secondary mb-2" type="button" onClick={() => loadMovies(page)}>
                                             <i className="fas fa-sync-alt mr-1"></i> Tải lại
                                         </button>
                                     </form>
@@ -438,6 +465,50 @@ const AdminMovies = () => {
                                             ))}
                                         </tbody>
                                     </table>
+                                </div>
+                            )}
+                            {!loading && totalPages > 1 && (
+                                <div className="d-flex flex-wrap align-items-center justify-content-between mt-3">
+                                    <div className="text-muted small mb-2">
+                                        Trang {page} / {totalPages} - {totalCount.toLocaleString('vi-VN')} phim
+                                    </div>
+                                    <div className="btn-group mb-2">
+                                        <button
+                                            type="button"
+                                            className="btn btn-outline-secondary btn-sm"
+                                            disabled={page <= 1}
+                                            onClick={() => setPage((current) => Math.max(1, current - 1))}
+                                        >
+                                            <i className="fas fa-chevron-left mr-1"></i> Trước
+                                        </button>
+                                        {Array.from({ length: totalPages }, (_, index) => index + 1)
+                                            .filter((pageNumber) => (
+                                                pageNumber === 1 ||
+                                                pageNumber === totalPages ||
+                                                Math.abs(pageNumber - page) <= 2
+                                            ))
+                                            .map((pageNumber, index, visiblePages) => {
+                                                const hasGap = index > 0 && pageNumber - visiblePages[index - 1] > 1;
+                                                return (
+                                                    <button
+                                                        key={pageNumber}
+                                                        type="button"
+                                                        className={`btn btn-sm ${pageNumber === page ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                                        onClick={() => setPage(pageNumber)}
+                                                    >
+                                                        {hasGap ? `... ${pageNumber}` : pageNumber}
+                                                    </button>
+                                                );
+                                            })}
+                                        <button
+                                            type="button"
+                                            className="btn btn-outline-secondary btn-sm"
+                                            disabled={page >= totalPages}
+                                            onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+                                        >
+                                            Sau <i className="fas fa-chevron-right ml-1"></i>
+                                        </button>
+                                    </div>
                                 </div>
                             )}
                         </div>
