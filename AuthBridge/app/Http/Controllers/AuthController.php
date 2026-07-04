@@ -11,7 +11,7 @@ use Laravel\Socialite\Facades\Socialite;
 
 class AuthController extends Controller
 {
-    private const DEFAULT_CUSTOMER_ROLE_ID = 3;
+    private const DEFAULT_CUSTOMER_ROLE_ID = 1;
 
     public function redirectToGoogle()
     {

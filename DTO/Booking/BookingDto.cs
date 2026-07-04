@@ -27,6 +27,7 @@ namespace DTO.Booking
             public DateTime? ConfirmedAt { get; set; }
             public DateTime? CancelledAt { get; set; }
             public string? CancelReason { get; set; }
+            public int MovieId { get; set; }
             public string MovieTitle { get; set; } = string.Empty;
             public string? MoviePosterUrl { get; set; }
             public string CinemaName { get; set; } = string.Empty;

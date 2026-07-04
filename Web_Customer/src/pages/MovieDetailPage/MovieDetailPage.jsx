@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { movieApi, showtimeApi } from '../../services/api';
+import MovieReviews from './MovieReviews';
 import './MovieDetailPage.css';
 
 function formatDate(value) {
@@ -216,6 +217,8 @@ export default function MovieDetailPage() {
           })
         )}
       </section>
+      
+      <MovieReviews movieId={movie.movieId || movie.id} />
     </div>
   );
 }

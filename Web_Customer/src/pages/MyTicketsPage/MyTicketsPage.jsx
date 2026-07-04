@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { bookingApi } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { getUserEmail, getUserId } from '../../utils/authUser';
+import { Link } from 'react-router-dom';
 import './MyTicketsPage.css';
 
 const statusLabels = {
@@ -46,6 +47,7 @@ function normalizeTicket(raw) {
     return {
       booking,
       movie: {
+        movieId: pick(raw.movie?.movieId, raw.Movie?.MovieId, booking.movieId, booking.MovieId),
         title: pick(raw.movie?.title, raw.Movie?.Title, booking.movieTitle, booking.MovieTitle),
         posterUrl: pick(raw.movie?.posterUrl, raw.Movie?.PosterUrl, booking.moviePosterUrl, booking.MoviePosterUrl, booking.posterUrl, booking.PosterUrl),
       },
@@ -67,7 +69,11 @@ function normalizeTicket(raw) {
 
   return {
     booking: raw,
-    movie: { title: pick(raw?.movieTitle, raw?.MovieTitle), posterUrl: pick(raw?.moviePosterUrl, raw?.MoviePosterUrl) },
+    movie: { 
+      movieId: pick(raw?.movieId, raw?.MovieId),
+      title: pick(raw?.movieTitle, raw?.MovieTitle), 
+      posterUrl: pick(raw?.moviePosterUrl, raw?.MoviePosterUrl) 
+    },
     cinema: { cinemaName: pick(raw?.cinemaName, raw?.CinemaName) },
     hall: { hallName: pick(raw?.hallName, raw?.HallName) },
     showtime: { startTime: pick(raw?.startTime, raw?.StartTime) },
@@ -159,6 +165,24 @@ export default function MyTicketsPage() {
                     <span className={`ticket-card__status ticket-card__status--${status}`}>
                       {statusLabels[status] || booking.status || booking.Status}
                     </span>
+                    {status === 'completed' && item.movie?.movieId && (
+                      <Link 
+                        to={`/movies/${item.movie.movieId}#movie-detail-reviews`} 
+                        className="ticket-card__review-btn"
+                        style={{
+                          display: 'inline-block',
+                          marginLeft: '1rem',
+                          padding: '0.25rem 0.75rem',
+                          fontSize: '0.875rem',
+                          backgroundColor: '#3b82f6',
+                          color: '#fff',
+                          borderRadius: '4px',
+                          textDecoration: 'none'
+                        }}
+                      >
+                        Viết đánh giá
+                      </Link>
+                    )}
                   </div>
 
                   <div className="ticket-card__grid">

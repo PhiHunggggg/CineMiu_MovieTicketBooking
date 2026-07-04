@@ -40,4 +40,40 @@ public static class ReviewDTO
         public List<Response> Items { get; set; } = [];
         public Stats Stats { get; set; } = new();
     }
+
+    public class CreateRequest
+    {
+        public byte Rating { get; set; }
+        public string Comment { get; set; } = "";
+    }
+
+    public class UpdateRequest
+    {
+        public byte Rating { get; set; }
+        public string Comment { get; set; } = "";
+    }
+
+    public class PublicResponse
+    {
+        public int ReviewId { get; set; }
+        public int MovieId { get; set; }
+        public int UserId { get; set; }
+        public string FullName { get; set; } = "";
+        public byte Rating { get; set; }
+        public string? Comment { get; set; }
+        public DateTime CreatedAt { get; set; }
+    }
+
+    public class PublicListResponse
+    {
+        public List<PublicResponse> Items { get; set; } = [];
+        public Stats Stats { get; set; } = new();
+    }
+
+    public class EligibilityResponse
+    {
+        public bool CanReview { get; set; }
+        public string? Reason { get; set; }
+        public PublicResponse? ExistingReview { get; set; }
+    }
 }

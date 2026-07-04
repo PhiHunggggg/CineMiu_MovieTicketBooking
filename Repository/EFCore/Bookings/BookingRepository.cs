@@ -1,4 +1,4 @@
-﻿using BaseCore.Repository.EFCore;
+using BaseCore.Repository.EFCore;
 using DTO.Booking;
 using Entities;
 using Libs.Booking;
@@ -73,6 +73,7 @@ namespace Repository.EFCore.Bookings
                 ConfirmedAt = x.booking.ConfirmedAt,
                 CancelledAt = x.booking.CancelledAt,
                 CancelReason = x.booking.CancelReason,
+                MovieId = x.movie.MovieId,
                 MovieTitle = x.movie.Title,
                 MoviePosterUrl = x.movie.PosterUrl,
                 CinemaName = x.cinema.CinemaName,
@@ -122,6 +123,7 @@ namespace Repository.EFCore.Bookings
                                     ConfirmedAt = booking.ConfirmedAt,
                                     CancelledAt = booking.CancelledAt,
                                     CancelReason = booking.CancelReason,
+                                    MovieId = movie.MovieId,
                                     MovieTitle = movie.Title,
                                     MoviePosterUrl = movie.PosterUrl,
                                     CinemaName = cinema.CinemaName,
@@ -260,6 +262,7 @@ namespace Repository.EFCore.Bookings
                                     ConfirmedAt = booking.ConfirmedAt,
                                     CancelledAt = booking.CancelledAt,
                                     CancelReason = booking.CancelReason,
+                                    MovieId = movie.MovieId,
                                     MovieTitle = movie.Title,
                                     MoviePosterUrl = movie.PosterUrl,
                                     CinemaName = cinema.CinemaName,

@@ -159,3 +159,11 @@ export const loyaltyApi = {
   getTransactionsByEmail: (email) => request(`/loyalty/by-email/transactions${buildQuery({ email })}`),
 };
 
+export const reviewApi = {
+  getByMovie: (movieId, params = {}) => request(`/movies/${movieId}/reviews${buildQuery(params)}`),
+  getEligibility: (movieId) => request(`/movies/${movieId}/reviews/eligibility`),
+  create: (movieId, data) => request(`/movies/${movieId}/reviews`, { method: 'POST', body: JSON.stringify(data) }),
+  update: (reviewId, data) => request(`/reviews/${reviewId}`, { method: 'PUT', body: JSON.stringify(data) }),
+  delete: (reviewId) => request(`/reviews/${reviewId}`, { method: 'DELETE' }),
+};
+

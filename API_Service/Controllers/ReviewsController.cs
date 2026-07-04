@@ -1,6 +1,8 @@
 using DTO.Administration;
 using Services.Administration;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace BaseCore.APIService.Controllers
 {
@@ -16,12 +18,14 @@ namespace BaseCore.APIService.Controllers
         }
 
         [HttpGet]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> GetAll([FromQuery] int? movieId, [FromQuery] bool visibleOnly = false)
         {
             return Ok(await _reviewService.GetAllAsync(movieId, visibleOnly));
         }
 
         [HttpPut("{id:int}/visibility")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> UpdateVisibility(int id, [FromBody] ReviewDTO.VisibilityRequest dto)
         {
             try
@@ -36,6 +40,7 @@ namespace BaseCore.APIService.Controllers
         }
 
         [HttpPost("{id:int}/reply")]
+        [Authorize(Roles = "admin")]
         public async Task<IActionResult> Reply(int id, [FromBody] ReviewDTO.ReplyRequest dto)
         {
             try
@@ -53,17 +58,54 @@ namespace BaseCore.APIService.Controllers
             }
         }
 
+        [HttpPut("{id:int}")]
+        [Authorize]
+        public async Task<IActionResult> UpdateReview(int id, [FromBody] ReviewDTO.UpdateRequest dto)
+        {
+            try
+            {
+                var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                var review = await _reviewService.UpdateReviewAsync(id, userId, dto);
+                return Ok(review);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFound(new { message = "Review not found" });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { message = ex.Message });
+            }
+            catch (ArgumentException ex)
+            {
+                return BadRequest(new { message = ex.Message });
+            }
+        }
+
         [HttpDelete("{id:int}")]
+        [Authorize]
         public async Task<IActionResult> Delete(int id)
         {
             try
             {
-                await _reviewService.DeleteAsync(id);
+                if (User.IsInRole("admin"))
+                {
+                    await _reviewService.DeleteAsync(id);
+                }
+                else
+                {
+                    var userId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+                    await _reviewService.DeleteByUserAsync(id, userId);
+                }
                 return NoContent();
             }
             catch (KeyNotFoundException)
             {
                 return NotFound(new { message = "Review not found" });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return StatusCode(403, new { message = ex.Message });
             }
         }
     }
