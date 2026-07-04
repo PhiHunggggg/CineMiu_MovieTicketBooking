@@ -33,6 +33,8 @@ namespace Repository.EFCore.Theater
         Task UpdateAsync(int showtimeId, ShowtimeDTO.ShowtimeRequest showtimeRequest);
         Task DeleteAsync(int showtimeId);
         Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateUpcomingAsync(int days);
+        Task<int?> GetDefaultGenerateMovieIdAsync();
+        Task<(List<ShowtimeDTO.ShowtimeSuggestion> Suggestions, List<string> Warnings)> BuildGenerateSuggestionsAsync(ShowtimeDTO.GenerateShowtimesRequest request);
         Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(
             int showtimeId,
             ShowtimeDTO.ShowtimeResponse details,

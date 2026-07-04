@@ -77,7 +77,7 @@ namespace Entities
         [Column("movie_id")]
         public int MovieId { get; set; }
         [Column("genre_id")]
-        public int GenreId { get; set; }
+        public byte GenreId { get; set; }
     }
     [Table("ticket_prices")]
     public class TicketPrice

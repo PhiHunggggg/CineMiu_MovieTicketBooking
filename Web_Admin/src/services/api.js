@@ -80,8 +80,14 @@ export const cinemaApi = {
 };
 
 export const showtimeApi = {
-    getAll: (params) => api.get('/showtimes', { params }),
-    generate: (days = 5) => api.post('/showtimes/generate', null, { params: { days }, timeout: 30000 }),
+    getAll: (params) => api.get('/showtimes', { params, timeout: 30000 }),
+    generate: (dataOrDays = 5) => {
+        if (typeof dataOrDays === 'number') {
+            return api.post('/showtimes/generate', null, { params: { days: dataOrDays }, timeout: 30000 });
+        }
+        return api.post('/showtimes/generate', dataOrDays, { timeout: 30000 });
+    },
+    previewGenerate: (data) => api.post('/showtimes/generate/preview', data, { timeout: 30000 }),
     getById: (id) => api.get(`/showtimes/${id}`),
     create: (data) => api.post('/showtimes', data),
     update: (id, data) => api.put(`/showtimes/${id}`, data),

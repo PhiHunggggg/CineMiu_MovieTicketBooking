@@ -16,10 +16,8 @@ const emptyForm = {
 
 const timeSlots = [
     { value: 'all_day', label: 'Cả ngày' },
-    { value: 'morning', label: 'Buổi sáng (trước 12:00)' },
-    { value: 'afternoon', label: 'Buổi chiều (12:00 - 17:59)' },
-    { value: 'evening', label: 'Buổi tối (18:00 - 22:59)' },
-    { value: 'late_night', label: 'Suất khuya (từ 23:00)' },
+    { value: 'before18', label: 'Trước 18:00' },
+    { value: 'after18', label: 'Sau 18:00' },
 ];
 
 const priceStatusOptions = [

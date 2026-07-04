@@ -59,7 +59,7 @@ namespace DTO.Theater
 
         public class GenreResponse
         {
-            public int GenreId { get; set; }
+            public byte GenreId { get; set; }
             public string GenreName { get; set; } = "";
             public string Description { get; set; } = "";
             public DateTime CreatedAt { get; set; }

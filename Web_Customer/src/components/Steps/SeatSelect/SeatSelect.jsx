@@ -14,18 +14,16 @@ function getSeatId(seat) {
 }
 
 function getSeatStatus(seat) {
+  if ((seat?.isActive ?? seat?.IsActive) === false) return 'maintenance';
   if (seat?.isBooked ?? seat?.IsBooked) return 'booked';
   if (seat?.isLocked ?? seat?.IsLocked) return 'locked';
-  return (seat?.status ?? seat?.Status ?? 'available').toString().toLowerCase();
+  const status = (seat?.status ?? seat?.Status ?? 'available').toString().toLowerCase();
+  if (status === 'inactive' || status === 'maintenance') return 'maintenance';
+  return status;
 }
 
 function getStartTime(showtime) {
   return showtime?.startTime ?? showtime?.StartTime ?? null;
-}
-
-function getSeatPrice(seat) {
-  const price = Number(seat?.finalPrice ?? seat?.FinalPrice ?? seat?.price ?? seat?.Price);
-  return Number.isFinite(price) ? price : 0;
 }
 
 export default function SeatSelect() {
@@ -188,7 +186,6 @@ export default function SeatSelect() {
     if (getSeatStatus(seat) !== 'available') return;
     const seatId = getSeatId(seat);
     if (!seatId) return;
-    const finalPrice = getSeatPrice(seat);
     toggleSeat({
       id: seatId,
       seatId,
@@ -210,6 +207,11 @@ export default function SeatSelect() {
     // Status classes
     if (isSelected(seat)) modifiers.push('seat--selected');
     const status = getSeatStatus(seat);
+    if (status === 'maintenance') {
+      modifiers.push('seat--maintenance');
+      return modifiers.join(' ');
+    }
+
     if (status === 'booked' || status === 'locked') {
       modifiers.push('seat--booked');
       return modifiers.join(' ');
@@ -217,6 +219,7 @@ export default function SeatSelect() {
 
     // Type classes
     const type = seatTypeMap[seat.seatTypeId ?? seat.SeatTypeId];
+    const seatTypeId = Number(seat.seatTypeId ?? seat.SeatTypeId ?? type?.seatTypeId ?? type?.SeatTypeId);
     const typeName = (
       seat.seatTypeName ||
       seat.SeatTypeName ||
@@ -227,9 +230,11 @@ export default function SeatSelect() {
       ''
     ).toLowerCase();
 
-    if (typeName.includes('vip') || typeName.includes('premium') || typeName.includes('sang') || typeName.includes('deluxe')) {
+    if (seatTypeId === 3 || typeName.includes('vip')) {
       modifiers.push('seat--vip');
-    } else if (typeName.includes('sweetbox') || typeName.includes('couple') || typeName.includes('đôi')) {
+    } else if (seatTypeId === 2 || typeName.includes('premium') || typeName.includes('sang') || typeName.includes('deluxe')) {
+      modifiers.push('seat--premium');
+    } else if (seatTypeId === 4 || typeName.includes('sweetbox') || typeName.includes('couple') || typeName.includes('đôi')) {
       modifiers.push('seat--couple');
     } else {
       modifiers.push('seat--available');
@@ -292,7 +297,7 @@ if (displayError && showtimeSeats.length === 0) {
                         className={`seat ${getSeatClass(seat)}`}
                         onClick={() => handleSeatClick(seat)}
                         disabled={status !== 'available' && !isSelected(seat)}
-                        title={`${seatCode} - ${formatPrice(finalPrice)}`}
+                        title={`${seatCode} - ${status === 'maintenance' ? 'Ghế bảo trì' : formatPrice(finalPrice)}`}
                         id={`seat-${seatCode}`}
                       >
                         <span className="seat__code">{colNumber}</span>
@@ -318,6 +323,14 @@ if (displayError && showtimeSeats.length === 0) {
             <div className="seat-legend-item">
               <div className="seat-legend-box seat-legend-box--booked" />
               <span>Đã đặt</span>
+            </div>
+            <div className="seat-legend-item">
+              <div className="seat-legend-box seat-legend-box--maintenance" />
+              <span>Bảo trì</span>
+            </div>
+            <div className="seat-legend-item">
+              <div className="seat-legend-box seat-legend-box--premium" />
+              <span>Premium</span>
             </div>
             <div className="seat-legend-item">
               <div className="seat-legend-box seat-legend-box--vip" />

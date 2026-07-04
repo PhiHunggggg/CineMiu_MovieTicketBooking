@@ -796,6 +796,10 @@
     background: #64748b;
 }
 
+.seat-premium {
+    background: #4f6f9f;
+}
+
 .seat-vip {
     background: #e59b16;
 }

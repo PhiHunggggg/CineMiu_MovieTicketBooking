@@ -27,7 +27,7 @@ namespace Entities
     {
         [Key]
         [Column("genre_id")]
-        public int GenreId { get; set; }
+        public byte GenreId { get; set; }
         [Column("genre_name")]
         public string GenreName { get; set; } = string.Empty;
         [Column("description")]

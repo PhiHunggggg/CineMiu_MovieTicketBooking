@@ -15,6 +15,8 @@ namespace Services.Theater
         // Legacy-compatible methods used by controllers
         Task<object> GetAllAsync(int? movieId, int? cinemaId, DateTime? date, int? seatTypeId, int? dayTypeId, int? hallTypeId);
         Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateUpcomingAsync(int days);
+        Task<ShowtimeDTO.GenerateShowtimesPreviewResponse> PreviewGenerateAsync(ShowtimeDTO.GenerateShowtimesRequest request);
+        Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateAsync(ShowtimeDTO.GenerateShowtimesRequest request);
         Task<ShowtimeDTO.ShowtimeResponse?> GetShowtimeDetailsAsync(int id);
         Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(int id, int? userId, string? sessionId);
         Task<List<Bookings.SeatLock>> LockSeatsAsync(int id, int userId, string sessionId, List<int> seatIds, int minutes);

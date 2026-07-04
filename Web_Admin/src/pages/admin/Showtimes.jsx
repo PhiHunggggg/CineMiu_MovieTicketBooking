@@ -43,6 +43,12 @@ const initialForm = {
   isSpecial: false,
 }
 
+const initialGenerateForm = {
+  movieId: '',
+  dateFrom: getTodayInputValue(),
+  dateTo: getTodayInputValue(),
+}
+
 function getErrorMessage(error, fallback) {
   const data = error?.response?.data
 
@@ -348,6 +354,10 @@ function buildPayload(form) {
   }
 }
 
+function getSuggestionKey(item, index) {
+  return [item.hallId, item.startTime, item.endTime, index].join('|')
+}
+
 function validateForm(form, halls) {
   const errors = {}
   const movieId = toInteger(form.movieId)
@@ -437,6 +447,11 @@ function Showtimes() {
   const [formErrors, setFormErrors] = useState({})
   const [isSaving, setIsSaving] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isGenerateModalOpen, setIsGenerateModalOpen] = useState(false)
+  const [generateForm, setGenerateForm] = useState(initialGenerateForm)
+  const [generatePreview, setGeneratePreview] = useState(null)
+  const [generateErrors, setGenerateErrors] = useState({})
+  const [selectedGenerateKeys, setSelectedGenerateKeys] = useState([])
   const [deletingId, setDeletingId] = useState(null)
   const [statusClock, setStatusClock] = useState(null)
 
@@ -557,6 +572,11 @@ function Showtimes() {
   const selectedMovie = useMemo(
     () => movies.find((movie) => String(movie.movieId) === form.movieId),
     [form.movieId, movies],
+  )
+
+  const selectedGenerateMovie = useMemo(
+    () => movies.find((movie) => String(movie.movieId) === generateForm.movieId),
+    [generateForm.movieId, movies],
   )
 
   const selectedHall = useMemo(
@@ -721,13 +741,81 @@ function Showtimes() {
     setPage(1)
   }
 
-  const handleGenerateSchedule = async () => {
-    const rawDays = window.prompt('Tạo lịch chiếu tự động cho bao nhiêu ngày tới?', '5')
-    if (rawDays === null) return
+  const openGenerateModal = () => {
+    setGenerateForm({
+      movieId: movies[0]?.movieId ? String(movies[0].movieId) : '',
+      dateFrom: todayInputValue,
+      dateTo: todayInputValue,
+    })
+    setGeneratePreview(null)
+    setGenerateErrors({})
+    setSelectedGenerateKeys([])
+    setError('')
+    setNotice('')
+    setIsGenerateModalOpen(true)
+  }
 
-    const days = Number(rawDays)
-    if (!Number.isInteger(days) || days < 1 || days > 30) {
-      setError('Số ngày tạo lịch phải từ 1 đến 30.')
+  const closeGenerateModal = () => {
+    if (isGenerating) return
+    setIsGenerateModalOpen(false)
+    setGeneratePreview(null)
+    setGenerateErrors({})
+    setSelectedGenerateKeys([])
+  }
+
+  const validateGenerateForm = () => {
+    const errors = {}
+    const movieId = toInteger(generateForm.movieId)
+    const dateFrom = generateForm.dateFrom ? new Date(generateForm.dateFrom) : null
+    const dateTo = generateForm.dateTo ? new Date(generateForm.dateTo) : null
+
+    if (!Number.isInteger(movieId) || movieId <= 0) errors.movieId = 'Vui lòng chọn phim.'
+    if (!generateForm.dateFrom || !dateFrom || Number.isNaN(dateFrom.getTime())) errors.dateFrom = 'Vui lòng chọn ngày bắt đầu.'
+    if (!generateForm.dateTo || !dateTo || Number.isNaN(dateTo.getTime())) errors.dateTo = 'Vui lòng chọn ngày kết thúc.'
+    if (dateFrom && dateTo && dateTo < dateFrom) errors.dateTo = 'Ngày kết thúc phải sau ngày bắt đầu.'
+    if (dateFrom && dateTo && (dateTo - dateFrom) / 86400000 > 30) errors.dateTo = 'Chỉ tạo tối đa 31 ngày mỗi lần.'
+
+    return errors
+  }
+
+  const buildGeneratePayload = () => ({
+    movieId: Number(generateForm.movieId),
+    dateFrom: generateForm.dateFrom,
+    dateTo: generateForm.dateTo,
+    cinemaId: isManagerScoped && assignedCinemaId ? Number(assignedCinemaId) : undefined,
+  })
+
+  const handlePreviewGenerateSchedule = async (event) => {
+    event.preventDefault()
+    const nextErrors = validateGenerateForm()
+    if (Object.keys(nextErrors).length > 0) {
+      setGenerateErrors(nextErrors)
+      setGeneratePreview(null)
+      setSelectedGenerateKeys([])
+      return
+    }
+
+    setIsGenerating(true)
+    setError('')
+    setNotice('')
+    setGenerateErrors({})
+
+    try {
+      const response = await showtimeApi.previewGenerate(buildGeneratePayload())
+      const preview = response.data ?? { suggestions: [], suggestedCount: 0, warnings: [] }
+      setGeneratePreview(preview)
+      setSelectedGenerateKeys((preview.suggestions || []).map((item, index) => getSuggestionKey(item, index)))
+    } catch (generateError) {
+      setError(getErrorMessage(generateError, 'Không tạo được gợi ý lịch chiếu.'))
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleConfirmGenerateSchedule = async () => {
+    const nextErrors = validateGenerateForm()
+    if (Object.keys(nextErrors).length > 0) {
+      setGenerateErrors(nextErrors)
       return
     }
 
@@ -736,11 +824,24 @@ function Showtimes() {
     setNotice('')
 
     try {
-      const response = await showtimeApi.generate(days)
+      const selectedSuggestions = (generatePreview?.suggestions || [])
+        .filter((item, index) => selectedGenerateKeys.includes(getSuggestionKey(item, index)))
+      if (selectedSuggestions.length === 0) {
+        setError('Vui lòng chọn ít nhất một suất chiếu để tạo.')
+        return
+      }
+
+      const response = await showtimeApi.generate({
+        ...buildGeneratePayload(),
+        suggestions: selectedSuggestions,
+      })
       const createdCount = getItems(response.data).length
       setNotice(createdCount > 0
-        ? `Đã tự động tạo ${createdCount} suất chiếu cho ${days} ngày tới.`
-        : 'Không có suất chiếu mới cần tạo trong khoảng thời gian này.')
+        ? 'Đã tạo ' + createdCount + ' suất chiếu cho phim ' + (selectedGenerateMovie?.title || '') + '.'
+        : 'Không có suất chiếu mới cần tạo trong khoảng ngày này.')
+      setIsGenerateModalOpen(false)
+      setGeneratePreview(null)
+      setSelectedGenerateKeys([])
       await fetchShowtimes()
     } catch (generateError) {
       setError(getErrorMessage(generateError, 'Không tạo được lịch chiếu tự động.'))
@@ -824,7 +925,7 @@ function Showtimes() {
             <button
               className="secondary-button"
               type="button"
-              onClick={handleGenerateSchedule}
+              onClick={openGenerateModal}
               disabled={isGenerating || isLookupsLoading}
             >
               <i className="fas fa-wand-magic-sparkles" />
@@ -1072,6 +1173,83 @@ function Showtimes() {
           </div>
         </div>
       </div>
+
+      {isGenerateModalOpen ? (
+        <div className="modal-backdrop">
+          <section className="modal-panel showtime-form-modal generate-showtimes-modal" role="dialog" aria-modal="true">
+            <div className="modal-header">
+              <h2>Tạo lịch chiếu tự động</h2>
+              <button className="close" type="button" onClick={closeGenerateModal} disabled={isGenerating} aria-label="Đóng form tạo lịch chiếu tự động">
+                <Icon name="close" />
+              </button>
+            </div>
+
+            <form className="movie-form showtime-form" onSubmit={handlePreviewGenerateSchedule}>
+              <div className="form-grid">
+                <label className="form-field required">
+                  <span>Phim</span>
+                  <select value={generateForm.movieId} onChange={(event) => { setGenerateForm((current) => ({ ...current, movieId: event.target.value })); setGeneratePreview(null); setSelectedGenerateKeys([]) }}>
+                    <option value="">Chọn phim</option>
+                    {movies.map((movie) => <option key={movie.movieId} value={movie.movieId}>{movie.title}</option>)}
+                  </select>
+                  {selectedGenerateMovie ? <small className="form-hint">{selectedGenerateMovie.durationMins} phút</small> : null}
+                  {generateErrors.movieId ? <em>{generateErrors.movieId}</em> : null}
+                </label>
+
+                <label className="form-field required">
+                  <span>Từ ngày</span>
+                  <input type="date" value={generateForm.dateFrom} onChange={(event) => { setGenerateForm((current) => ({ ...current, dateFrom: event.target.value })); setGeneratePreview(null); setSelectedGenerateKeys([]) }} />
+                  {generateErrors.dateFrom ? <em>{generateErrors.dateFrom}</em> : null}
+                </label>
+
+                <label className="form-field required">
+                  <span>Đến ngày</span>
+                  <input type="date" value={generateForm.dateTo} onChange={(event) => { setGenerateForm((current) => ({ ...current, dateTo: event.target.value })); setGeneratePreview(null); setSelectedGenerateKeys([]) }} />
+                  {generateErrors.dateTo ? <em>{generateErrors.dateTo}</em> : null}
+                </label>
+              </div>
+
+              {generatePreview ? (
+                <div className="generate-preview">
+                  {(generatePreview.warnings || []).map((warning) => <div key={warning} className="alert alert-warning">{warning}</div>)}
+                  <div className="generate-preview__summary">
+                    <strong>{selectedGenerateKeys.length} / {generatePreview.suggestedCount || 0} suất được chọn</strong>
+                    <span>Hệ thống bỏ qua các khung giờ trùng phòng, ngoài giờ hoạt động hoặc quá sát hiện tại.</span>
+                  </div>
+                  <div className="generate-preview__actions">
+                    <button className="btn btn-secondary" type="button" onClick={() => setSelectedGenerateKeys((generatePreview.suggestions || []).map((item, index) => getSuggestionKey(item, index)))}>Chọn tất cả</button>
+                    <button className="btn btn-secondary" type="button" onClick={() => setSelectedGenerateKeys([])}>Bỏ chọn tất cả</button>
+                  </div>
+                  <div className="generate-preview__list">
+                    {(generatePreview.suggestions || []).map((item, index) => (
+                      <label className="generate-preview__item" key={String(item.hallId) + '-' + item.startTime + '-' + index}>
+                        <input
+                          type="checkbox"
+                          checked={selectedGenerateKeys.includes(getSuggestionKey(item, index))}
+                          onChange={(event) => {
+                            const key = getSuggestionKey(item, index)
+                            setSelectedGenerateKeys((current) => event.target.checked
+                              ? [...current, key]
+                              : current.filter((value) => value !== key))
+                          }}
+                        />
+                        <div><strong>{formatTime(item.startTime)} - {formatTime(item.endTime)}</strong><span>{formatDate(item.startTime)}</span></div>
+                        <div><strong>{item.hallName}</strong><span>{item.cinemaName}</span></div>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="form-actions">
+                <button className="btn btn-secondary" type="button" onClick={closeGenerateModal} disabled={isGenerating}>Đóng</button>
+                <button className="btn btn-secondary" type="submit" disabled={isGenerating || isLookupsLoading}>{isGenerating ? 'Đang gợi ý...' : 'Xem gợi ý'}</button>
+                <button className="btn btn-primary" type="button" onClick={handleConfirmGenerateSchedule} disabled={isGenerating || !generatePreview || selectedGenerateKeys.length === 0}>{isGenerating ? 'Đang tạo...' : 'Tạo các suất đã chọn'}</button>
+              </div>
+            </form>
+          </section>
+        </div>
+      ) : null}
 
       {isFormOpen ? (
         <div className="modal-backdrop">

@@ -368,6 +368,143 @@ namespace Repository.EFCore.Theater
             return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
         }
 
+        public async Task<int?> GetDefaultGenerateMovieIdAsync()
+        {
+            return await context.Movies.AsNoTracking()
+                .Where(x => x.Status != null &&
+                            (x.Status.ToLower() == "nowshowing" ||
+                             x.Status.ToLower() == "now_showing"))
+                .OrderBy(x => x.MovieId)
+                .Select(x => (int?)x.MovieId)
+                .FirstOrDefaultAsync();
+        }
+
+        public async Task<(List<ShowtimeDTO.ShowtimeSuggestion> Suggestions, List<string> Warnings)> BuildGenerateSuggestionsAsync(ShowtimeDTO.GenerateShowtimesRequest request)
+        {
+            var warnings = new List<string>();
+            var dateFrom = request.DateFrom.Date;
+            var dateTo = request.DateTo.Date;
+
+            if (request.MovieId <= 0)
+            {
+                throw new ArgumentException("Vui lòng chọn phim.");
+            }
+
+            if (dateFrom == default || dateTo == default || dateTo < dateFrom)
+            {
+                throw new ArgumentException("Khoảng ngày tạo lịch không hợp lệ.");
+            }
+
+            if ((dateTo - dateFrom).TotalDays > 30)
+            {
+                throw new ArgumentException("Chỉ có thể tạo lịch tối đa 31 ngày mỗi lần.");
+            }
+
+            var movie = await context.Movies.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.MovieId == request.MovieId);
+            if (movie == null)
+            {
+                throw new ArgumentException("Phim đã chọn không tồn tại.");
+            }
+
+            if (movie.ReleaseDate.HasValue && dateFrom < movie.ReleaseDate.Value.Date)
+            {
+                dateFrom = movie.ReleaseDate.Value.Date;
+                warnings.Add("Khoảng ngày đã được điều chỉnh theo ngày khởi chiếu của phim.");
+            }
+
+            if (movie.EndDate.HasValue && dateTo > movie.EndDate.Value.Date)
+            {
+                dateTo = movie.EndDate.Value.Date;
+                warnings.Add("Khoảng ngày đã được điều chỉnh theo ngày kết thúc chiếu của phim.");
+            }
+
+            if (dateTo < dateFrom)
+            {
+                return ([], warnings);
+            }
+
+            var hallsQuery =
+                from hall in context.Halls.AsNoTracking()
+                join cinema in context.Cinemas.AsNoTracking() on hall.CinemaId equals cinema.CinemaId
+                where hall.Status.ToLower() == "active" && cinema.IsActive
+                select new { hall, cinema };
+
+            if (request.CinemaId.HasValue && request.CinemaId.Value > 0)
+            {
+                hallsQuery = hallsQuery.Where(x => x.cinema.CinemaId == request.CinemaId.Value);
+            }
+
+            var halls = await hallsQuery
+                .OrderBy(x => x.cinema.CinemaId)
+                .ThenBy(x => x.hall.HallId)
+                .ToListAsync();
+
+            if (halls.Count == 0)
+            {
+                return ([], warnings);
+            }
+
+            var rangeEnd = dateTo.AddDays(1);
+            var existing = await context.ShowTimes.AsNoTracking()
+                .Where(x => x.StartTime >= dateFrom && x.StartTime < rangeEnd)
+                .ToListAsync();
+            var suggestions = new List<ShowtimeDTO.ShowtimeSuggestion>();
+            var slots = new[] { 9, 12, 15, 18, 21 };
+            var earliestStart = DateTime.Now.AddMinutes(30);
+
+            for (var date = dateFrom; date <= dateTo; date = date.AddDays(1))
+            {
+                foreach (var row in halls)
+                {
+                    foreach (var slot in slots)
+                    {
+                        var startTime = date.AddHours(slot);
+                        var endTime = startTime.AddMinutes(movie.DurationMins);
+
+                        if (startTime <= earliestStart ||
+                            startTime.TimeOfDay < row.cinema.OpeningTime ||
+                            endTime.TimeOfDay > row.cinema.ClosingTime)
+                        {
+                            continue;
+                        }
+
+                        var overlaps = existing.Any(x =>
+                            x.HallId == row.hall.HallId &&
+                            !string.Equals(x.Status, "cancelled", StringComparison.OrdinalIgnoreCase) &&
+                            x.StartTime < endTime &&
+                            startTime < x.EndTime) ||
+                            suggestions.Any(x =>
+                                x.HallId == row.hall.HallId &&
+                                x.StartTime < endTime &&
+                                startTime < x.EndTime);
+
+                        if (overlaps)
+                        {
+                            continue;
+                        }
+
+                        suggestions.Add(new ShowtimeDTO.ShowtimeSuggestion
+                        {
+                            MovieId = movie.MovieId,
+                            MovieTitle = movie.Title,
+                            HallId = row.hall.HallId,
+                            HallName = row.hall.HallName,
+                            CinemaId = row.cinema.CinemaId,
+                            CinemaName = row.cinema.CinemaName,
+                            StartTime = startTime,
+                            EndTime = endTime,
+                            LanguageType = "subtitled",
+                            IsSpecial = false,
+                            Status = "scheduled"
+                        });
+                    }
+                }
+            }
+
+            return (suggestions, warnings);
+        }
+
         public async Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(
             int showtimeId,
             ShowtimeDTO.ShowtimeResponse details,
@@ -377,8 +514,11 @@ namespace Repository.EFCore.Theater
             var now = DateTime.UtcNow;
             var showtime = await context.ShowTimes.AsNoTracking().FirstAsync(x => x.ShowtimeId == showtimeId);
             var seats = await context.Seats.AsNoTracking()
-                .Where(x => x.HallId == details.HallId && x.IsActive)
+                .Where(x => x.HallId == details.HallId)
                 .OrderBy(x => x.RowLabel).ThenBy(x => x.ColNumber).ToListAsync();
+            seats = seats
+                .Where(x => RowLabelToNumber(x.RowLabel) <= details.Hall.TotalRows && x.ColNumber <= details.Hall.TotalCols)
+                .ToList();
             var seatIds = seats.Select(x => x.SeatId).ToList();
             var usedSeatTypeIds = seats.Select(x => x.SeatTypeId).Distinct().ToList();
             var seatTypes = await context.SeatTypes.AsNoTracking()
@@ -406,8 +546,9 @@ namespace Repository.EFCore.Theater
                 var price = TicketPriceCalculator.ResolvePrice(
                     showtime, details.Hall.CinemaId, details.Hall.HallTypeId, seat.SeatTypeId,
                     seatType?.PriceModifier ?? 0, standardSeatTypeId, dayTypes, priceRules);
-                var booked = bookedSeatIds.Contains(seat.SeatId);
-                var locked = seatLock != null && !currentSession;
+                var inactive = !seat.IsActive;
+                var booked = !inactive && bookedSeatIds.Contains(seat.SeatId);
+                var locked = !inactive && seatLock != null && !currentSession;
                 return new ShowtimeDTO.SeatResponse
                 {
                     SeatId = seat.SeatId,
@@ -419,7 +560,8 @@ namespace Repository.EFCore.Theater
                     SeatCode = seat.SeatCode,
                     Price = price,
                     FinalPrice = price,
-                    Status = booked ? "booked" : locked ? "locked" : "available",
+                    Status = inactive ? "maintenance" : booked ? "booked" : locked ? "locked" : "available",
+                    IsActive = seat.IsActive,
                     IsBooked = booked,
                     IsLocked = locked,
                     IsLockedByCurrentSession = currentSession,
@@ -455,6 +597,9 @@ namespace Repository.EFCore.Theater
                     ticket => ticket.BookingId, booking => booking.BookingId, (ticket, booking) => ticket.SeatId)
                 .AnyAsync(x => requested.Contains(x));
             if (booked) throw new InvalidOperationException("Some seats are already booked");
+
+
+            // point
 
             var conflict = await context.SeatLocks.AnyAsync(x =>
                 x.ShowtimeId == showtimeId && requested.Contains(x.SeatId) && x.ExpiresAt > now &&
@@ -641,6 +786,8 @@ namespace Repository.EFCore.Theater
             var cinemaIds = items.Select(x => x.Cinema.CinemaId).Distinct().ToList();
             var hallTypeIds = items.Select(x => x.Hall.HallTypeId).Distinct().ToList();
             var hallIds = items.Select(x => x.Hall.HallId).Distinct().ToList();
+            var minShowDate = items.Min(x => x.Showtime.StartTime.Date);
+            var maxShowDate = items.Max(x => x.Showtime.StartTime.Date);
             var dayTypes = await context.DayTypes.AsNoTracking().ToListAsync();
             var standardSeatTypeId = await ResolveStandardSeatTypeIdAsync();
             var activeHallSeats = await context.Seats
@@ -667,7 +814,9 @@ namespace Repository.EFCore.Theater
                 .Where(x =>
                     cinemaIds.Contains(x.CinemaId) &&
                     hallTypeIds.Contains(x.HallTypeId) &&
-                    seatTypeIds.Contains(x.SeatTypeId))
+                    seatTypeIds.Contains(x.SeatTypeId) &&
+                    x.EffectiveFrom.Date <= maxShowDate &&
+                    (!x.EffectiveTo.HasValue || x.EffectiveTo.Value.Date >= minShowDate))
                 .ToListAsync();
 
             var now = DateTime.Now;
@@ -849,6 +998,18 @@ namespace Repository.EFCore.Theater
             }
 
             return showtime.StartTime <= now ? "showing" : "upcoming";
+        }
+
+        private static int RowLabelToNumber(string? rowLabel)
+        {
+            var value = 0;
+            foreach (var character in rowLabel?.Trim().ToUpperInvariant() ?? "")
+            {
+                if (character < 'A' || character > 'Z') return int.MaxValue;
+                value = (value * 26) + character - 'A' + 1;
+            }
+
+            return value == 0 ? int.MaxValue : value;
         }
     }
 }

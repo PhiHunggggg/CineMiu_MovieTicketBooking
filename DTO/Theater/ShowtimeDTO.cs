@@ -47,6 +47,37 @@ namespace DTO.Theater
             public string? Status { get; set; }
         }
 
+        public class GenerateShowtimesRequest
+        {
+            public int MovieId { get; set; }
+            public DateTime DateFrom { get; set; }
+            public DateTime DateTo { get; set; }
+            public int? CinemaId { get; set; }
+            public List<ShowtimeSuggestion> Suggestions { get; set; } = [];
+        }
+
+        public class ShowtimeSuggestion
+        {
+            public int MovieId { get; set; }
+            public string MovieTitle { get; set; } = "";
+            public int HallId { get; set; }
+            public string HallName { get; set; } = "";
+            public int CinemaId { get; set; }
+            public string CinemaName { get; set; } = "";
+            public DateTime StartTime { get; set; }
+            public DateTime EndTime { get; set; }
+            public string LanguageType { get; set; } = "subtitled";
+            public bool IsSpecial { get; set; }
+            public string Status { get; set; } = "scheduled";
+        }
+
+        public class GenerateShowtimesPreviewResponse
+        {
+            public int SuggestedCount { get; set; }
+            public List<ShowtimeSuggestion> Suggestions { get; set; } = [];
+            public List<string> Warnings { get; set; } = [];
+        }
+
         public class SeatLockRequest
         {
             public int UserId { get; set; }
@@ -73,6 +104,7 @@ namespace DTO.Theater
             public decimal Price { get; set; }
             public decimal FinalPrice { get; set; }
             public string Status { get; set; } = "available";
+            public bool IsActive { get; set; } = true;
             public bool IsBooked { get; set; }
             public bool IsLocked { get; set; }
             public bool IsLockedByCurrentSession { get; set; }

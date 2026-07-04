@@ -1,6 +1,7 @@
 using DTO.Theater;
 using Entities;
 using Microsoft.EntityFrameworkCore;
+using Repository.Pricing;
 
 namespace Repository.EFCore.Theater
 {
@@ -433,13 +434,17 @@ namespace Repository.EFCore.Theater
                 .ToHashSetAsync();
 
             var seatsToRemove = existingSeats.Where(x => !requestedCodes.Contains(x.SeatCode)).ToList();
-            if (seatsToRemove.Any(x => usedSeatIds.Contains(x.SeatId)))
+            var now = DateTime.UtcNow;
+            var removableSeats = seatsToRemove.Where(x => !usedSeatIds.Contains(x.SeatId)).ToList();
+            var historicalSeats = seatsToRemove.Where(x => usedSeatIds.Contains(x.SeatId)).ToList();
+
+            context.Seats.RemoveRange(removableSeats);
+            foreach (var historicalSeat in historicalSeats)
             {
-                throw new InvalidOperationException("Cannot remove seats that already have tickets");
+                historicalSeat.IsActive = false;
+                historicalSeat.UpdatedAt = now;
             }
 
-            context.Seats.RemoveRange(seatsToRemove);
-            var now = DateTime.UtcNow;
             foreach (var requestedSeat in normalizedSeats)
             {
                 if (existingByCode.TryGetValue(requestedSeat.SeatCode, out var seat))
@@ -520,6 +525,7 @@ namespace Repository.EFCore.Theater
                 context.Halls.Add(hall);
                 await context.SaveChangesAsync();
                 context.Seats.AddRange(BuildSeats(hall, seatTypeIds, now));
+                await EnsureDefaultTicketPricesAsync(hall.CinemaId, hall.HallTypeId, now);
                 await context.SaveChangesAsync();
             }
 
@@ -703,12 +709,11 @@ namespace Repository.EFCore.Theater
                 .Where(x => hallTypeIds.Contains(x.HallTypeId))
                 .ToDictionaryAsync(x => x.HallTypeId);
 
-            var activeSeatCounts = await context.Seats
+            var activeSeats = await context.Seats
                 .AsNoTracking()
                 .Where(x => hallIds.Contains(x.HallId) && x.IsActive)
-                .GroupBy(x => x.HallId)
-                .Select(x => new { HallId = x.Key, Count = x.Count() })
-                .ToDictionaryAsync(x => x.HallId, x => x.Count);
+                .Select(x => new { x.HallId, x.RowLabel, x.ColNumber })
+                .ToListAsync();
 
             var now = DateTime.Now;
             var upcomingShowtimeCounts = await context.ShowTimes
@@ -739,8 +744,11 @@ namespace Repository.EFCore.Theater
                     Name = hall.HallName,
                     TotalRows = hall.TotalRows,
                     TotalCols = hall.TotalCols,
-                    TotalSeats = hall.TotalSeats,
-                    ActiveSeatCount = activeSeatCounts.GetValueOrDefault(hall.HallId),
+                    TotalSeats = checked((short)(hall.TotalRows * hall.TotalCols)),
+                    ActiveSeatCount = activeSeats.Count(seat =>
+                        seat.HallId == hall.HallId &&
+                        RowLabelToNumber(seat.RowLabel) <= hall.TotalRows &&
+                        seat.ColNumber <= hall.TotalCols),
                     UpcomingShowtimeCount = upcomingShowtimeCounts.GetValueOrDefault(hall.HallId),
                     Status = NormalizeStatus(hall.Status),
                     CreatedAt = hall.CreatedAt,
@@ -781,6 +789,72 @@ namespace Repository.EFCore.Theater
             }
 
             return seats;
+        }
+
+        private async Task EnsureDefaultTicketPricesAsync(int cinemaId, byte hallTypeId, DateTime now)
+        {
+            var hallType = await context.HallTypes.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.HallTypeId == hallTypeId);
+            var seatTypes = await context.SeatTypes.AsNoTracking()
+                .OrderBy(x => x.SeatTypeId)
+                .ToListAsync();
+            var dayTypes = await context.DayTypes.AsNoTracking()
+                .OrderBy(x => x.DayTypeId)
+                .ToListAsync();
+
+            if (seatTypes.Count == 0 || dayTypes.Count == 0) return;
+
+            var existingKeys = await context.TicketPrices
+                .Where(x => x.CinemaId == cinemaId && x.HallTypeId == hallTypeId)
+                .Select(x => new { x.SeatTypeId, x.DayTypeId, x.TimeSlot })
+                .ToListAsync();
+            var existing = existingKeys
+                .Select(x => $"{x.SeatTypeId}:{x.DayTypeId}:{TicketPriceCalculator.NormalizeTimeSlot(x.TimeSlot)}")
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var hallSurcharge = hallType?.SurchargePct ?? 0m;
+            var effectiveFrom = now.Date;
+            var timeSlots = new[] { "before18", "after18" };
+            foreach (var seatType in seatTypes)
+            {
+                foreach (var dayType in dayTypes)
+                {
+                    var daySurcharge = dayType.TypeName?.ToLowerInvariant() switch
+                    {
+                        var value when value != null && value.Contains("weekend") => 10000m,
+                        var value when value != null && value.Contains("holiday") => 20000m,
+                        _ => 0m
+                    };
+                    foreach (var timeSlot in timeSlots)
+                    {
+                        var key = $"{seatType.SeatTypeId}:{dayType.DayTypeId}:{timeSlot}";
+                        if (existing.Contains(key)) continue;
+
+                        var timeSurcharge = timeSlot switch
+                        {
+                            "after18" => 20000m,
+                            _ => 0m
+                        };
+                        var basePrice = TicketPriceCalculator.DefaultBasePrice
+                            + seatType.PriceModifier
+                            + daySurcharge
+                            + timeSurcharge
+                            + Math.Round(TicketPriceCalculator.DefaultBasePrice * hallSurcharge / 100m, 0);
+
+                        context.TicketPrices.Add(new Tickets.TicketPrice
+                        {
+                            CinemaId = cinemaId,
+                            HallTypeId = hallTypeId,
+                            SeatTypeId = seatType.SeatTypeId,
+                            DayTypeId = dayType.DayTypeId,
+                            TimeSlot = timeSlot,
+                            BasePrice = basePrice,
+                            EffectiveFrom = effectiveFrom,
+                            EffectiveTo = null
+                        });
+                    }
+                }
+            }
         }
 
         private static string NormalizeStatus(string? status)
@@ -838,6 +912,18 @@ namespace Repository.EFCore.Theater
             }
 
             return label;
+        }
+
+        private static int RowLabelToNumber(string? rowLabel)
+        {
+            var value = 0;
+            foreach (var character in rowLabel?.Trim().ToUpperInvariant() ?? "")
+            {
+                if (character < 'A' || character > 'Z') return int.MaxValue;
+                value = (value * 26) + character - 'A' + 1;
+            }
+
+            return value == 0 ? int.MaxValue : value;
         }
 
         private static bool IsSoldBookingStatus(string? status)

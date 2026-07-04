@@ -61,87 +61,205 @@ namespace Services.Theater
         {
             days = Math.Clamp(days, 1, 30);
 
-            var movies = await context.Movies.AsNoTracking()
+            var movie = await context.Movies.AsNoTracking()
                 .Where(x => x.Status != null &&
                             (x.Status.ToLower() == "nowshowing" ||
                              x.Status.ToLower() == "now_showing"))
                 .OrderBy(x => x.MovieId)
-                .ToListAsync();
-            var halls = await context.Halls.AsNoTracking()
-                .Where(x => x.Status.ToLower() == "active")
-                .OrderBy(x => x.HallId)
-                .ToListAsync();
+                .FirstOrDefaultAsync();
 
-            if (movies.Count == 0 || halls.Count == 0)
+            if (movie == null)
             {
                 return [];
             }
 
-            var today = DateTime.Today;
-            var rangeEnd = today.AddDays(days);
-            var existing = await context.ShowTimes
-                .Where(x => x.StartTime >= today && x.StartTime < rangeEnd)
-                .ToListAsync();
-            var created = new List<ShowTime>();
-            var slots = new[] { 9, 12, 15, 18, 21 };
-            var now = DateTime.Now;
-
-            for (var dayIndex = 0; dayIndex < days; dayIndex++)
+            return await GenerateAsync(new ShowtimeDTO.GenerateShowtimesRequest
             {
-                var date = today.AddDays(dayIndex);
-                for (var hallIndex = 0; hallIndex < halls.Count; hallIndex++)
+                MovieId = movie.MovieId,
+                DateFrom = DateTime.Today,
+                DateTo = DateTime.Today.AddDays(days - 1)
+            });
+        }
+
+        public async Task<ShowtimeDTO.GenerateShowtimesPreviewResponse> PreviewGenerateAsync(ShowtimeDTO.GenerateShowtimesRequest request)
+        {
+            var (suggestions, warnings) = await BuildGenerateSuggestionsAsync(request);
+            return new ShowtimeDTO.GenerateShowtimesPreviewResponse
+            {
+                SuggestedCount = suggestions.Count,
+                Suggestions = suggestions,
+                Warnings = warnings
+            };
+        }
+
+        public async Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateAsync(ShowtimeDTO.GenerateShowtimesRequest request)
+        {
+            var suggestions = request.Suggestions.Count > 0
+                ? request.Suggestions
+                : (await BuildGenerateSuggestionsAsync(request)).Suggestions;
+
+            foreach (var suggestion in suggestions)
+            {
+                try
                 {
-                    var hall = halls[hallIndex];
-                    for (var slotIndex = 0; slotIndex < slots.Length; slotIndex++)
+                    await showtimeRepository.CreateAsync(new ShowtimeDTO.ShowtimeRequest
                     {
-                        var startTime = date.AddHours(slots[slotIndex]);
-                        if (startTime <= now.AddMinutes(30))
+                        MovieId = suggestion.MovieId,
+                        HallId = suggestion.HallId,
+                        StartTime = suggestion.StartTime,
+                        EndTime = suggestion.EndTime,
+                        LanguageType = suggestion.LanguageType,
+                        IsSpecial = suggestion.IsSpecial,
+                        Status = suggestion.Status
+                    });
+                }
+                catch (ArgumentException)
+                {
+                    continue;
+                }
+            }
+
+            if (suggestions.Count == 0)
+            {
+                return [];
+            }
+
+            var dateFrom = request.DateFrom.Date;
+            var dateTo = request.DateTo.Date;
+            var responses = await showtimeRepository.GetAllShowtimesAsync(
+                null, request.MovieId, request.CinemaId, null, null, "scheduled");
+
+            return responses.Where(x =>
+                x.StartTime.Date >= dateFrom &&
+                x.StartTime.Date <= dateTo &&
+                suggestions.Any(s => s.HallId == x.HallId && s.StartTime == x.StartTime))
+                .ToList();
+        }
+
+        private async Task<(List<ShowtimeDTO.ShowtimeSuggestion> Suggestions, List<string> Warnings)> BuildGenerateSuggestionsAsync(ShowtimeDTO.GenerateShowtimesRequest request)
+        {
+            var warnings = new List<string>();
+            var dateFrom = request.DateFrom.Date;
+            var dateTo = request.DateTo.Date;
+
+            if (request.MovieId <= 0)
+            {
+                throw new ArgumentException("Vui lòng chọn phim.");
+            }
+
+            if (dateFrom == default || dateTo == default || dateTo < dateFrom)
+            {
+                throw new ArgumentException("Khoảng ngày tạo lịch không hợp lệ.");
+            }
+
+            if ((dateTo - dateFrom).TotalDays > 30)
+            {
+                throw new ArgumentException("Chỉ có thể tạo lịch tối đa 31 ngày mỗi lần.");
+            }
+
+            var movie = await context.Movies.AsNoTracking()
+                .FirstOrDefaultAsync(x => x.MovieId == request.MovieId);
+            if (movie == null)
+            {
+                throw new ArgumentException("Phim đã chọn không tồn tại.");
+            }
+
+            if (movie.ReleaseDate.HasValue && dateFrom < movie.ReleaseDate.Value.Date)
+            {
+                dateFrom = movie.ReleaseDate.Value.Date;
+                warnings.Add("Khoảng ngày đã được điều chỉnh theo ngày khởi chiếu của phim.");
+            }
+
+            if (movie.EndDate.HasValue && dateTo > movie.EndDate.Value.Date)
+            {
+                dateTo = movie.EndDate.Value.Date;
+                warnings.Add("Khoảng ngày đã được điều chỉnh theo ngày kết thúc chiếu của phim.");
+            }
+
+            if (dateTo < dateFrom)
+            {
+                return ([], warnings);
+            }
+
+            var hallsQuery =
+                from hall in context.Halls.AsNoTracking()
+                join cinema in context.Cinemas.AsNoTracking() on hall.CinemaId equals cinema.CinemaId
+                where hall.Status.ToLower() == "active" && cinema.IsActive
+                select new { hall, cinema };
+
+            if (request.CinemaId.HasValue && request.CinemaId.Value > 0)
+            {
+                hallsQuery = hallsQuery.Where(x => x.cinema.CinemaId == request.CinemaId.Value);
+            }
+
+            var halls = await hallsQuery
+                .OrderBy(x => x.cinema.CinemaId)
+                .ThenBy(x => x.hall.HallId)
+                .ToListAsync();
+
+            if (halls.Count == 0)
+            {
+                return ([], warnings);
+            }
+
+            var rangeEnd = dateTo.AddDays(1);
+            var existing = await context.ShowTimes.AsNoTracking()
+                .Where(x => x.StartTime >= dateFrom && x.StartTime < rangeEnd)
+                .ToListAsync();
+            var suggestions = new List<ShowtimeDTO.ShowtimeSuggestion>();
+            var slots = new[] { 9, 12, 15, 18, 21 };
+            var earliestStart = DateTime.Now.AddMinutes(30);
+
+            for (var date = dateFrom; date <= dateTo; date = date.AddDays(1))
+            {
+                foreach (var row in halls)
+                {
+                    foreach (var slot in slots)
+                    {
+                        var startTime = date.AddHours(slot);
+                        var endTime = startTime.AddMinutes(movie.DurationMins);
+
+                        if (startTime <= earliestStart ||
+                            startTime.TimeOfDay < row.cinema.OpeningTime ||
+                            endTime.TimeOfDay > row.cinema.ClosingTime)
                         {
                             continue;
                         }
 
-                        var movie = movies[(dayIndex * halls.Count * slots.Length +
-                                            hallIndex * slots.Length +
-                                            slotIndex) % movies.Count];
-                        var endTime = startTime.AddMinutes(movie.DurationMins);
-                        var overlaps = existing.Concat(created).Any(x =>
-                            x.HallId == hall.HallId &&
-                            x.Status != "cancelled" &&
+                        var overlaps = existing.Any(x =>
+                            x.HallId == row.hall.HallId &&
+                            !string.Equals(x.Status, "cancelled", StringComparison.OrdinalIgnoreCase) &&
                             x.StartTime < endTime &&
-                            startTime < x.EndTime);
+                            startTime < x.EndTime) ||
+                            suggestions.Any(x =>
+                                x.HallId == row.hall.HallId &&
+                                x.StartTime < endTime &&
+                                startTime < x.EndTime);
+
                         if (overlaps)
                         {
                             continue;
                         }
 
-                        created.Add(new ShowTime
+                        suggestions.Add(new ShowtimeDTO.ShowtimeSuggestion
                         {
                             MovieId = movie.MovieId,
-                            HallId = hall.HallId,
+                            MovieTitle = movie.Title,
+                            HallId = row.hall.HallId,
+                            HallName = row.hall.HallName,
+                            CinemaId = row.cinema.CinemaId,
+                            CinemaName = row.cinema.CinemaName,
                             StartTime = startTime,
                             EndTime = endTime,
                             LanguageType = "subtitled",
                             IsSpecial = false,
-                            Status = "scheduled",
-                            CreatedAt = DateTime.UtcNow,
-                            UpdatedAt = DateTime.UtcNow
+                            Status = "scheduled"
                         });
                     }
                 }
             }
 
-            if (created.Count == 0)
-            {
-                return [];
-            }
-
-            context.ShowTimes.AddRange(created);
-            await context.SaveChangesAsync();
-
-            var createdIds = created.Select(x => x.ShowtimeId).ToHashSet();
-            var responses = await showtimeRepository.GetAllShowtimesAsync(
-                null, null, null, null, null, null);
-            return responses.Where(x => createdIds.Contains(x.ShowtimeId)).ToList();
+            return (suggestions, warnings);
         }
 
     public async Task<ShowtimeDTO.ShowtimeResponse?> GetShowtimeDetailsAsync(int id)

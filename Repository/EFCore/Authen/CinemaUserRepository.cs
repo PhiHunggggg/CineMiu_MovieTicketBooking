@@ -38,10 +38,12 @@ namespace Repository.EFCore.Authen
             CinemaUserDTO.UserRequest request,
             string passwordHash)
         {
+            await ValidateCinemaAsync(request.CinemaId);
             var now = DateTime.UtcNow;
             var user = new Users
             {
-                RoleId = request.RoleId ?? (byte)1,
+                // SỬA DÒNG 56: Ép kiểu từ int? sang byte
+                RoleId = request.RoleId.HasValue ? (byte)request.RoleId.Value : (byte)1,
                 FullName = request.FullName,
                 Email = request.Email,
                 Phone = request.Phone,
@@ -49,6 +51,7 @@ namespace Repository.EFCore.Authen
                 AvatarUrl = request.AvatarUrl,
                 DateOfBirth = request.DateOfBirth,
                 Gender = request.Gender,
+                CinemaId = request.CinemaId,
                 IsActive = request.IsActive ?? true,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -65,14 +68,22 @@ namespace Repository.EFCore.Authen
         {
             var user = await context.Users.FirstOrDefaultAsync(x => x.UserId == userId)
                 ?? throw new KeyNotFoundException("User not found");
+            await ValidateCinemaAsync(request.CinemaId);
 
-            user.RoleId = request.RoleId ?? user.RoleId;
+           
+            if (request.RoleId.HasValue)
+            {
+                user.RoleId = (byte)request.RoleId.Value;
+            }
+            // Nếu không có giá trị thì giữ nguyên user.RoleId
+            
             user.FullName = request.FullName;
             user.Email = request.Email;
             user.Phone = request.Phone;
             user.AvatarUrl = request.AvatarUrl;
             user.DateOfBirth = request.DateOfBirth;
             user.Gender = request.Gender;
+            user.CinemaId = request.CinemaId;
             user.IsActive = request.IsActive ?? user.IsActive;
             user.UpdatedAt = DateTime.UtcNow;
             if (!string.IsNullOrWhiteSpace(passwordHash))
@@ -110,5 +121,13 @@ namespace Repository.EFCore.Authen
         };
 
         private static CinemaUserDTO.UserResponse ToResponse(Users x) => ToResponseExpression(x);
+
+        private async Task ValidateCinemaAsync(int? cinemaId)
+        {
+            if (cinemaId.HasValue && !await context.Cinemas.AnyAsync(x => x.CinemaId == cinemaId.Value))
+            {
+                throw new ArgumentException("Selected cinema does not exist");
+            }
+        }
     }
 }

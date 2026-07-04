@@ -1,4 +1,4 @@
-USE [BaseCoreBookingMovie];
+USE [CINEMIU_MovieTicketBooking];
 SET XACT_ABORT ON;
 
 BEGIN TRANSACTION;

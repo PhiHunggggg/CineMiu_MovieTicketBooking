@@ -347,7 +347,7 @@ BEGIN TRY
 
 
     ------------------------------------------------------------
-    -- 7. Ticket prices: 5 rạp x 5 loại phòng x 4 loại ghế x 3 loại ngày x 3 khung giờ = 900 dòng
+    -- 7. Ticket prices: 5 rạp x 5 loại phòng x 4 loại ghế x 3 loại ngày x 2 khung giờ = 600 dòng
     ------------------------------------------------------------
     DECLARE @cinema INT = 1, @hallType TINYINT, @seatTypeId TINYINT, @dayType TINYINT, @slot NVARCHAR(20), @base DECIMAL(10,2);
     WHILE @cinema <= 5
@@ -361,7 +361,7 @@ BEGIN TRY
                 SET @dayType = 1;
                 WHILE @dayType <= 3
                 BEGIN
-                    DECLARE slot_cursor CURSOR LOCAL FAST_FORWARD FOR SELECT v FROM (VALUES (N'Morning'),(N'Afternoon'),(N'Evening')) s(v);
+                    DECLARE slot_cursor CURSOR LOCAL FAST_FORWARD FOR SELECT v FROM (VALUES (N'before18'),(N'after18')) s(v);
                     OPEN slot_cursor;
                     FETCH NEXT FROM slot_cursor INTO @slot;
                     WHILE @@FETCH_STATUS = 0
@@ -371,7 +371,7 @@ BEGIN TRY
                             + CASE @hallType WHEN 2 THEN 20000 WHEN 3 THEN 50000 WHEN 4 THEN 80000 WHEN 5 THEN 60000 ELSE 0 END
                             + CASE @seatTypeId WHEN 2 THEN 30000 WHEN 3 THEN 80000 WHEN 4 THEN 100000 ELSE 0 END
                             + CASE @dayType WHEN 2 THEN 15000 WHEN 3 THEN 30000 ELSE 0 END
-                            + CASE @slot WHEN N'Evening' THEN 20000 WHEN N'Afternoon' THEN 10000 ELSE 0 END;
+                            + CASE @slot WHEN N'after18' THEN 20000 ELSE 0 END;
 
                         INSERT INTO [dbo].[ticket_prices] ([cinema_id],[hall_type_id],[seat_type_id],[day_type_id],[time_slot],[base_price],[effective_from],[effective_to])
                         VALUES (@cinema,@hallType,@seatTypeId,@dayType,@slot,@base,'2026-05-01','2026-12-31');

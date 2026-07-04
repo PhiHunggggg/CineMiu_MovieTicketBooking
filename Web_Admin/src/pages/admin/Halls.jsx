@@ -38,18 +38,110 @@ function getTodayValue() {
     return `${year}-${month}-${day}`;
 }
 
-function getSeatTypeKey(typeName) {
-    const normalizedName = String(typeName || '').toLowerCase();
-    if (normalizedName.includes('vip')) return 'vip';
-    if (normalizedName.includes('couple')) return 'couple';
+function getSeatTypeName(type) {
+    if (!type || typeof type !== 'object') return String(type || '');
+    return String(type.typeName || type.TypeName || type.seatTypeName || type.SeatTypeName || type.name || type.Name || '');
+}
+
+function getSeatTypeId(type) {
+    if (!type || typeof type !== 'object') return null;
+    return Number(type.seatTypeId || type.SeatTypeId || type.id || type.Id || 0) || null;
+}
+
+function getSeatTypeKey(type) {
+    const normalizedName = getSeatTypeName(type).toLowerCase();
+    const seatTypeId = getSeatTypeId(type);
+    if (seatTypeId === 3 || normalizedName.includes('vip')) return 'vip';
+    if (seatTypeId === 2 || normalizedName.includes('premium')) return 'premium';
+    if (
+        seatTypeId === 4
+        || normalizedName.includes('couple')
+        || normalizedName.includes('sweetbox')
+        || normalizedName.includes('doi')
+        || normalizedName.includes('đôi')
+    ) return 'couple';
     return 'standard';
 }
 
-function getSeatTypeLabel(typeName) {
-    const key = getSeatTypeKey(typeName);
+function getSeatTypeLabel(type) {
+    const key = getSeatTypeKey(type);
     if (key === 'vip') return 'Ghế VIP';
+    if (key === 'premium') return 'Ghế Premium';
     if (key === 'couple') return 'Ghế Couple';
     return 'Ghế thường';
+}
+
+function rowLabelToNumber(rowLabel) {
+    return String(rowLabel || '').trim().toUpperCase().split('').reduce((value, character) => {
+        const code = character.charCodeAt(0);
+        if (code < 65 || code > 90) return Number.MAX_SAFE_INTEGER;
+        return (value * 26) + code - 64;
+    }, 0);
+}
+
+function isSeatWithinHallLayout(seat, hall) {
+    const rowLabel = seat.rowLabel ?? seat.RowLabel;
+    const colNumber = seat.colNumber ?? seat.ColNumber ?? 0;
+    const totalRows = hall.totalRows ?? hall.TotalRows ?? 0;
+    const totalCols = hall.totalCols ?? hall.TotalCols ?? 0;
+
+    return (
+        rowLabelToNumber(rowLabel) <= Number(totalRows)
+        && Number(colNumber) <= Number(totalCols)
+    );
+}
+
+function rowNumberToLabel(rowNumber) {
+    let value = Number(rowNumber);
+    let label = '';
+    while (value > 0) {
+        value -= 1;
+        label = String.fromCharCode(65 + (value % 26)) + label;
+        value = Math.floor(value / 26);
+    }
+    return label;
+}
+
+function normalizeSeatLayout(seats, hall, fallbackSeatTypeId) {
+    const totalRows = Number(hall.totalRows ?? hall.TotalRows ?? 0);
+    const totalCols = Number(hall.totalCols ?? hall.TotalCols ?? 0);
+    const seatByPosition = new Map();
+
+    seats
+        .filter((seat) => isSeatWithinHallLayout(seat, hall))
+        .forEach((seat) => {
+            const rowLabel = String(seat.rowLabel ?? seat.RowLabel ?? '').trim().toUpperCase();
+            const colNumber = Number(seat.colNumber ?? seat.ColNumber);
+            seatByPosition.set(`${rowLabel}-${colNumber}`, {
+                ...seat,
+                rowLabel,
+                colNumber,
+                seatCode: seat.seatCode ?? seat.SeatCode ?? `${rowLabel}${colNumber}`,
+                seatTypeId: Number(seat.seatTypeId ?? seat.SeatTypeId ?? fallbackSeatTypeId),
+                isActive: (seat.isActive ?? seat.IsActive) !== false,
+            });
+        });
+
+    const normalizedSeats = [];
+    for (let row = 1; row <= totalRows; row += 1) {
+        const rowLabel = rowNumberToLabel(row);
+        for (let col = 1; col <= totalCols; col += 1) {
+            const key = `${rowLabel}-${col}`;
+            normalizedSeats.push(seatByPosition.get(key) || {
+                seatTypeId: Number(fallbackSeatTypeId),
+                rowLabel,
+                colNumber: col,
+                seatCode: `${rowLabel}${col}`,
+                isActive: true,
+            });
+        }
+    }
+
+    return normalizedSeats;
+}
+
+function getSeatLayoutKey(seat) {
+    return String(seat.seatId ?? seat.id ?? seat.seatCode ?? seat.SeatCode);
 }
 
 function getStatusLabel(status) {
@@ -96,7 +188,7 @@ export default function Halls() {
                 cinemaLookupApi.getAll(),
             ]);
             const cinemaItems = getItems(cinemaResponse.data).filter((cinema) => (
-                !isManagerScoped || (assignedCinemaId && String(cinema.cinemaId || cinema.id) === assignedCinemaId)
+                !isManagerScoped || !assignedCinemaId || String(cinema.cinemaId || cinema.id) === assignedCinemaId
             ));
             const lookupData = lookupResponse.data || {};
             const hallResponses = await Promise.all(
@@ -160,7 +252,7 @@ export default function Halls() {
     );
 
     const seatTypeById = useMemo(
-        () => new Map(seatTypes.map((item) => [Number(item.seatTypeId), item])),
+        () => new Map(seatTypes.map((item) => [getSeatTypeId(item), item])),
         [seatTypes],
     );
 
@@ -250,6 +342,7 @@ export default function Halls() {
         const totalRows = Number(form.totalRows);
         const totalCols = Number(form.totalCols);
         const payload = {
+            cinemaId: Number(form.cinemaId),
             hallTypeId: Number(form.hallTypeId),
             hallName: form.hallName.trim(),
             totalRows,
@@ -306,7 +399,7 @@ export default function Halls() {
 
         try {
             const response = await cinemaApi.getHallSeats(getHallId(hall));
-            const seats = getItems(response.data);
+            const seats = normalizeSeatLayout(getItems(response.data), hall, seatTypes[0]?.seatTypeId || 1);
             setSeatLayout(seats);
             setSelectedSeatTypeId(String(seats[0]?.seatTypeId || seatTypes[0]?.seatTypeId || ''));
         } catch (requestError) {
@@ -324,10 +417,10 @@ export default function Halls() {
         setSeatEditMode('type');
     };
 
-    const changeSeatType = (seatId) => {
+    const changeSeatType = (seatKey) => {
         if (seatEditMode === 'lock') {
             setSeatLayout((currentSeats) => currentSeats.map((seat) => (
-                Number(seat.seatId || seat.id) === Number(seatId)
+                getSeatLayoutKey(seat) === String(seatKey)
                     ? { ...seat, isActive: seat.isActive === false }
                     : seat
             )));
@@ -336,7 +429,7 @@ export default function Halls() {
 
         if (!selectedSeatTypeId) return;
         setSeatLayout((currentSeats) => currentSeats.map((seat) => (
-            Number(seat.seatId || seat.id) === Number(seatId)
+            getSeatLayoutKey(seat) === String(seatKey)
                 ? { ...seat, seatTypeId: Number(selectedSeatTypeId) }
                 : seat
         )));
@@ -468,7 +561,12 @@ export default function Halls() {
                                             <td>{hall.hallTypeName || hallType?.typeName || '-'}</td>
                                             <td>{hall.totalRows} hàng × {hall.totalCols} cột</td>
                                             <td>
-                                                <strong>{Number(hall.activeSeatCount ?? hall.totalSeats ?? 0).toLocaleString('vi-VN')} ghế hoạt động</strong>
+                                                <strong>
+                                                    {Number(hall.activeSeatCount ?? 0).toLocaleString('vi-VN')}
+                                                    /
+                                                    {Number((hall.totalRows || 0) * (hall.totalCols || 0)).toLocaleString('vi-VN')}
+                                                    {' '}ghế hoạt động
+                                                </strong>
                                             </td>
                                             <td>
                                                 <span className={`hall-status status-${getHallDisplayStatus(hall)}`}>
@@ -516,7 +614,7 @@ export default function Halls() {
                                         <div className="form-grid theater-form-grid">
                                             <label className="form-field">
                                                 <span>Chi nhánh rạp</span>
-                                                <select value={form.cinemaId} onChange={(event) => setForm({ ...form, cinemaId: event.target.value })} disabled={Boolean(editingHall) || isManagerScoped}>
+                                                <select value={form.cinemaId} onChange={(event) => setForm({ ...form, cinemaId: event.target.value })} disabled={Boolean(editingHall) || (isManagerScoped && Boolean(assignedCinemaId))}>
                                                     <option value="">Chọn chi nhánh</option>
                                                     {cinemas.map((cinema) => <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>{cinema.cinemaName || cinema.name}</option>)}
                                                 </select>
@@ -583,15 +681,15 @@ export default function Halls() {
 
                                     <div className="seat-type-toolbar">
                                         {seatTypes.map((type) => {
-                                            const typeId = String(type.seatTypeId);
-                                            const typeKey = getSeatTypeKey(type.typeName);
+                                            const typeId = String(getSeatTypeId(type));
+                                            const typeKey = getSeatTypeKey(type);
                                             const count = seatLayout.filter((seat) => (
                                                 seat.isActive !== false
-                                                && Number(seat.seatTypeId) === Number(type.seatTypeId)
+                                                && Number(seat.seatTypeId) === getSeatTypeId(type)
                                             )).length;
                                             return (
                                                 <button
-                                                    key={type.seatTypeId}
+                                                    key={typeId}
                                                     className={`seat-type-option seat-${typeKey} ${seatEditMode === 'type' && selectedSeatTypeId === typeId ? 'selected' : ''}`}
                                                     type="button"
                                                     onClick={() => {
@@ -600,7 +698,7 @@ export default function Halls() {
                                                     }}
                                                 >
                                                     <i className="fas fa-chair" />
-                                                    <span>{getSeatTypeLabel(type.typeName)}</span>
+                                                    <span>{getSeatTypeLabel(type)}</span>
                                                     <strong>{count}</strong>
                                                 </button>
                                             );
@@ -631,14 +729,14 @@ export default function Halls() {
                                                         <div className="seat-layout-seats">
                                                             {row.seats.map((seat) => {
                                                                 const type = seatTypeById.get(Number(seat.seatTypeId));
-                                                                const typeKey = getSeatTypeKey(type?.typeName);
+                                                                const typeKey = getSeatTypeKey(type);
                                                                 return (
                                                                     <button
-                                                                        key={seat.seatId || seat.id || seat.seatCode}
+                                                                        key={getSeatLayoutKey(seat)}
                                                                         className={`seat-layout-seat seat-${typeKey} ${seat.isActive === false ? 'seat-inactive' : ''}`}
                                                                         type="button"
-                                                                        title={`${seat.seatCode} - ${seat.isActive === false ? 'Đã khóa do hỏng/bảo trì' : getSeatTypeLabel(type?.typeName)}`}
-                                                                        onClick={() => changeSeatType(seat.seatId || seat.id)}
+                                                                        title={`${seat.seatCode} - ${seat.isActive === false ? 'Đã khóa do hỏng/bảo trì' : getSeatTypeLabel(type)}`}
+                                                                        onClick={() => changeSeatType(getSeatLayoutKey(seat))}
                                                                     >
                                                                         {seat.seatCode}
                                                                     </button>

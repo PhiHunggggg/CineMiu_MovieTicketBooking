@@ -2194,6 +2194,108 @@ textarea.form-control,
     overflow-y: auto;
 }
 
+.generate-showtimes-modal {
+    display: flex;
+    flex-direction: column;
+    width: min(100%, 860px);
+    overflow: hidden;
+}
+
+.generate-showtimes-modal .showtime-form {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
+}
+
+.generate-showtimes-modal .form-grid {
+    flex: 0 0 auto;
+}
+
+.generate-preview {
+    display: grid;
+    gap: 12px;
+    min-height: 0;
+    margin: 0 20px 18px;
+}
+
+.generate-preview__summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 14px;
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.generate-preview__summary span {
+    color: #64748b;
+    font-size: 0.9rem;
+    text-align: right;
+}
+
+.generate-preview__list {
+    display: grid;
+    gap: 8px;
+    max-height: min(320px, calc(100vh - 430px));
+    overflow: auto;
+    padding-bottom: 12px;
+}
+
+.generate-preview__actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.generate-preview__item {
+    display: grid;
+    grid-template-columns: 22px minmax(150px, 0.8fr) minmax(220px, 1.2fr);
+    align-items: center;
+    gap: 16px;
+    padding: 10px 12px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.generate-preview__item input {
+    width: 18px;
+    height: 18px;
+    accent-color: #0f766e;
+}
+
+.generate-preview__item div {
+    min-width: 0;
+}
+
+.generate-preview__item strong,
+.generate-preview__item span {
+    display: block;
+}
+
+.generate-preview__item span {
+    color: #64748b;
+    font-size: 0.88rem;
+}
+
+.alert-warning {
+    border-color: rgba(245, 158, 11, 0.35);
+    background: #fffbeb;
+    color: #92400e;
+}
+
+.generate-showtimes-modal .form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: auto;
+    border-top: 1px solid rgba(15, 23, 42, 0.1);
+    background: #fff;
+}
+
 .movie-form {
     display: block;
 }
@@ -3060,6 +3162,10 @@ textarea.form-control,
 
 .seat-standard {
     background: #64748b;
+}
+
+.seat-premium {
+    background: #4f6f9f;
 }
 
 .seat-vip {

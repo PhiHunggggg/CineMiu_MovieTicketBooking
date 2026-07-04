@@ -25,8 +25,14 @@ public class ShowtimesController(IShowtimeService service) : ApiControllerBase
             keyword, movieId, cinemaId, hallId, date, dateFrom, dateTo, status, page, pageSize, upcomingOnly));
 
     [HttpPost("generate")]
-    public async Task<IActionResult> Generate([FromQuery] int days = 5) =>
-        Ok(await service.GenerateUpcomingAsync(days));
+    public async Task<IActionResult> Generate([FromQuery] int days = 5, [FromBody] ShowtimeDTO.GenerateShowtimesRequest? request = null) =>
+        Ok(request == null || request.MovieId <= 0
+            ? await service.GenerateUpcomingAsync(days)
+            : await service.GenerateAsync(request));
+
+    [HttpPost("generate/preview")]
+    public async Task<IActionResult> PreviewGenerate([FromBody] ShowtimeDTO.GenerateShowtimesRequest request) =>
+        Ok(await service.PreviewGenerateAsync(request));
 
     [HttpGet("{id:int}")]
     public Task<IActionResult> GetById(int id) => ExecuteAsync(async () =>

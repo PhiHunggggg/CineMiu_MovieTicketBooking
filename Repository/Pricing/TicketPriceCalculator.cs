@@ -9,7 +9,7 @@ namespace Repository.Pricing
         public const decimal DefaultBasePrice = 75000m;
 
         public static readonly IReadOnlySet<string> AllowedTimeSlots = new HashSet<string>(
-            ["all_day", "morning", "afternoon", "evening", "late_night"],
+            ["all_day", "before18", "after18"],
             StringComparer.OrdinalIgnoreCase);
 
         public static decimal ResolvePrice(
@@ -52,23 +52,21 @@ namespace Repository.Pricing
         public static string NormalizeTimeSlot(string? timeSlot)
         {
             var normalized = timeSlot?.Trim().ToLowerInvariant();
-            return string.IsNullOrWhiteSpace(normalized) ? "all_day" : normalized;
+            normalized = normalized?.Replace("_", "").Replace("-", "").Replace(" ", "");
+            return normalized switch
+            {
+                null or "" => "all_day",
+                "before18" or "before1800" => "before18",
+                "after18" or "after1800" => "after18",
+                "morning" or "afternoon" => "before18",
+                "evening" or "latenight" => "after18",
+                _ => normalized
+            };
         }
 
         public static string ResolveTimeSlot(DateTime startTime)
         {
-            var hour = startTime.Hour;
-            if (hour < 12)
-            {
-                return "morning";
-            }
-
-            if (hour < 18)
-            {
-                return "afternoon";
-            }
-
-            return hour < 23 ? "evening" : "late_night";
+            return startTime.Hour < 18 ? "before18" : "after18";
         }
 
         public static byte? ResolveDayTypeId(ShowTime showtime, IReadOnlyCollection<DayType> dayTypes)
@@ -125,9 +123,9 @@ namespace Repository.Pricing
                     x.DayTypeId == dayTypeId.Value &&
                     x.EffectiveFrom.Date <= showDate &&
                     (!x.EffectiveTo.HasValue || x.EffectiveTo.Value.Date >= showDate) &&
-                    (string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase) ||
-                     string.Equals(x.TimeSlot, "all_day", StringComparison.OrdinalIgnoreCase)))
-                .OrderByDescending(x => string.Equals(x.TimeSlot, timeSlot, StringComparison.OrdinalIgnoreCase))
+                    (string.Equals(NormalizeTimeSlot(x.TimeSlot), timeSlot, StringComparison.OrdinalIgnoreCase) ||
+                     string.Equals(NormalizeTimeSlot(x.TimeSlot), "all_day", StringComparison.OrdinalIgnoreCase)))
+                .OrderByDescending(x => string.Equals(NormalizeTimeSlot(x.TimeSlot), timeSlot, StringComparison.OrdinalIgnoreCase))
                 .ThenByDescending(x => x.EffectiveFrom)
                 .ThenByDescending(x => x.PriceId)
                 .FirstOrDefault();

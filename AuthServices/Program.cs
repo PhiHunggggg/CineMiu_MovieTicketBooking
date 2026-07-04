@@ -47,7 +47,7 @@ builder.Services.AddDbContext<SqlServerDbContext>(options =>
 {
     if (useInMemoryDatabase)
     {
-        options.UseInMemoryDatabase("BaseCoreBookingMovie");
+        options.UseInMemoryDatabase("CINEMIU_MovieTicketBooking");
     }
     else
     {
@@ -139,7 +139,7 @@ static string BuildSqlServerConnectionString(IConfiguration configuration, strin
     if (!configuration.GetValue("SqlServerAuth:Enabled", false))
     {
         return configuration.GetConnectionString(connectionStringName)
-            ?? "Server=DESKTOP-FNMVI5L;Database=BaseCoreBookingMovie;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
+            ?? "Server=DESKTOP-FNMVI5L;Database=CINEMIU_MovieTicketBooking;Trusted_Connection=True;TrustServerCertificate=True;Encrypt=False";
     }
 
     var userId = Environment.GetEnvironmentVariable("CINEMIU_DB_USER")
@@ -160,7 +160,7 @@ static string BuildSqlServerConnectionString(IConfiguration configuration, strin
     var sqlConnection = new SqlConnectionStringBuilder
     {
         DataSource = configuration["SqlServerAuth:Server"] ?? "DESKTOP-FNMVI5L",
-        InitialCatalog = configuration["SqlServerAuth:Database"] ?? "BaseCoreBookingMovie",
+        InitialCatalog = configuration["SqlServerAuth:Database"] ?? "CINEMIU_MovieTicketBooking",
         UserID = userId,
         Password = password,
         IntegratedSecurity = false,

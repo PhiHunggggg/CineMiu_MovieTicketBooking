@@ -14,7 +14,9 @@ export default defineConfig({
     open: true,        // tự mở browser khi chạy npm run dev
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        // 🔴 KHI DEBUG DEMO: đổi thành 'http://localhost:5001' để bypass Gateway (tránh 503 timeout)
+        // ✅ KHI BÌNH THƯỜNG: giữ 'http://localhost:5000' (qua API Gateway)
+        target: 'http://localhost:5000', // ← ĐÃ ĐỔI SANG DIRECT CHO DEMO DEBUG
         changeOrigin: true,
         secure: false,
         configure: (proxy) => {
