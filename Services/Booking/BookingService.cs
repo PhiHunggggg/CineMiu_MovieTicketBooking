@@ -11,7 +11,7 @@ using static DTO.Booking.BookingDto;
 
 namespace Services.Booking
 {
-    public class BookkingService(
+    public class BookingService(
         IBookingRepository bookingRepository,
         SqlServerDbContext context,
         ILoyaltyService loyaltyService) : IBookingService
