@@ -1,11 +1,13 @@
 using DTO.Administration;
 using Services.Administration;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace APIService.Controllers
 {
     [Route("api/admin-system")]
     [ApiController]
+    [Authorize(Roles = "admin")]
     public class AdminSystemController : ControllerBase
     {
         private readonly IAdminSystemService _adminSystemService;
@@ -83,6 +85,10 @@ namespace APIService.Controllers
             {
                 await _adminSystemService.DeleteSessionAsync(sessionId);
                 return NoContent();
+            }
+            catch (KeyNotFoundException ex)
+            {
+                return NotFound(new { message = ex.Message });
             }
             catch (ArgumentException ex)
             {

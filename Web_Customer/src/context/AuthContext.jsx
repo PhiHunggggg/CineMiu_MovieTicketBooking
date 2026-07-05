@@ -26,6 +26,23 @@ function clearStoredAuth() {
   localStorage.removeItem('user');
 }
 
+function normalizeUser(value, fallbackRole = null) {
+  if (!value) return null;
+  return {
+    userId: value.userId ?? value.UserId,
+    roleId: value.roleId ?? value.RoleId,
+    cinemaId: value.cinemaId ?? value.CinemaId ?? null,
+    fullName: value.fullName ?? value.FullName,
+    email: value.email ?? value.Email,
+    phone: value.phone ?? value.Phone ?? null,
+    avatarUrl: value.avatarUrl ?? value.AvatarUrl ?? null,
+    dateOfBirth: value.dateOfBirth ?? value.DateOfBirth ?? null,
+    gender: value.gender ?? value.Gender ?? null,
+    isActive: value.isActive ?? value.IsActive ?? true,
+    role: value.role ?? value.Role ?? fallbackRole,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getStoredAuth()?.user || null);
   const [token, setToken] = useState(() => getStoredAuth()?.token || null);
@@ -33,16 +50,8 @@ export function AuthProvider({ children }) {
 
   const normalizeAuthResult = useCallback((result) => {
     const tokenValue = result?.token ?? result?.Token ?? null;
-    const userValue = result?.user ?? {
-      userId: result?.userId ?? result?.UserId,
-      roleId: result?.roleId ?? result?.RoleId,
-      cinemaId: result?.cinemaId ?? result?.CinemaId,
-      fullName: result?.fullName ?? result?.FullName,
-      email: result?.email ?? result?.Email,
-      phone: result?.phone ?? result?.Phone,
-      avatarUrl: result?.avatarUrl ?? result?.AvatarUrl,
-      role: result?.role ?? result?.Role,
-    };
+    const roleValue = result?.role ?? result?.Role ?? null;
+    const userValue = normalizeUser(result?.user ?? result, roleValue);
 
     return {
       ...result,
@@ -76,7 +85,11 @@ export function AuthProvider({ children }) {
   const login = useCallback(async (email, password) => {
     const result = await authApi.login({ email, password });
     const auth = normalizeAuthResult(result);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(auth));
+    const roleName = String(auth.user?.role || auth.role || '').trim().toLowerCase();
+    if (!['customer', 'user', 'member'].includes(roleName)) {
+      throw new Error('Tài khoản này không phải tài khoản khách hàng.');
+    }
+    storeAuth(auth);
     setToken(auth.token);
     setUser(auth.user);
     return auth;
@@ -98,15 +111,18 @@ export function AuthProvider({ children }) {
     storeAuth(auth);
     setToken(auth.token);
     setUser(auth.user);
-  }, []);
+  }, [normalizeAuthResult]);
 
   const updateProfile = useCallback(async (data) => {
-    const nextUser = normalizeUser(await authApi.updateProfile(data));
+    const nextUser = {
+      ...user,
+      ...normalizeUser(await authApi.updateProfile(data), user?.role),
+    };
     const nextAuth = { token, user: nextUser };
     storeAuth(nextAuth);
     setUser(nextUser);
     return nextUser;
-  }, [token]);
+  }, [token, user]);
 
   return (
     <AuthContext.Provider value={{

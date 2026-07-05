@@ -1,6 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { concessionApi } from '../../../services/api';
-import { useAuth } from '../../../contexts/AuthContext';
 
 const emptyItem = {
     catId: '',

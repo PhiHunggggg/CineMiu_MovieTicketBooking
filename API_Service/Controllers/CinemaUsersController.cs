@@ -1,4 +1,5 @@
 using DTO.Authen;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Services.Authen;
 
@@ -6,6 +7,7 @@ namespace API_Service.Controllers
 {
     [Route("api/cinema-users")]
     [ApiController]
+    [Authorize(Roles = "admin")]
     public class CinemaUsersController(ICinemaUserService cinemaUserService) : ControllerBase
     {
         [HttpGet]

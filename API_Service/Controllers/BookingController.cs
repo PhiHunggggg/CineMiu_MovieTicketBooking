@@ -18,6 +18,7 @@ namespace API_Service.Controllers
         public async Task<IActionResult> GetAll(
             [FromQuery] string? keyword,
             [FromQuery] string? status,
+            [FromQuery] int? movieId,
             [FromQuery] int? cinemaId,
             [FromQuery] DateTime? date,
             [FromQuery] int page = 1,

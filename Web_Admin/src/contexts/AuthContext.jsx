@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import { authApi } from '../services/api';
 
 const AuthContext = createContext(null);
@@ -30,14 +30,16 @@ export const AuthProvider = ({ children }) => {
         try {
             const response = await authApi.login(email, password);
             const authData = response.data;
+            const account = authData.user || authData;
             const userData = {
-                userId: Number(authData.userId),
-                roleId: authData.roleId,
+                userId: Number(account.userId),
+                roleId: account.roleId,
                 role: authData.role,
-                fullName: authData.fullName,
-                email: authData.email,
-                phone: authData.phone,
-                avatarUrl: authData.avatarUrl,
+                cinemaId: account.cinemaId ?? null,
+                fullName: account.fullName,
+                email: account.email,
+                phone: account.phone,
+                avatarUrl: account.avatarUrl,
             };
 
             localStorage.setItem('token', authData.token);
@@ -59,13 +61,12 @@ export const AuthProvider = ({ children }) => {
     };
 
     const getRole = () => (user?.role || '').toString().toLowerCase();
-    const getRoleId = () => Number(user?.roleId || 0);
-    const isAdmin = () => getRoleId() === 4 || getRole().includes('admin');
-    const isCinemaManager = () => getRoleId() === 3 || isAdmin() || getRole().includes('manager');
-    const isTicketStaff = () => getRoleId() === 2 || getRole().includes('staff');
+    const isAdmin = () => getRole().includes('admin');
+    const isCinemaManager = () => isAdmin() || getRole().includes('manager');
+    const isTicketStaff = () => getRole().includes('staff');
     const canCheckInTickets = () => isAdmin() || isCinemaManager() || isTicketStaff();
 
-    const value = useMemo(() => ({
+    const value = {
         user,
         login,
         logout,
@@ -75,7 +76,7 @@ export const AuthProvider = ({ children }) => {
         canCheckInTickets,
         isAuthenticated: Boolean(user),
         loading: false,
-    }), [user]);
+    };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

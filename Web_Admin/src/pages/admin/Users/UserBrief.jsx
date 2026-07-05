@@ -3,7 +3,7 @@ const UserBrief = ({ activeCustomerCount, customerCount, lockedCustomerCount }) 
         <div>
             <i className="fas fa-users"></i>
             <p>
-                <span>Tổng khách hàng</span>
+                <span>Tổng tài khoản</span>
                 <strong>{customerCount.toLocaleString('vi-VN')}</strong>
             </p>
         </div>
@@ -24,8 +24,8 @@ const UserBrief = ({ activeCustomerCount, customerCount, lockedCustomerCount }) 
         <div>
             <i className="fas fa-clock-rotate-left"></i>
             <p>
-                <span>Lịch sử đặt vé</span>
-                <strong>Chi tiết</strong>
+                <span>Phân quyền</span>
+                <strong>Admin · Manager · Staff</strong>
             </p>
         </div>
     </div>

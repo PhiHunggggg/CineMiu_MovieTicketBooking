@@ -1,6 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
 import { cinemaApi, revenueApi } from '../../../services/api';
-import { useAuth } from '../../../contexts/AuthContext';
 
 const currentDate = new Date();
 const currentYear = currentDate.getFullYear();

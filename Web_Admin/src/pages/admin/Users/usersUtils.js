@@ -1,5 +1,6 @@
 export const emptyUser = {
     roleId: '',
+    cinemaId: '',
     fullName: '',
     email: '',
     phone: '',
@@ -22,6 +23,7 @@ export const createUserFormData = (user, roles) => {
 
     return {
         roleId: user.roleId || '',
+        cinemaId: user.cinemaId || '',
         fullName: user.fullName || user.name || '',
         email: user.email || '',
         phone: user.phone || '',
@@ -43,7 +45,7 @@ export const getRoleName = (roles, roleId) => {
 };
 
 export const getCustomerStats = (users) => {
-    const customerUsers = users.filter((user) => Number(user.roleId) === 1);
+    const customerUsers = users;
     const activeCustomerCount = customerUsers.filter((user) => user.isActive).length;
 
     return {

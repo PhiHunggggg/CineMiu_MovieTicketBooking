@@ -31,11 +31,11 @@ const AdminCinemaManagers = () => {
 
     const managerRole = useMemo(() => roles.find((role) => {
         const name = String(role.roleName || role.name || '').toLowerCase();
-        return Number(role.roleId) === 3 || name.includes('manager') || name.includes('quản lý');
+        return name.includes('manager') || name.includes('quản lý');
     }), [roles]);
 
     const managers = useMemo(() => users.filter((user) => {
-        const matchesRole = Number(user.roleId) === Number(managerRole?.roleId || 3);
+        const matchesRole = managerRole && Number(user.roleId) === Number(managerRole.roleId);
         const matchesCinema = !cinemaFilter || Number(user.cinemaId) === Number(cinemaFilter);
         return matchesRole && matchesCinema;
     }), [users, cinemaFilter, managerRole]);
@@ -80,7 +80,7 @@ const AdminCinemaManagers = () => {
     };
 
     const buildPayload = (user, overrides = {}) => ({
-        roleId: Number(managerRole?.roleId || 3),
+        roleId: Number(managerRole?.roleId),
         cinemaId: overrides.cinemaId ?? user.cinemaId ?? null,
         fullName: overrides.fullName ?? user.fullName ?? '',
         email: overrides.email ?? user.email ?? '',

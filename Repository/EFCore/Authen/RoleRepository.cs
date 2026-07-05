@@ -13,8 +13,12 @@ namespace Repository.EFCore.Authen
         }
         public async Task<Role?> GetByUserId(int userId)
         {
-            var role = await _dbSet.AsNoTracking().FirstOrDefaultAsync(x=> x.RoleId ==userId);
-            return role;
+            return await (
+                from user in _context.Users.AsNoTracking()
+                join role in _dbSet.AsNoTracking() on user.RoleId equals role.RoleId
+                where user.UserId == userId
+                select role
+            ).FirstOrDefaultAsync();
         }
         public async Task<Role?> GetByName(string roleName)
         {

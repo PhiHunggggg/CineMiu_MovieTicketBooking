@@ -21,6 +21,7 @@ namespace DTO.Authen
         public class UserRequest
         {
             public byte? RoleId { get; set; }
+            public int? CinemaId { get; set; }
             public string FullName { get; set; } = "";
             public string Email { get; set; } = "";
             public string? Phone { get; set; }

@@ -62,7 +62,7 @@ namespace Services.Authen
             var now = DateTime.UtcNow;
             var user = new Users
             {
-                RoleId = request.RoleId == 0 ? (byte)1 : request.RoleId,
+                RoleId = request.RoleId,
                 CinemaId = request.CinemaId,
                 FullName = request.FullName.Trim(),
                 Email = request.Email.Trim(),
@@ -88,7 +88,7 @@ namespace Services.Authen
             }
 
 
-            user.RoleId = request.RoleId == 0 ? (byte)1 : request.RoleId;
+            user.RoleId = request.RoleId;
             user.CinemaId = request.CinemaId;
             user.FullName = request.FullName.Trim();
             user.Email = request.Email.Trim();
@@ -154,7 +154,11 @@ namespace Services.Authen
         }
         public async Task<Users> CreateAsync(Users user, string password,byte roleid)
         {
-            user.RoleId = roleid == 0 ? (byte)1 : roleid;
+            if (roleid == 0)
+            {
+                throw new ArgumentException("Role is required");
+            }
+            user.RoleId = roleid;
             user.PasswordHash = TokenHelper.HashPasswordForStorage(password);
             user.IsActive = true;
             user.CreatedAt = DateTime.UtcNow;
@@ -244,7 +248,7 @@ namespace Services.Authen
             }
 
             var roles = await userRepository.GetRolesAsync();
-            var roleId = request.RoleId == 0 ? (byte)1 : request.RoleId;
+            var roleId = request.RoleId;
             var roleExists = false;
             foreach (var role in roles)
             {

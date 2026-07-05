@@ -47,7 +47,7 @@ const AdminCinemas = () => {
         try {
             const response = await cinemaApi.getAll({ city: city || undefined, activeOnly: false });
             setCinemas(getItems(response.data));
-        } catch (err) {
+        } catch {
             setError('Không tải được danh sách chi nhánh rạp');
         } finally {
             setLoading(false);

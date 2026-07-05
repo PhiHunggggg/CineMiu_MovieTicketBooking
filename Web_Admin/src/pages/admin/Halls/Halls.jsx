@@ -1,7 +1,6 @@
 ﻿import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import { cinemaApi, cinemaLookupApi, showtimeApi } from '../../../services/api';
-import { useAuth } from '../../../contexts/AuthContext';
+import { Link, useSearchParams } from 'react-router-dom';
+import { cinemaApi, cinemaLookupApi } from '../../../services/api';
 
 const emptyForm = {
     cinemaId: '',

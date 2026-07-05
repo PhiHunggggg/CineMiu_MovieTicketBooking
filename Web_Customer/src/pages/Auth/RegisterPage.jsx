@@ -19,7 +19,7 @@ export default function RegisterPage() {
         setSubmitting(true);
         setError('');
         try {
-            await register({ ...form, roleId: 1 });
+            await register(form);
             navigate('/login', { replace: true });
         } catch (err) {
             setError(err.message || 'Đăng ký thất bại');

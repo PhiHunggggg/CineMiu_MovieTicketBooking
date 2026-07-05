@@ -57,6 +57,7 @@ builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
 builder.Services.AddHostedService<PendingBookingExpirationWorker>();
+builder.Services.AddHostedService<ShowtimeStatusWorker>();
 // Register EFCore theater repositories
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
 builder.Services.AddScoped<ICategoriesRepository, CategoriesRepository>();

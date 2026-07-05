@@ -19,7 +19,7 @@ const BookingFilters = ({
                         className="form-control"
                         value={filters.keyword}
                         onChange={(e) => setFilters({ ...filters, keyword: e.target.value })}
-                        placeholder="Mã vé, tên, email..."
+                        placeholder="Mã đặt vé, QR, ticket ID, tên, email..."
                     />
                 </div>
                 <div>

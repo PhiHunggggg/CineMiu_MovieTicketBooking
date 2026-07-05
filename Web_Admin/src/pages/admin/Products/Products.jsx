@@ -130,7 +130,7 @@ const Products = () => {
         try {
             await productApi.delete(id);
             loadProducts();
-        } catch (error) {
+        } catch {
             alert('Failed to delete product');
         }
     };

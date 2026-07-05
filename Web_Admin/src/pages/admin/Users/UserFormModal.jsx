@@ -1,4 +1,5 @@
 const UserFormModal = ({
+    cinemas,
     editingUser,
     error,
     formData,
@@ -9,6 +10,10 @@ const UserFormModal = ({
     show,
 }) => {
     if (!show) return null;
+    const selectedRole = roles.find((role) => Number(role.roleId) === Number(formData.roleId));
+    const selectedRoleName = String(selectedRole?.roleName || '').toLowerCase();
+    const requiresCinema = selectedRoleName.includes('staff') ||
+        selectedRoleName.includes('manager');
 
     return (
         <>
@@ -43,11 +48,24 @@ const UserFormModal = ({
                                 </div>
                                 <div className="form-group">
                                     <label>Vai trò</label>
-                                    <select className="form-control" value={formData.roleId} onChange={(e) => setFormData({ ...formData, roleId: e.target.value })}>
+                                    <select className="form-control" value={formData.roleId} onChange={(e) => setFormData({ ...formData, roleId: e.target.value, cinemaId: '' })} required>
                                         <option value="">Chọn vai trò</option>
                                         {roles.map((role) => <option key={role.roleId} value={role.roleId}>{role.roleName}</option>)}
                                     </select>
                                 </div>
+                                {requiresCinema && (
+                                    <div className="form-group">
+                                        <label>Chi nhánh làm việc</label>
+                                        <select className="form-control" value={formData.cinemaId} onChange={(e) => setFormData({ ...formData, cinemaId: e.target.value })} required>
+                                            <option value="">Chọn chi nhánh</option>
+                                            {cinemas.map((cinema) => (
+                                                <option key={cinema.cinemaId || cinema.id} value={cinema.cinemaId || cinema.id}>
+                                                    {cinema.cinemaName || cinema.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                                 <div className="form-group">
                                     <label>Trạng thái</label>
                                     <select className="form-control" value={String(formData.isActive)} onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'true' })}>

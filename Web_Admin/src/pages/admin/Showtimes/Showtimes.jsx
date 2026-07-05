@@ -2,7 +2,6 @@
 import { Link, useSearchParams } from 'react-router-dom'
 import Icon from '../../../components/Icon'
 import { cinemaApi, movieApi, showtimeApi, ticketPriceApi } from '../../../services/api'
-import { useAuth } from '../../../contexts/AuthContext'
 
 const PAGE_SIZE = 8
 

@@ -46,7 +46,7 @@ const AdminSystem = () => {
         setEditingRole(role);
         setError('');
         setRoleForm(role ? {
-            roleName: role.roleName || '',
+            roleName: role.name || '',
             description: role.description || '',
         } : emptyRole);
         setShowRoleModal(true);
@@ -63,10 +63,14 @@ const AdminSystem = () => {
         setError('');
 
         try {
+            const payload = {
+                name: roleForm.roleName.trim(),
+                description: roleForm.description,
+            };
             if (editingRole) {
-                await adminSystemApi.updateRole(editingRole.roleId, roleForm);
+                await adminSystemApi.updateRole(editingRole.id, payload);
             } else {
-                await adminSystemApi.createRole(roleForm);
+                await adminSystemApi.createRole(payload);
             }
             closeRoleModal();
             await loadSystem();
@@ -76,11 +80,11 @@ const AdminSystem = () => {
     };
 
     const deleteRole = async (role) => {
-        if (!window.confirm(`Xóa vai trò "${role.roleName}"?`)) return;
+        if (!window.confirm(`Xóa vai trò "${role.name}"?`)) return;
 
         setError('');
         try {
-            await adminSystemApi.deleteRole(role.roleId);
+            await adminSystemApi.deleteRole(role.id);
             await loadSystem();
         } catch (err) {
             setError(err.response?.data?.message || 'Xóa vai trò thất bại');
@@ -120,9 +124,6 @@ const AdminSystem = () => {
     };
 
     const roles = summary?.roles || [];
-    const permissions = summary?.permissions || [];
-    const sessionSummary = summary?.sessions || {};
-    const tokens = summary?.tokens || {};
 
     return (
         <div className="content-wrapper">
@@ -157,7 +158,7 @@ const AdminSystem = () => {
                                         <span className="info-box-icon bg-warning"><i className="fas fa-chair"></i></span>
                                         <div className="info-box-content">
                                             <span className="info-box-text">Ghế đang giữ</span>
-                                            <span className="info-box-number">{sessionSummary.activeSeatLocks || 0}</span>
+                                            <span className="info-box-number">{summary?.activeSeatLockCount || 0}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -166,7 +167,7 @@ const AdminSystem = () => {
                                         <span className="info-box-icon bg-success"><i className="fas fa-plug"></i></span>
                                         <div className="info-box-content">
                                             <span className="info-box-text">Phiên giữ ghế</span>
-                                            <span className="info-box-number">{sessionSummary.activeSeatLockSessions || 0}</span>
+                                            <span className="info-box-number">{summary?.activeSessionCount || 0}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -175,7 +176,7 @@ const AdminSystem = () => {
                                         <span className="info-box-icon bg-secondary"><i className="fas fa-key"></i></span>
                                         <div className="info-box-content">
                                             <span className="info-box-text">Token</span>
-                                            <span className="info-box-number">{tokens.mode || 'JWT'}</span>
+                                            <span className="info-box-number">JWT</span>
                                         </div>
                                     </div>
                                 </div>
@@ -202,8 +203,8 @@ const AdminSystem = () => {
                                                 </thead>
                                                 <tbody>
                                                     {roles.map((role) => (
-                                                        <tr key={role.roleId}>
-                                                            <td><strong>{role.roleName}</strong></td>
+                                                        <tr key={role.id}>
+                                                            <td><strong>{role.name}</strong></td>
                                                             <td>{role.description || '-'}</td>
                                                             <td>{role.userCount || 0}</td>
                                                             <td className="text-center">
@@ -228,14 +229,11 @@ const AdminSystem = () => {
                                             <h3 className="card-title mb-0">Phân quyền hiện tại</h3>
                                         </div>
                                         <div className="card-body">
-                                            {permissions.map((permission) => (
-                                                <div className="mb-3" key={permission.role}>
-                                                    <strong>{permission.role}</strong>
-                                                    <div className="text-muted">{permission.scope}</div>
-                                                </div>
-                                            ))}
                                             <div className="alert alert-light mb-0">
-                                                <strong>{tokens.mode || 'JWT'}:</strong> {tokens.note || 'Đang dùng JWT cho phiên đăng nhập.'}
+                                                <strong>JWT:</strong> Phiên đăng nhập được xác thực theo vai trò của tài khoản.
+                                            </div>
+                                            <div className="mt-3">
+                                                <strong>{summary?.activeUserCount || 0}</strong>/{summary?.userCount || 0} tài khoản đang hoạt động.
                                             </div>
                                         </div>
                                     </div>
@@ -253,26 +251,24 @@ const AdminSystem = () => {
                                                 <tr>
                                                     <th>Session</th>
                                                     <th>Khách hàng</th>
-                                                    <th>Phim</th>
-                                                    <th>Rạp / Phòng</th>
-                                                    <th>Ghế</th>
+                                                    <th>Số ghế giữ</th>
+                                                    <th>Hoạt động cuối</th>
                                                     <th>Hết hạn</th>
                                                     <th style={{ width: '80px' }}>Thao tác</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {sessions.length === 0 ? (
-                                                    <tr><td colSpan="7" className="text-center">Không có session giữ ghế</td></tr>
+                                                    <tr><td colSpan="6" className="text-center">Không có session giữ ghế</td></tr>
                                                 ) : sessions.map((session) => (
-                                                    <tr key={session.lockId}>
+                                                    <tr key={session.sessionId}>
                                                         <td><code>{session.sessionId}</code></td>
                                                         <td>
                                                             {session.fullName || '-'}
                                                             <div className="small text-muted">{session.email || ''}</div>
                                                         </td>
-                                                        <td>{session.movieTitle}</td>
-                                                        <td>{session.cinemaName}<div className="small text-muted">{session.hallName}</div></td>
-                                                        <td>{session.seatCode}</td>
+                                                        <td>{session.lockedSeatCount}</td>
+                                                        <td>{formatDateTime(session.lastActivityAt)}</td>
                                                         <td>{formatDateTime(session.expiresAt)}</td>
                                                         <td className="text-center">
                                                             <button className="btn btn-sm btn-danger" type="button" onClick={() => deleteSession(session)}>

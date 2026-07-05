@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { bookingAdminApi, cinemaLookupApi, userApi } from '../../../services/api';
+import { bookingAdminApi, cinemaApi, cinemaLookupApi, userApi } from '../../../services/api';
 import BookingHistoryModal from './BookingHistoryModal';
 import UserBrief from './UserBrief';
 import UserFormModal from './UserFormModal';
@@ -9,6 +9,7 @@ import { createUserFormData, emptyUser, getCustomerStats, getUserId } from './us
 const Users = () => {
     const [users, setUsers] = useState([]);
     const [roles, setRoles] = useState([]);
+    const [cinemas, setCinemas] = useState([]);
     const [loading, setLoading] = useState(true);
     const [keyword, setKeyword] = useState('');
     const [showModal, setShowModal] = useState(false);
@@ -26,8 +27,12 @@ const Users = () => {
 
     const loadLookups = async () => {
         try {
-            const response = await cinemaLookupApi.getAll();
-            setRoles(response.data?.roles || []);
+            const [lookupResponse, cinemaResponse] = await Promise.all([
+                cinemaLookupApi.getAll(),
+                cinemaApi.getAll({ activeOnly: false }),
+            ]);
+            setRoles(lookupResponse.data?.roles || []);
+            setCinemas(cinemaResponse.data?.items || cinemaResponse.data?.data || cinemaResponse.data || []);
         } catch (err) {
             console.error('Failed to load roles:', err);
         }
@@ -71,6 +76,7 @@ const Users = () => {
             const payload = {
                 ...formData,
                 roleId: formData.roleId ? Number(formData.roleId) : null,
+                cinemaId: formData.cinemaId ? Number(formData.cinemaId) : null,
                 dateOfBirth: formData.dateOfBirth || null,
             };
 
@@ -106,7 +112,7 @@ const Users = () => {
             });
             loadUsers();
         } catch (err) {
-            setError(err.response?.data?.message || 'Thay đổi trạng thái khách hàng thất bại');
+            setError(err.response?.data?.message || 'Thay đổi trạng thái tài khoản thất bại');
         }
     };
 
@@ -136,7 +142,7 @@ const Users = () => {
                 <div className="container-fluid">
                     <div className="admin-page-title">
                         <div>
-                            <p className="admin-eyebrow">Khách hàng</p>
+                            <p className="admin-eyebrow">Tài khoản & phân quyền</p>
                             <h1>Quản lý người dùng</h1>
                             <span>Xem tài khoản, lịch sử đặt vé và kiểm soát truy cập.</span>
                         </div>
@@ -162,6 +168,7 @@ const Users = () => {
                         onSearch={handleSearch}
                         onToggleStatus={handleToggleStatus}
                         roles={roles}
+                        cinemas={cinemas}
                         setKeyword={setKeyword}
                         showModal={showModal}
                     />
@@ -175,6 +182,7 @@ const Users = () => {
                 onClose={closeModal}
                 onSubmit={handleSubmit}
                 roles={roles}
+                cinemas={cinemas}
                 setFormData={setFormData}
                 show={showModal}
             />

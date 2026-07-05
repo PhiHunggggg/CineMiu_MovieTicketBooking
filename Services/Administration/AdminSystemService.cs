@@ -51,6 +51,7 @@ public class AdminSystemService(IAdminSystemRepository repository) : IAdminSyste
     {
         Id = role.RoleId,
         Name = role.RoleName,
-        Description = role.Description
+        Description = role.Description,
+        UserCount = 0
     };
 }

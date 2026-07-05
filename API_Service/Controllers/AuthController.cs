@@ -49,13 +49,27 @@ namespace APIService.Controllers
             var user = new CinemaUser
             {
                 FullName = dto.FullName,
-                Email = dto.Email,
+                Email = dto.Email.Trim().ToLowerInvariant(),
                 Phone = dto.Phone,
                 DateOfBirth = dto.DateOfBirth,
                 Gender = dto.Gender
             };
 
-            var createdUser = await _userService.CreateAsync(user, dto.Password, 1);
+            var customerRole = (await _userRepository.GetRolesAsync())
+                .FirstOrDefault(role =>
+                    string.Equals(role.RoleName, "customer", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(role.RoleName, "user", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(role.RoleName, "member", StringComparison.OrdinalIgnoreCase));
+            if (customerRole == null)
+            {
+                _logger.LogError("Registration failed because the customer role is missing");
+                return StatusCode(StatusCodes.Status500InternalServerError, new
+                {
+                    message = "Customer role is not configured"
+                });
+            }
+
+            var createdUser = await _userService.CreateAsync(user, dto.Password, customerRole.RoleId);
             var roleName = await _userService.ResolveRoleName(createdUser.RoleId) ?? "customer";
             var token = GenerateJwtToken(createdUser, roleName);
             _logger.LogInformation(
@@ -150,10 +164,12 @@ namespace APIService.Controllers
                 return ApiErrors.NotFound(this, ErrorCodes.NotFound, "User not found");
             }
 
+            var roleName = await _userService.ResolveRoleName(user.RoleId) ?? "customer";
             return Ok(new
             {
                 user.UserId,
                 user.RoleId,
+                role = roleName,
                 cinemaId = user.CinemaId,
                 user.FullName,
                 user.Email,
@@ -303,7 +319,6 @@ namespace APIService.Controllers
 
     public class RegisterDto
     {
-        public byte? RoleId { get; set; }
         public string FullName { get; set; } = "";
         public string Email { get; set; } = "";
         public string Password { get; set; } = "";

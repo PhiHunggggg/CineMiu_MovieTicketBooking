@@ -3,6 +3,7 @@ using DTO.Common;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Repository.EFCore.Bookings;
+using Repository.EFCore.Authen;
 using Services.Administration;
 using Services.Loyalty;
 using Microsoft.Extensions.Logging;
@@ -12,6 +13,7 @@ namespace Services.Booking
 {
     public class BookkingService(
         IBookingRepository bookingRepository,
+        IUserRepository userRepository,
         ILoyaltyService loyaltyService,
         INotificationService notificationService,
         ILogger<BookkingService> logger) : IBookingService
@@ -40,7 +42,14 @@ namespace Services.Booking
             var (booking, user, tickets) = await bookingRepository.GetCheckInDataAsync(bookingId, checkInUserId, dto);
             if (booking == null) return new NotFoundObjectResult(new { message = "Booking not found" });
 
-            if (user == null || !user.IsActive || user.RoleId is not (2 or 3 or 4))
+            var roleName = user == null
+                ? null
+                : (await userRepository.ResolveRoleName(user.RoleId))?.Trim().ToLowerInvariant();
+            var canCheckIn = roleName != null &&
+                (roleName.Contains("admin") ||
+                 roleName.Contains("staff") ||
+                 roleName.Contains("manager"));
+            if (user == null || !user.IsActive || !canCheckIn)
             {
                 return new ObjectResult(new { message = "Only ticket staff, cinema managers or admins can check in tickets" })
                 {

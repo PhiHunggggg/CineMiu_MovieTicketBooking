@@ -1,6 +1,7 @@
 import { getRoleName, getUserId, getUserName } from './usersUtils';
 
 const UserTableCard = ({
+    cinemas,
     customerUsers,
     error,
     keyword,
@@ -53,6 +54,7 @@ const UserTableCard = ({
                                 <th>Email</th>
                                 <th>Số điện thoại</th>
                                 <th>Vai trò</th>
+                                <th>Chi nhánh</th>
                                 <th>Trạng thái</th>
                                 <th style={{ width: '145px' }}>Thao tác</th>
                             </tr>
@@ -60,7 +62,7 @@ const UserTableCard = ({
                         <tbody>
                             {customerUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="text-center">Không tìm thấy người dùng</td>
+                                    <td colSpan="7" className="text-center">Không tìm thấy người dùng</td>
                                 </tr>
                             ) : (
                                 customerUsers.map((user) => (
@@ -69,6 +71,7 @@ const UserTableCard = ({
                                         <td>{user.email}</td>
                                         <td>{user.phone || '-'}</td>
                                         <td><span className="badge badge-info">{getRoleName(roles, user.roleId)}</span></td>
+                                        <td>{cinemas.find((cinema) => Number(cinema.cinemaId || cinema.id) === Number(user.cinemaId))?.cinemaName || '-'}</td>
                                         <td>
                                             <span className={`badge ${user.isActive ? 'badge-success' : 'badge-secondary'}`}>
                                                 {user.isActive ? 'Hoạt động' : 'Ngừng hoạt động'}

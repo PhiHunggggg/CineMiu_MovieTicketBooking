@@ -39,11 +39,18 @@ namespace Repository.EFCore.Bookings
             if (!string.IsNullOrEmpty(keyword))
             {
                 var search = keyword.Trim().ToLower();
+                var ticketId = int.TryParse(search, out var parsedTicketId)
+                    ? parsedTicketId
+                    : (int?)null;
                 query = query.Where(x =>
                     x.booking.BookingCode.ToLower().Contains(search) ||
                     x.user.FullName.ToLower().Contains(search) ||
                     x.user.Email.ToLower().Contains(search) ||
-                    (x.user.Phone != null && x.user.Phone.ToLower().Contains(search))
+                    (x.user.Phone != null && x.user.Phone.ToLower().Contains(search)) ||
+                    _dbset.Tickets.Any(ticket =>
+                        ticket.BookingId == x.booking.BookingId &&
+                        ((ticket.QrCode != null && ticket.QrCode.ToLower().Contains(search)) ||
+                         (ticketId.HasValue && ticket.TicketId == ticketId.Value)))
                 );
             }
             if (!string.IsNullOrEmpty(status))

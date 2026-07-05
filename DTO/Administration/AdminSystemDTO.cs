@@ -13,6 +13,7 @@ public static class AdminSystemDTO
         public byte Id { get; set; }
         public string Name { get; set; } = "";
         public string? Description { get; set; }
+        public int UserCount { get; set; }
     }
 
     public class SessionResponse
@@ -32,6 +33,7 @@ public static class AdminSystemDTO
         public int ActiveUserCount { get; set; }
         public int RoleCount { get; set; }
         public int ActiveSessionCount { get; set; }
+        public int ActiveSeatLockCount { get; set; }
         public List<RoleResponse> Roles { get; set; } = [];
     }
 }

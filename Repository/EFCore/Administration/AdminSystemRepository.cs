@@ -14,7 +14,8 @@ public class AdminSystemRepository(SqlServerDbContext context) : IAdminSystemRep
             {
                 Id = x.RoleId,
                 Name = x.RoleName,
-                Description = x.Description
+                Description = x.Description,
+                UserCount = context.Users.Count(user => user.RoleId == x.RoleId)
             }).ToListAsync();
 
         return new AdminSystemDTO.SummaryResponse
@@ -24,6 +25,7 @@ public class AdminSystemRepository(SqlServerDbContext context) : IAdminSystemRep
             RoleCount = roles.Count,
             ActiveSessionCount = await context.SeatLocks.Where(x => x.ExpiresAt > now)
                 .Select(x => x.SessionId).Distinct().CountAsync(),
+            ActiveSeatLockCount = await context.SeatLocks.CountAsync(x => x.ExpiresAt > now),
             Roles = roles
         };
     }

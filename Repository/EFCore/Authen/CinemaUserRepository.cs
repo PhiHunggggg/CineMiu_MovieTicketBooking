@@ -41,7 +41,8 @@ namespace Repository.EFCore.Authen
             var now = DateTime.UtcNow;
             var user = new Users
             {
-                RoleId = request.RoleId ?? 1,
+                RoleId = request.RoleId!.Value,
+                CinemaId = request.CinemaId,
                 FullName = request.FullName,
                 Email = request.Email,
                 Phone = request.Phone,
@@ -67,6 +68,7 @@ namespace Repository.EFCore.Authen
                 ?? throw new KeyNotFoundException("User not found");
 
             user.RoleId = request.RoleId ?? user.RoleId;
+            user.CinemaId = request.CinemaId;
             user.FullName = request.FullName;
             user.Email = request.Email;
             user.Phone = request.Phone;
