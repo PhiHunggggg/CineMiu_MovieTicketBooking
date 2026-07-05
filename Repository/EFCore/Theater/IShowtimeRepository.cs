@@ -42,8 +42,7 @@ namespace Repository.EFCore.Theater
             int showtimeId,
             int userId,
             string sessionId,
-            List<int> seatIds,
-            int minutes);
+            List<int> seatIds);
         Task UnlockSeatsAsync(int showtimeId, int userId, string sessionId);
     }
 }

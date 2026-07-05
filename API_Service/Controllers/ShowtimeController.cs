@@ -63,7 +63,7 @@ public class ShowtimesController(IShowtimeService service) : ApiControllerBase
     [HttpPost("{id:int}/locks")]
     public Task<IActionResult> LockSeats(int id, [FromBody] ShowtimeDTO.SeatLockRequest request) =>
         ExecuteAsync(async () => Ok(await service.LockSeatsAsync(
-            id, request.UserId, request.SessionId ?? "", request.SeatIds, request.Minutes)));
+            id, request.UserId, request.SessionId ?? "", request.SeatIds)));
 
     [HttpPost("{id:int}/unlocks")]
     public Task<IActionResult> UnlockSeats(int id, [FromBody] ShowtimeDTO.SeatUnlockRequest request) =>

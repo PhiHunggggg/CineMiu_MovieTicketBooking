@@ -143,8 +143,7 @@ export default function SeatSelect() {
       await showtimeApi.lockSeats(showtimeId, {
         userId,
         sessionId,
-        seatIds,
-        minutes: 10
+        seatIds
       });
       
       setSessionId(sessionId);

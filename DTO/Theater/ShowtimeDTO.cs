@@ -51,7 +51,6 @@ namespace DTO.Theater
         {
             public int UserId { get; set; }
             public string? SessionId { get; set; }
-            public int Minutes { get; set; } = 10;
             public List<int> SeatIds { get; set; } = [];
         }
 
