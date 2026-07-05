@@ -16,7 +16,7 @@ namespace Services.Booking
         IUserRepository userRepository,
         ILoyaltyService loyaltyService,
         INotificationService notificationService,
-        ILogger<BookkingService> logger) : IBookingService
+        ILogger<BookingService> logger) : IBookingService
     {
         public Task<Paging.PaginationResponse<BookingResponse>> GetAllAsync(string? keyword, string? status, int? movieId, int? cinemaId, DateTime? date, int pageNumber = 1, int pageSize = 10)
         {

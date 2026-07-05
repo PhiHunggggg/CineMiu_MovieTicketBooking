@@ -23,11 +23,6 @@ function getStartTime(showtime) {
   return showtime?.startTime ?? showtime?.StartTime ?? null;
 }
 
-function getSeatPrice(seat) {
-  const price = Number(seat?.finalPrice ?? seat?.FinalPrice ?? seat?.price ?? seat?.Price);
-  return Number.isFinite(price) ? price : 0;
-}
-
 export default function SeatSelect() {
   const {
     showtime, hall, movie, cinema, selectedSeats, toggleSeat, removeSeats, confirmSeats,
@@ -188,7 +183,6 @@ export default function SeatSelect() {
     if (getSeatStatus(seat) !== 'available') return;
     const seatId = getSeatId(seat);
     if (!seatId) return;
-    const finalPrice = getSeatPrice(seat);
     toggleSeat({
       id: seatId,
       seatId,

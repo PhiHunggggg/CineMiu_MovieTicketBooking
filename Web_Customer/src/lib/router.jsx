@@ -37,9 +37,9 @@ function matchRoute(pattern, pathname) {
     return params;
 }
 
-function navigateTo(to) {
+function navigateTo(to, replace = false) {
     const url = typeof to === 'string' ? to : `${to.pathname || ''}${to.search || ''}${to.hash || ''}`;
-    window.history.pushState({}, '', url);
+    window.history[replace ? 'replaceState' : 'pushState']({}, '', url);
     window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
@@ -70,7 +70,7 @@ export function Route() {
     return null;
 }
 
-export function Link({ to, onClick, replace: _replace, reloadDocument, ...props }) {
+export function Link({ to, onClick, replace = false, reloadDocument, ...props }) {
     const href = typeof to === 'string' ? to : `${to.pathname || ''}${to.search || ''}${to.hash || ''}`;
 
     const handleClick = (event) => {
@@ -88,7 +88,7 @@ export function Link({ to, onClick, replace: _replace, reloadDocument, ...props 
         }
 
         event.preventDefault();
-        navigateTo(href);
+        navigateTo(href, replace);
     };
 
     return <a href={href} onClick={handleClick} {...props} />;
