@@ -22,9 +22,13 @@ const getHallId = (hall) => hall?.hallId || hall?.id;
 const getErrorMessage = (error, fallback) => error?.response?.data?.message || error?.message || fallback;
 
 function getSeatTypeKey(typeName) {
-    const normalizedName = String(typeName || '').toLowerCase();
+    const normalizedName = String(typeName || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase();
+    if (normalizedName.includes('sweetbox') || normalizedName.includes('couple') || normalizedName.includes('doi')) return 'couple';
     if (normalizedName.includes('vip')) return 'vip';
-    if (normalizedName.includes('couple')) return 'couple';
+    if (normalizedName.includes('premium')) return 'premium';
     return 'standard';
 }
 
@@ -32,6 +36,7 @@ function getSeatTypeLabel(typeName) {
     const key = getSeatTypeKey(typeName);
     if (key === 'vip') return 'Ghế VIP';
     if (key === 'couple') return 'Ghế Couple';
+    if (key === 'premium') return 'Ghế Premium';
     return 'Ghế thường';
 }
 

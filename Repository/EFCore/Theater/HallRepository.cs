@@ -491,12 +491,11 @@ namespace Repository.EFCore.Theater
                 throw new InvalidOperationException("Hall name already exists in the selected cinema");
             }
 
-            var seatTypeIds = await context.SeatTypes
+            var seatTypes = await context.SeatTypes
                 .AsNoTracking()
                 .OrderBy(x => x.SeatTypeId)
-                .Select(x => x.SeatTypeId)
                 .ToListAsync();
-            if (seatTypeIds.Count == 0)
+            if (seatTypes.Count == 0)
             {
                 throw new ArgumentException("At least one seat type is required before creating a hall");
             }
@@ -519,7 +518,7 @@ namespace Repository.EFCore.Theater
             {
                 context.Halls.Add(hall);
                 await context.SaveChangesAsync();
-                context.Seats.AddRange(BuildSeats(hall, seatTypeIds, now));
+                context.Seats.AddRange(BuildSeats(hall, seatTypes, now));
                 await context.SaveChangesAsync();
             }
 
@@ -749,11 +748,17 @@ namespace Repository.EFCore.Theater
             }).ToList();
         }
 
-        private static List<Seat> BuildSeats(Hall hall, IReadOnlyList<byte> seatTypeIds, DateTime now)
+        private static List<Seat> BuildSeats(Hall hall, IReadOnlyList<SeatType> seatTypes, DateTime now)
         {
-            var standardSeatTypeId = seatTypeIds[0];
-            var vipSeatTypeId = seatTypeIds.Count > 1 ? seatTypeIds[1] : standardSeatTypeId;
-            var coupleSeatTypeId = seatTypeIds.Count > 2 ? seatTypeIds[2] : vipSeatTypeId;
+            byte FindSeatType(byte fallbackId, params string[] keywords) =>
+                seatTypes.FirstOrDefault(type => keywords.Any(keyword =>
+                    type.TypeName.Contains(keyword, StringComparison.OrdinalIgnoreCase)))?.SeatTypeId
+                ?? fallbackId;
+
+            var fallbackSeatTypeId = seatTypes[0].SeatTypeId;
+            var standardSeatTypeId = FindSeatType(fallbackSeatTypeId, "standard", "normal", "thường");
+            var vipSeatTypeId = FindSeatType(standardSeatTypeId, "vip", "premium");
+            var coupleSeatTypeId = FindSeatType(vipSeatTypeId, "sweetbox", "couple", "đôi");
             var seats = new List<Seat>();
             for (var row = 1; row <= hall.TotalRows; row++)
             {
