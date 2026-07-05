@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { cinemaApi } from '../../services/api';
+import CinemaMap from '../../components/CinemaMap/CinemaMap';
 import './CinemasPage.css';
 
 export default function CinemasPage() {
@@ -8,6 +9,7 @@ export default function CinemasPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [cityFilter, setCityFilter] = useState('');
+  const [showMapCinemaId, setShowMapCinemaId] = useState(null);
 
   useEffect(() => {
     cinemaApi.getAll()
@@ -93,19 +95,41 @@ export default function CinemasPage() {
                 <div className="cp-cinema-card__body">
                   <h3 className="cp-cinema-card__name">{cinema.name}</h3>
                   <p className="cp-cinema-card__address">
-                    📍 {cinema.address}
-                  </p>
+                    📍 {cinema.address}</p>
+
                   {cinema.district && (
-                    <span className="cp-cinema-card__district">{cinema.district}</span>
+                    <span className="cp-cinema-card__district">
+                      {cinema.district}</span>
                   )}
-                  <div className="cp-cinema-card__actions">
+                  
+                <div className="cp-cinema-card__actions">
                     <Link
                       to={`/bookings?flow=cinema_first&cinemaId=${cinema.cinemaId}`}
                       className="cp-cinema-card__book-btn"
-                    >
-                      🎟️ Đặt vé tại rạp
+                    > 🎟️ Đặt vé tại rạp
                     </Link>
+
+                    <button
+                      type="button"
+                      className="cp-cinema-card__map-btn"
+                      onClick={() =>
+                        setShowMapCinemaId(
+                          showMapCinemaId === cinema.cinemaId ? null : cinema.cinemaId
+                        )
+                      }
+                    >
+                      {showMapCinemaId === cinema.cinemaId ? 'Ẩn' : 'Bản đồ'}
+                    </button>
                   </div>
+
+                  {showMapCinemaId === cinema.cinemaId && (
+                    <CinemaMap
+                      cinemaLat={cinema.latitude}
+                      cinemaLng={cinema.longitude}
+                      cinemaName={cinema.name}
+                    />
+                  )}
+              
                 </div>
               </div>
             ))}

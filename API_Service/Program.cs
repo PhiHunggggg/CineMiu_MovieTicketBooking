@@ -55,9 +55,9 @@ builder.Services.AddScoped<IProductService, ProductService>();
 builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
-builder.Services.AddScoped<IBookingService, BookkingService>();
 builder.Services.AddHostedService<PendingBookingExpirationWorker>();
 builder.Services.AddHostedService<ShowtimeStatusWorker>();
+builder.Services.AddScoped<IBookingService, BookingService>();
 // Register EFCore theater repositories
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
 builder.Services.AddScoped<ICategoriesRepository, CategoriesRepository>();
@@ -101,6 +101,7 @@ builder.Services.AddControllers()
     });
 
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHttpClient();
 
 // Swagger Configuration
 builder.Services.AddSwaggerGen(options =>

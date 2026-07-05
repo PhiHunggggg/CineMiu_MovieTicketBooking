@@ -98,7 +98,8 @@ namespace Services.Promotion
         public Task<PromotionDto.PromotionResponse> UpdateAsync(int promoId, PromotionDto.PromotionRequest request) =>
             promotionRepository.UpdateAsync(promoId, request);
 
-        public async Task DeleteAsync(int promoId)
+        public async Task DeleteAsync(int 
+        promoId)
         {
             await promotionRepository.DeleteAsync(promoId);
         }
