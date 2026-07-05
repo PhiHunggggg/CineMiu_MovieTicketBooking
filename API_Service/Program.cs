@@ -29,6 +29,7 @@ using Services.Promotion;
 using Services.Reports;
 using System.Text;
 using API_Service.Infrastructure;
+using API_Service.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -55,6 +56,7 @@ builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
 builder.Services.AddScoped<ICategoryService, CategoryService>();
 builder.Services.AddScoped<IBookingRepository, BookingRepository>();
 builder.Services.AddScoped<IBookingService, BookkingService>();
+builder.Services.AddHostedService<PendingBookingExpirationWorker>();
 // Register EFCore theater repositories
 builder.Services.AddScoped<IMovieRepository, MovieRepository>();
 builder.Services.AddScoped<ICategoriesRepository, CategoriesRepository>();

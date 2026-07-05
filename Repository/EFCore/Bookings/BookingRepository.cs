@@ -850,9 +850,41 @@ namespace Repository.EFCore.Bookings
         }
         public async Task<BookingDto.PaymentProcessResult> AddPaymentAsync(int bookingId, PaymentDto dto)
         {
+            var strategy = _dbset.Database.CreateExecutionStrategy();
+
+            return await strategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = _dbset.Database.IsRelational()
+                    ? await _dbset.Database.BeginTransactionAsync(IsolationLevel.Serializable)
+                    : null;
+
+                var result = await AddPaymentInTransactionAsync(bookingId, dto);
+
+                if (transaction != null)
+                {
+                    await transaction.CommitAsync();
+                }
+
+                return result;
+            });
+        }
+
+        private async Task<BookingDto.PaymentProcessResult> AddPaymentInTransactionAsync(
+            int bookingId,
+            PaymentDto dto)
+        {
             var booking = await _dbset.Bookings.FirstOrDefaultAsync(x => x.BookingId == bookingId);
             if (booking == null) return new() { Message = "Booking not found" };
             if (booking.Status is "cancelled" or "completed") return new() { Message = $"Cannot pay for a {booking.Status} booking" };
+
+            var now = DateTime.UtcNow;
+            if (booking.Status == "pending" &&
+                booking.ExpiresAt.HasValue &&
+                booking.ExpiresAt.Value <= now)
+            {
+                return new() { Message = "Cannot pay for an expired booking" };
+            }
+
             if (!await _dbset.PaymentMethods.AnyAsync(x => x.MethodId == dto.MethodId && x.IsActive))
                 return new() { Message = "Payment method not found or inactive" };
 
@@ -869,7 +901,6 @@ namespace Repository.EFCore.Bookings
             if (dto.Amount > outstandingAmount)
                 return new() { Message = $"Payment amount exceeds outstanding amount ({outstandingAmount:n0} VND)" };
 
-            var now = DateTime.UtcNow;
             var payment = new Entities.Bookings.Payment
             {
                 BookingId = bookingId,
