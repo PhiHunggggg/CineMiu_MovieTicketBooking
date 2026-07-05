@@ -16,19 +16,11 @@ namespace Services.Booking
         INotificationService notificationService,
         ILogger<BookkingService> logger) : IBookingService
     {
-        public async Task<Paging.PaginationResponse<BookingResponse>> GetAllAsync(string? keyword, string? status, int? cinemaId, DateTime? date, int pageNumber = 1, int pageSize = 10)
+        public Task<Paging.PaginationResponse<BookingResponse>> GetAllAsync(string? keyword, string? status, int? movieId, int? cinemaId, DateTime? date, int pageNumber = 1, int pageSize = 10)
         {
             pageNumber = Math.Max(1, pageNumber);
             pageSize = Math.Clamp(pageSize, 1, 500);
-            var bookings = await bookingRepository.GetAllAsync(keyword, status, cinemaId, date);
-            return new Paging.PaginationResponse<BookingResponse>
-            {
-                Page = pageNumber,
-                PageSize = pageSize,
-                TotalCount = bookings.Count,
-                TotalPages = (int)Math.Ceiling(bookings.Count / (double)pageSize),
-                Items = bookings.Skip((pageNumber - 1) * pageSize).Take(pageSize).ToList()
-            };
+            return bookingRepository.GetAllAsync(keyword, status, movieId, cinemaId, date, pageNumber, pageSize);
         }
 
         public Task<BookingResponse?> GetByIdAsync(int id) => bookingRepository.GetByIdAsync(id);

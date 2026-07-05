@@ -5,7 +5,7 @@ const API_BASE_URL = '/api';
 // Create axios instance
 const api = axios.create({
     baseURL: API_BASE_URL,
-    timeout: 8000,
+    timeout: 30000,
     headers: {
         'Content-Type': 'application/json',
     },
@@ -58,8 +58,8 @@ export const cinemaLookupApi = {
 export const movieApi = {
     getAll: (params) => api.get('/movies', { params }),
     getById: (id) => api.get(`/movies/${id}`),
-    create: (data) => api.post('/movies', data),
-    update: (id, data) => api.put(`/movies/${id}`, data),
+    create: (data) => api.post('/movies', data, { timeout: 30000 }),
+    update: (id, data) => api.put(`/movies/${id}`, data, { timeout: 30000 }),
     delete: (id) => api.delete(`/movies/${id}`),
 };
 
@@ -102,8 +102,8 @@ export const revenueApi = {
 };
 
 export const bookingAdminApi = {
-    getAll: (params) => api.get('/bookings', { params }),
-    getById: (id) => api.get(`/bookings/${id}`),
+    getAll: (params) => api.get('/bookings', { params, timeout: 30000 }),
+    getById: (id) => api.get(`/bookings/${id}`, { timeout: 30000 }),
     getByCode: (code) => api.get(`/bookings/code/${encodeURIComponent(code)}`),
     getByUser: (userId) => api.get(`/bookings/user/${userId}`),
     cancel: (id, data) => api.post(`/bookings/${id}/cancel`, data),

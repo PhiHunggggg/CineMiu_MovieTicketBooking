@@ -6,22 +6,49 @@ import ProtectedRoute from './components/ProtectedRoute';
 import MainLayout from './components/MainLayout';  // <-- Sửa lại thành components
 //import Login from './pages/Login';
 
-// Import từ pages/admin/
-import Dashboard from './pages/admin/Dashboard';
-import Users from './pages/admin/Users';
-import AdminMovies from './pages/admin/Movies';
-import AdminCinemas from './pages/admin/Cinemas';
-import AdminBookings from './pages/admin/Bookings';
-import AdminConcessions from './pages/admin/Concession';
-import AdminPromotions from './pages/admin/Vouchers';
-import RevenueReports from './pages/admin/RevenueReport';
-import Showtimes from './pages/admin/Showtimes';
-import Halls from './pages/admin/Halls';
-import TicketPrices from './pages/admin/TicketPrices';
-import Reviews from './pages/admin/Reviews';
-import AdminNotifications from './pages/admin/Notification';
-import System from './pages/admin/System';
-import Login from './pages/admin/Login';
+import Dashboard from './pages/admin/Dashboard/Dashboard';
+import Users from './pages/admin/Users/Users';
+import AdminMovies from './pages/admin/Movies/Movies';
+import AdminCinemas from './pages/admin/Cinemas/Cinemas';
+import AdminCinemaManagers from './pages/admin/CinemaManagers/CinemaManagers';
+import AdminBookings from './pages/admin/Bookings/Bookings';
+import AdminConcessions from './pages/admin/Concession/Concession';
+import AdminPromotions from './pages/admin/Vouchers/Vouchers';
+import RevenueReports from './pages/admin/RevenueReport/RevenueReport';
+import BranchOverview from './pages/admin/BranchOverview/BranchOverview';
+import Showtimes from './pages/admin/Showtimes/Showtimes';
+import Halls from './pages/admin/Halls/Halls';
+import TicketPrices from './pages/admin/TicketPrices/TicketPrices';
+import Reviews from './pages/admin/Reviews/Reviews';
+import AdminNotifications from './pages/admin/Notification/Notification';
+import System from './pages/admin/System/System';
+import Login from './pages/admin/Login/Login';
+
+function HomeRedirect() {
+  const { isAdmin, isCinemaManager, canCheckInTickets } = useAuth();
+
+  if (isAdmin()) return <Navigate to="/admin/dashboard" replace />;
+  if (isCinemaManager()) return <Navigate to="/admin/branch" replace />;
+  if (canCheckInTickets()) return <Navigate to="/admin/bookings" replace />;
+
+  return <Navigate to="/login" replace />;
+}
+
+const adminOnly = (element) => (
+  <ProtectedRoute adminOnly>{element}</ProtectedRoute>
+);
+
+const managerOnly = (element) => (
+  <ProtectedRoute managerOnly>{element}</ProtectedRoute>
+);
+
+const branchOperator = (element) => (
+  <ProtectedRoute branchOperator>{element}</ProtectedRoute>
+);
+
+const checkInOnly = (element) => (
+  <ProtectedRoute checkInOnly>{element}</ProtectedRoute>
+);
 
 function App() {
   return (

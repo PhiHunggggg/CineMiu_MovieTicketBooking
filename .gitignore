@@ -367,6 +367,9 @@ FodyWeavers.xsd
 .dotnet-home/
 .nuget-packages/
 
+# ASP.NET Core runtime data protection keys
+**/App_Data/DataProtectionKeys/
+
 FodyWeavers.xsd.codex-run/
 .codex-run/
 
