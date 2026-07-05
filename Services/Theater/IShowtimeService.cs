@@ -17,7 +17,7 @@ namespace Services.Theater
         Task<List<ShowtimeDTO.ShowtimeResponse>> GenerateUpcomingAsync(int days);
         Task<ShowtimeDTO.ShowtimeResponse?> GetShowtimeDetailsAsync(int id);
         Task<List<ShowtimeDTO.SeatResponse>> GetSeatsAsync(int id, int? userId, string? sessionId);
-        Task<List<Bookings.SeatLock>> LockSeatsAsync(int id, int userId, string sessionId, List<int> seatIds, int minutes);
+        Task<List<Bookings.SeatLock>> LockSeatsAsync(int id, int userId, string sessionId, List<int> seatIds);
         Task UnlockSeatsAsync(int id, int userId, string sessionId);
     }
 }

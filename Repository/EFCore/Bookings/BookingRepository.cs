@@ -18,6 +18,7 @@ namespace Repository.EFCore.Bookings
 {
     public class BookingRepository: Repository<Booking>,IBookingRepository
     {
+        private const int BookingExpirationMinutes = 10;
         private readonly SqlServerDbContext _dbset;
 
         public BookingRepository(SqlServerDbContext context) : base(context)
@@ -510,7 +511,7 @@ namespace Repository.EFCore.Bookings
                     Status = "pending",
                     BookingChannel = request.BookingChannel ?? "web",
                     CreatedAt = DateTime.UtcNow,
-                    ExpiresAt = DateTime.UtcNow.AddMinutes(10),
+                    ExpiresAt = DateTime.UtcNow.AddMinutes(BookingExpirationMinutes),
                     Notes = string.IsNullOrWhiteSpace(request.PromoCode)
                         ? request.Notes
                         : string.Join(" | ", new[] { request.Notes, $"Promo:{request.PromoCode.Trim().ToUpperInvariant()}" }.Where(x => !string.IsNullOrWhiteSpace(x)))

@@ -6,7 +6,7 @@ import { getUserId } from '../../../utils/authUser';
 import './Invoice.css';
 import { generateQrCodeUrl, BANK_ID, ACCOUNT_NO, ACCOUNT_NAME } from '../../../staticThing';
 
-const PAYMENT_TIMEOUT_SECONDS = 5 * 60; // 5 phút
+const PAYMENT_TIMEOUT_SECONDS = 10 * 60;
 
 function getBookingId(order) {
     return order?.bookingId
@@ -57,15 +57,15 @@ export default function Invoice() {
   const [success, setSuccess] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [cancelled, setCancelled] = useState(false);
-  const [paymentTimeLeft, setPaymentTimeLeft] = useState(PAYMENT_TIMEOUT_SECONDS); // 5 phút thanh toán
+  const [paymentTimeLeft, setPaymentTimeLeft] = useState(PAYMENT_TIMEOUT_SECONDS);
   const pollingRef = useRef(null);
   const countdownRef = useRef(null);
 
-  // Bộ đếm ngược 5 phút cho riêng bước thanh toán.
+  // Bộ đếm ngược 10 phút, khớp với thời hạn booking ở backend.
   useEffect(() => {
     if (!isWaiting) return;
 
-    setPaymentTimeLeft(PAYMENT_TIMEOUT_SECONDS); // Reset về 5 phút khi bắt đầu chờ
+    setPaymentTimeLeft(PAYMENT_TIMEOUT_SECONDS);
 
     countdownRef.current = setInterval(() => {
       setPaymentTimeLeft(prev => {
@@ -135,7 +135,7 @@ export default function Invoice() {
     if (order) {
       const orderId = order.bookingId ?? order.BookingId;
       try {
-        await bookingApi.cancel(orderId, 'Hết thời gian chờ thanh toán QR (5 phút)');
+        await bookingApi.cancel(orderId, 'Hết thời gian chờ thanh toán QR (10 phút)');
         console.log(`[Invoice] Order ${orderId} cancelled due to timeout`);
       } catch (err) {
         console.error('[Invoice] Cancel error:', err);
@@ -314,7 +314,7 @@ export default function Invoice() {
         <div className="invoice-waiting__card">
           <div className="invoice-waiting__header">
             <h2 className="invoice-waiting__title" style={{ color: '#e74c3c' }}>Đơn hàng đã bị hủy</h2>
-            <p className="invoice-waiting__subtitle">Đã hết 5 phút mà chưa nhận được xác nhận thanh toán.</p>
+            <p className="invoice-waiting__subtitle">Đã hết 10 phút mà chưa nhận được xác nhận thanh toán.</p>
           </div>
           <div className="invoice-waiting__note">
             <p>Đơn hàng của bạn đã được hủy tự động. Vui lòng đặt vé lại nếu bạn vẫn muốn xem phim.</p>
@@ -613,7 +613,7 @@ export default function Invoice() {
               </div>
               {payMethod === 'qrbank' && (
                 <p style={{ marginTop: '0.75rem', fontSize: '0.82rem', color: 'var(--text-muted)', borderLeft: '3px solid var(--primary)', paddingLeft: '0.75rem' }}>
-                  Sau khi xác nhận, mã QR sẽ hiển thị. Bạn có <strong>5 phút</strong> để hoàn thành chuyển khoản. Đơn hàng sẽ tự động hủy nếu không nhận được thanh toán.
+                  Sau khi xác nhận, mã QR sẽ hiển thị. Bạn có <strong>10 phút</strong> để hoàn thành chuyển khoản. Đơn hàng sẽ tự động hủy nếu không nhận được thanh toán.
                 </p>
               )}
             </div>

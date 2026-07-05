@@ -3,6 +3,7 @@ import { showtimeApi, bookingApi } from '../services/api';
 import { useAuth } from './AuthContext';
 import { getUserId } from '../utils/authUser';
 const BookingContext = createContext(null);
+const SEAT_HOLD_SECONDS = 10 * 60;
 
 function getOrderStatus(order) {
   return (order?.status ?? order?.Status ?? '').toString().toLowerCase();
@@ -56,7 +57,7 @@ const initialState = {
   discountAmount: 0,
   totalAmount: 0,
   order: null,
-  timeLeft: 300, // 5 minutes in seconds
+  timeLeft: SEAT_HOLD_SECONDS,
   isTimerActive: false,
   sessionId: null,
   isPaymentWaiting: false, // true when QR payment screen is active
@@ -84,7 +85,7 @@ function bookingReducer(state, action) {
         voucher: null,
         voucherCode: '',
         sessionId: null,
-        timeLeft: 300,
+        timeLeft: SEAT_HOLD_SECONDS,
         isTimerActive: false,
       };
     case 'SELECT_MOVIE':
@@ -97,7 +98,7 @@ function bookingReducer(state, action) {
         hall: null,
         selectedSeats: [],
         sessionId: null,
-        timeLeft: 300,
+        timeLeft: SEAT_HOLD_SECONDS,
         isTimerActive: false,
       };
     // Movie-first flow: select movie first (step 1 → step 2)
@@ -115,7 +116,7 @@ function bookingReducer(state, action) {
         voucher: null,
         voucherCode: '',
         sessionId: null,
-        timeLeft: 300,
+        timeLeft: SEAT_HOLD_SECONDS,
         isTimerActive: false,
       };
     // Movie-first flow: select cinema after movie (step 2 → step 3)
@@ -129,11 +130,11 @@ function bookingReducer(state, action) {
         hall: null,
         selectedSeats: [],
         sessionId: null,
-        timeLeft: 300,
+        timeLeft: SEAT_HOLD_SECONDS,
         isTimerActive: false,
       };
     case 'SELECT_SHOWDATE':
-      return { ...state, showDate: action.payload, showtime: null, hall: null, selectedSeats: [], sessionId: null, timeLeft: 300, isTimerActive: false };
+      return { ...state, showDate: action.payload, showtime: null, hall: null, selectedSeats: [], sessionId: null, timeLeft: SEAT_HOLD_SECONDS, isTimerActive: false };
     case 'SELECT_SHOWTIME':
       return {
         ...state,
@@ -142,7 +143,7 @@ function bookingReducer(state, action) {
         step: 4,
         selectedSeats: [],
         sessionId: null,
-        timeLeft: 300,
+        timeLeft: SEAT_HOLD_SECONDS,
         isTimerActive: false,
       };
     case 'TOGGLE_SEAT': {
@@ -234,7 +235,7 @@ function bookingReducer(state, action) {
       };
     }
     case 'RESET_TIMER':
-      return { ...state, timeLeft: 300, isTimerActive: false };
+      return { ...state, timeLeft: SEAT_HOLD_SECONDS, isTimerActive: false };
     case 'UNLOCK_SEATS_AND_RESET':
       // Unlock local state: clear selected seats, sessionId, and stop the timer
       return {
@@ -242,7 +243,7 @@ function bookingReducer(state, action) {
         selectedSeats: [],
         subtotalTickets: 0,
         sessionId: null,
-        timeLeft: 300,
+        timeLeft: SEAT_HOLD_SECONDS,
         isTimerActive: false,
       };
     case 'STOP_TIMER':

@@ -162,11 +162,11 @@ namespace Services.Theater
     }
 
     public Task<List<Bookings.SeatLock>> LockSeatsAsync(
-        int id, int userId, string sessionId, List<int> seatIds, int minutes)
+        int id, int userId, string sessionId, List<int> seatIds)
     {
         ValidateSession(userId, sessionId);
         if (seatIds.Count == 0) throw new ArgumentException("At least one seat is required");
-        return showtimeRepository.LockSeatsAsync(id, userId, sessionId.Trim(), seatIds, minutes);
+        return showtimeRepository.LockSeatsAsync(id, userId, sessionId.Trim(), seatIds);
     }
 
     public Task UnlockSeatsAsync(int id, int userId, string sessionId)
