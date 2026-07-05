@@ -1,5 +1,6 @@
 ﻿using BaseCore.Repository.EFCore;
 using DTO.Booking;
+using DTO.Common;
 using Entities;
 using Libs.Booking;
 using Microsoft.AspNetCore.Mvc;
@@ -22,8 +23,11 @@ namespace Repository.EFCore.Bookings
         {
             _dbset = context;
         }
-        public Task<List<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? cinemaId, DateTime? date)
+        public async Task<Paging.PaginationResponse<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? movieId, int? cinemaId, DateTime? date, int pageNumber, int pageSize)
         {
+            pageNumber = Math.Max(1, pageNumber);
+            pageSize = Math.Clamp(pageSize, 1, 500);
+
             var query = from booking in _dbSet.AsNoTracking()
                         join user in _dbset.Users.AsNoTracking() on booking.UserId equals user.UserId
                         join showtime in _dbset.ShowTimes.AsNoTracking() on booking.ShowtimeId equals showtime.ShowtimeId
@@ -45,6 +49,10 @@ namespace Repository.EFCore.Bookings
             {
                 query = query.Where(x => x.booking.Status.ToLower() == status.Trim().ToLower());
             }
+            if (movieId.HasValue)
+            {
+                query = query.Where(x => x.movie.MovieId == movieId.Value);
+            }
             if (cinemaId.HasValue)
             {
                 query = query.Where(x => x.cinema.CinemaId == cinemaId.Value);
@@ -54,9 +62,12 @@ namespace Repository.EFCore.Bookings
                 var dateOnly = date.Value.Date;
                 query = query.Where(x => x.showtime.StartTime.Date == dateOnly);
             }
-            var result = query
+            var totalCount = await query.CountAsync();
+            var result = await query
                 .OrderByDescending(x => x.booking.CreatedAt)
                 .ThenByDescending(x => x.booking.BookingId)
+                .Skip((pageNumber - 1) * pageSize)
+                .Take(pageSize)
                 .Select(x => new BookingDto.BookingResponse
             {
                 BookingId = x.booking.BookingId,
@@ -91,7 +102,14 @@ namespace Repository.EFCore.Bookings
                     .Max(p => p.RefundedAt)
             }).ToListAsync();
 
-            return result;
+            return new Paging.PaginationResponse<BookingDto.BookingResponse>
+            {
+                Page = pageNumber,
+                PageSize = pageSize,
+                TotalCount = totalCount,
+                TotalPages = (int)Math.Ceiling(totalCount / (double)pageSize),
+                Items = result
+            };
         }
         public async Task<BookingDto.BookingResponse?> GetByIdAsync(int id)
         {

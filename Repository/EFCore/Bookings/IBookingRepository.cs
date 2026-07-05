@@ -1,5 +1,6 @@
 using BaseCore.Repository.EFCore;
 using DTO.Booking;
+using DTO.Common;
 using Entities;
 using System;
 using System.Collections.Generic;
@@ -11,7 +12,7 @@ namespace Repository.EFCore.Bookings
 {
     public interface IBookingRepository : IRepository<Booking>
     {
-        Task<List<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? cinemaId, DateTime? date);
+        Task<Paging.PaginationResponse<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? movieId, int? cinemaId, DateTime? date, int pageNumber, int pageSize);
         Task<BookingDto.BookingResponse?> GetByIdAsync(int id);
         Task<BookingDto.BookingDetailResponse?> GetDetailAsync(int id);
         Task<BookingDto.BookingResponse?> GetByBookingCodeAsync(string bookingCode);

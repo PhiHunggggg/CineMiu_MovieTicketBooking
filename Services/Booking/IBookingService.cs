@@ -10,7 +10,7 @@ namespace Services.Booking
 {
     public interface IBookingService
     {
-        Task<Paging.PaginationResponse<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? cinemaId, DateTime? date, int pageNumber=1, int pageSize=10);
+        Task<Paging.PaginationResponse<BookingDto.BookingResponse>> GetAllAsync(string? keyword, string? status, int? movieId, int? cinemaId, DateTime? date, int pageNumber=1, int pageSize=10);
         Task<BookingDto.BookingResponse?> GetByIdAsync(int id);
         Task<BookingDto.BookingDetailResponse?> GetDetailAsync(int id);
         Task<BookingDto.BookingResponse?> GetByBookingCodeAsync(string bookingCode);

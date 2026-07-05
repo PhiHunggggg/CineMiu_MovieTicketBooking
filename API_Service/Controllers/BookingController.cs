@@ -25,7 +25,7 @@ namespace API_Service.Controllers
         {
             page = Math.Max(1, page);
             pageSize = Math.Clamp(pageSize, 1, 500);
-            var result = await bookingService.GetAllAsync(keyword, status, cinemaId, date, page, pageSize);
+            var result = await bookingService.GetAllAsync(keyword, status, movieId, cinemaId, date, page, pageSize);
             return Ok(new { total = result.TotalCount, result.Items });
         }
 
