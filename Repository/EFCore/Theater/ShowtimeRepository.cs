@@ -645,7 +645,15 @@ namespace Repository.EFCore.Theater
                 .Where(x => x.ShowtimeId == showtimeId && x.UserId == userId && x.SessionId == sessionId).ToListAsync();
             if (locks.Count == 0) return;
             context.SeatLocks.RemoveRange(locks);
-            await context.SaveChangesAsync();
+            try
+            {
+                await context.SaveChangesAsync();
+            }
+            catch (DbUpdateConcurrencyException)
+            {
+                // Unlock can be triggered more than once during navigation/unload.
+                // If another request already removed the same locks, the desired state is reached.
+            }
         }
 
         private async Task<(DateTime EndTime, string LanguageType, string Status, string? Error)> PrepareShowtimeAsync(ShowtimeDTO.ShowtimeRequest dto, int? currentShowtimeId)
