@@ -225,6 +225,42 @@
         "OPTIONS"
       ],
       "Priority": 0
+    },
+    {
+      "DownstreamPathTemplate": "/api/map/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5004
+        }
+      ],
+      "UpstreamPathTemplate": "/api/map/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS"
+      ]
+    },
+    {
+      "DownstreamPathTemplate": "/api/node-promotions/{everything}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [
+        {
+          "Host": "localhost",
+          "Port": 5005
+        }
+      ],
+      "UpstreamPathTemplate": "/api/node-promotions/{everything}",
+      "UpstreamHttpMethod": [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS"
+      ]
     }
   ],
 
