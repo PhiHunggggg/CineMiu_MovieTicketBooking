@@ -119,7 +119,7 @@ builder.Services.AddDbContext<SqlServerDbContext>(options =>
 {
     if (useInMemoryDatabase)
     {
-        options.UseInMemoryDatabase("CINEMIU_MovieTicketBookinge");
+        options.UseInMemoryDatabase("CINEMIU_MovieTicketBooking");
     }
     else
     {

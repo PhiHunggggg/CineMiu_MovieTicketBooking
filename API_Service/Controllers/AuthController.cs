@@ -109,6 +109,7 @@ namespace APIService.Controllers
         }
 
         [HttpGet("me")]
+        [HttpGet("profile")]
         public async Task<IActionResult> GetProfile()
         {
             var authHeader = Request.Headers["Authorization"].ToString();

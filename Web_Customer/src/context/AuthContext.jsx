@@ -26,6 +26,22 @@ function clearStoredAuth() {
   localStorage.removeItem('user');
 }
 
+function normalizeUser(profile) {
+  return {
+    userId: profile?.userId ?? profile?.UserId,
+    roleId: profile?.roleId ?? profile?.RoleId,
+    cinemaId: profile?.cinemaId ?? profile?.CinemaId,
+    fullName: profile?.fullName ?? profile?.FullName,
+    email: profile?.email ?? profile?.Email,
+    phone: profile?.phone ?? profile?.Phone,
+    avatarUrl: profile?.avatarUrl ?? profile?.AvatarUrl,
+    dateOfBirth: profile?.dateOfBirth ?? profile?.DateOfBirth,
+    gender: profile?.gender ?? profile?.Gender,
+    isActive: profile?.isActive ?? profile?.IsActive,
+    role: profile?.role ?? profile?.Role,
+  };
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => getStoredAuth()?.user || null);
   const [token, setToken] = useState(() => getStoredAuth()?.token || null);

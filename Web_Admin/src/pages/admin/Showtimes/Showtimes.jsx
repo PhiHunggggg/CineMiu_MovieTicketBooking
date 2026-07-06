@@ -431,7 +431,7 @@ function Showtimes() {
   const [page, setPage] = useState(1)
   const [cinemaInput, setCinemaInput] = useState(assignedCinemaId || searchParams.get('cinemaId') || '')
   const [hallInput, setHallInput] = useState(searchParams.get('hallId') || '')
-  const [dateInput, setDateInput] = useState(toDisplayFilterDate(initialDate))
+  const [dateInput, setDateInput] = useState(initialDate)
   const [cinemaFilter, setCinemaFilter] = useState(assignedCinemaId || searchParams.get('cinemaId') || '')
   const [hallFilter, setHallFilter] = useState(searchParams.get('hallId') || '')
   const [dateFilter, setDateFilter] = useState(initialDate)
@@ -732,7 +732,7 @@ function Showtimes() {
   const resetFilters = () => {
     setCinemaInput(assignedCinemaId)
     setHallInput('')
-    setDateInput(toDisplayFilterDate(todayInputValue))
+    setDateInput(todayInputValue)
     setCinemaFilter(assignedCinemaId)
     setHallFilter('')
     setDateFilter(todayInputValue)

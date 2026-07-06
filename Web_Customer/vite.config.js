@@ -23,7 +23,7 @@ export default defineConfig({
             console.log('[Proxy Error]', err.message);
             if (!res.headersSent) {
               res.writeHead(502, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ message: 'Backend unavailable. Ensure API Gateway is running on port 5000.' }));
+              res.end(JSON.stringify({ message: 'Backend unavailable. Ensure API service is running on port 5001.' }));
             }
           });
         }

@@ -325,12 +325,19 @@ const AdminMovies = () => {
             }
 
             closeModal();
-            await loadMovies(page);
         } catch (err) {
             console.error('Failed to save movie:', err);
             setError(getSaveErrorMessage(err));
+            return;
         } finally {
             setSaving(false);
+        }
+
+        try {
+            await loadMovies(page);
+        } catch (err) {
+            console.error('Failed to reload movies after save:', err);
+            setError('Đã lưu phim nhưng không tải lại được danh sách, vui lòng bấm Tải lại');
         }
     };
 
