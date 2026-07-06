@@ -129,18 +129,28 @@ export default function Invoice() {
     setIsWaiting(false);
     setPaymentWaiting(false); // re-enable stepper navigation
 
-    // Mở khóa ghế ngay lập tức
-    unlockSeats();
-
     if (order) {
-      const orderId = order.bookingId ?? order.BookingId;
+      const orderId = getBookingId(order);
       try {
+        // Payment may already be committed even when a follow-up action such as
+        // email delivery made the original request fail or time out.
+        const latestOrder = await bookingApi.getById(orderId);
+        const latestBooking = latestOrder.booking ?? latestOrder;
+        if (isPaidBookingStatus(getBookingStatus(latestBooking))) {
+          setOrder(latestOrder);
+          setSuccess(true);
+          return;
+        }
+
         await bookingApi.cancel(orderId, 'Hết thời gian chờ thanh toán QR (10 phút)');
         console.log(`[Invoice] Order ${orderId} cancelled due to timeout`);
       } catch (err) {
         console.error('[Invoice] Cancel error:', err);
       }
     }
+
+    // Chỉ mở khóa ghế sau khi chắc chắn booking chưa được thanh toán.
+    unlockSeats();
     setCancelled(true);
   };
 
@@ -180,6 +190,22 @@ export default function Invoice() {
       setSuccess(true);
     } catch (err) {
       console.error('[Booking] QR demo confirm failed:', err);
+      try {
+        const bookingId = getBookingId(order);
+        const latestOrder = bookingId ? await bookingApi.getById(bookingId) : null;
+        const latestBooking = latestOrder?.booking ?? latestOrder;
+        if (latestOrder && isPaidBookingStatus(getBookingStatus(latestBooking))) {
+          clearInterval(pollingRef.current);
+          clearInterval(countdownRef.current);
+          setOrder(latestOrder);
+          setIsWaiting(false);
+          setPaymentWaiting(false);
+          setSuccess(true);
+          return;
+        }
+      } catch (recoveryError) {
+        console.error('[Booking] Could not recover confirmed payment:', recoveryError);
+      }
       setError(err.message || 'Không thể xác nhận thanh toán QR demo.');
     } finally {
       setProcessing(false);

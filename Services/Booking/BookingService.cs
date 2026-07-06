@@ -97,11 +97,24 @@ namespace Services.Booking
             var result = await bookingRepository.AddPaymentAsync(bookingId, dto);
             if (result.Success && result.NewlyConfirmed)
             {
-                await loyaltyService.AddPointsAsync(
-                    result.UserId,
-                    (int)Math.Floor(result.FinalAmount / 1000m),
-                    bookingId,
-                    $"Dat ve {result.BookingCode}");
+                try
+                {
+                    await loyaltyService.AddPointsAsync(
+                        result.UserId,
+                        (int)Math.Floor(result.FinalAmount / 1000m),
+                        bookingId,
+                        $"Đặt vé {result.BookingCode}");
+                }
+                catch (Exception exception)
+                {
+                    // Payment has already been committed. Optional follow-up work
+                    // must not turn a successful payment response into an error.
+                    logger.LogError(
+                        exception,
+                        "PaymentLoyaltyPointsFailed bookingId={BookingId} bookingCode={BookingCode}",
+                        bookingId,
+                        result.BookingCode);
+                }
 
                 try
                 {

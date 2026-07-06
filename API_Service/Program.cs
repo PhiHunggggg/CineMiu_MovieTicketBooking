@@ -84,6 +84,8 @@ builder.Services.AddScoped<IReportService, ReportService>();
 builder.Services.AddScoped<IRoleRepository, RoleRepository>();
 builder.Services.Configure<NotificationApiOptions>(
     builder.Configuration.GetSection(NotificationApiOptions.SectionName));
+builder.Services.AddSingleton<IEmailDispatchQueue, EmailDispatchQueue>();
+builder.Services.AddHostedService<EmailDispatchWorker>();
 builder.Services.AddHttpClient<IEmailSender, PhpEmailSender>(client =>
 {
     // Gmail SMTP can take more than 15 seconds to negotiate TLS and authenticate,

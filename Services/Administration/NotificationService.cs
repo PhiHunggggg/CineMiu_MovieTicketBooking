@@ -10,7 +10,7 @@ namespace Services.Administration;
 
 public class NotificationService(
     INotificationRepository repository,
-    IEmailSender emailSender) : INotificationService
+    IEmailDispatchQueue emailQueue) : INotificationService
 {
     public Task<List<NotificationDTO.Response>> GetAllAsync(
         int? userId, string? type, string? sentVia, bool unreadOnly) =>
@@ -37,10 +37,10 @@ public class NotificationService(
 
         if (notification.SentVia == "email")
         {
-            await emailSender.SendAsync(
+            emailQueue.Enqueue(new EmailDispatchMessage(
                 recipientEmail,
                 notification.Title,
-                notification.Message);
+                notification.Message));
         }
 
         return notification;
@@ -49,12 +49,13 @@ public class NotificationService(
     public async Task<Notification> CreatePaymentSuccessAsync(BookingDto.BookingDetailResponse detail)
     {
         var booking = detail.Booking;
-        if (booking.UserId <= 0 || string.IsNullOrWhiteSpace(booking.email))
-            throw new ArgumentException("Booking user email is required");
+        if (booking.UserId <= 0)
+            throw new ArgumentException("Booking user is required");
         if (detail.Tickets.Count == 0)
             throw new ArgumentException("Paid booking does not contain any tickets");
 
         const string notificationType = "payment_success";
+        var hasRecipientEmail = !string.IsNullOrWhiteSpace(booking.email);
         var title = $"Thanh toán thành công - Vé xem phim {booking.BookingCode}";
         var plainText = BuildPaymentPlainText(detail);
         var htmlBody = BuildPaymentHtml(detail);
@@ -66,15 +67,18 @@ public class NotificationService(
             Title = title,
             Message = plainText,
             IsRead = false,
-            SentVia = "email",
+            SentVia = hasRecipientEmail ? "email" : "system",
             CreatedAt = DateTime.UtcNow
         });
 
-        await emailSender.SendAsync(
-            booking.email,
-            title,
-            plainText,
-            htmlBody);
+        if (hasRecipientEmail)
+        {
+            emailQueue.Enqueue(new EmailDispatchMessage(
+                booking.email,
+                title,
+                plainText,
+                htmlBody));
+        }
 
         return notification;
     }
