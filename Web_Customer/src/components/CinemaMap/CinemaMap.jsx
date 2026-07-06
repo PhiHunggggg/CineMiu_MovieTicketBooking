@@ -51,8 +51,8 @@ export default function CinemaMap({ cinemaLat, cinemaLng, cinemaName }) {
         if (!userPos) return;
         if (!cinemaPos.lat || !cinemaPos.lng) return;
 
-        const apiUrl =
-            `http://localhost:5004/api/map/directions` +
+            const apiUrl =
+            `/api/map/directions` +
             `?lat1=${userPos.lat}` +
             `&lon1=${userPos.lng}` +
             `&lat2=${cinemaPos.lat}` +

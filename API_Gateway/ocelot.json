@@ -227,7 +227,7 @@
       "Priority": 0
     },
     {
-      "DownstreamPathTemplate": "/api/map/{everything}",
+      "DownstreamPathTemplate": "/api/map/directions",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [
         {
@@ -235,14 +235,8 @@
           "Port": 5004
         }
       ],
-      "UpstreamPathTemplate": "/api/map/{everything}",
-      "UpstreamHttpMethod": [
-        "GET",
-        "POST",
-        "PUT",
-        "DELETE",
-        "OPTIONS"
-      ]
+      "UpstreamPathTemplate": "/api/map/directions",
+      "UpstreamHttpMethod": [ "GET" ]
     },
     {
       "DownstreamPathTemplate": "/api/node-promotions/{everything}",
